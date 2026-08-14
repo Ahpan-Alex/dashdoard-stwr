@@ -27,6 +27,8 @@ export type AppUser = {
   mustChangePassword?: boolean;
   lastLoginAt?: string;
   createdAt: string;
+  /** Data URL de la photo de profil */
+  photoData?: string | null;
 };
 
 export type AuthSession = {

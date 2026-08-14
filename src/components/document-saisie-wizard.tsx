@@ -3,13 +3,15 @@
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import {
   AlignLeft,
+  FileText,
   GripVertical,
   MessageSquare,
   Minus,
-  Plus,
   Sigma,
   Trash2,
 } from "lucide-react";
+import { DocumentPreview } from "@/components/document-preview";
+import type { ModeleDocument } from "@/lib/document-templates";
 import {
   calculerTotaux,
   isLigneProduit,
@@ -17,16 +19,25 @@ import {
   recalculerSousTotaux as recalculerSousTotauxBase,
   type TotauxDocument,
 } from "@/lib/commercial";
+import {
+  stockDisponible,
+  stockRestantPourSaisie,
+} from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type {
+  CategorieProduit,
+  Client,
+  EntreeStock,
   LigneDocument,
+  Parametres,
+  PointDeVente,
   Produit,
   TarifClient,
   TypeLigneDocument,
+  Vente,
 } from "@/lib/types";
 import {
   designationFacture,
-  prixVenteCatalogue,
   produitsActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
@@ -67,13 +78,34 @@ export function lignesToDraft(lignes: LigneDocument[]): DraftLigne[] {
   });
 }
 
+type PreviewMeta = {
+  type: "devis" | "commande" | "bon_de_livraison";
+  numero: string;
+  date: string;
+  echeance?: string;
+  client?: Client;
+  pdv?: PointDeVente;
+  parametres: Parametres;
+  modele?: ModeleDocument;
+  conditionsPaiement?: string;
+  referenceDevis?: string;
+  referenceCommande?: string;
+};
+
 type Props = {
   titre: string;
   produits: Produit[];
+  categoriesProduits?: CategorieProduit[];
   tauxTVA: number;
   assujettiTVA: boolean;
   clientId?: string;
   tarifsClients?: TarifClient[];
+  /** Point de vente du document (contrôle stock). */
+  pointDeVenteId: string;
+  entrees: EntreeStock[];
+  ventes: Vente[];
+  /** Métadonnées pour l'aperçu PDF obligatoire en prévalidation. */
+  previewMeta: PreviewMeta;
   /** Afficher la ligne acomptes dans la prévalidation */
   showAcomptes?: boolean;
   acomptesTTC?: number;
@@ -95,10 +127,15 @@ type Props = {
 export function DocumentSaisieWizard({
   titre,
   produits,
+  categoriesProduits = [],
   tauxTVA,
   assujettiTVA,
   clientId,
   tarifsClients = [],
+  pointDeVenteId,
+  entrees,
+  ventes,
+  previewMeta,
   showAcomptes = false,
   acomptesTTC = 0,
   acomptesLabel,
@@ -115,24 +152,58 @@ export function DocumentSaisieWizard({
   const [lignes, setLignes] = useState<DraftLigne[]>(initialLignes);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
+  const [filtreFamille, setFiltreFamille] = useState("");
+  const [rechercheProduit, setRechercheProduit] = useState("");
   const [form, setForm] = useState({
-    produitId: produitsDispo[0]?.id ?? "",
-    quantite: "1",
-    prixUnitaire: produitsDispo[0]
-      ? String(
-          resolvePrixVenteHT(produitsDispo[0], {
-            clientId,
-            quantite: 1,
-            tarifsClients,
-          }),
-        )
-      : "",
-    remisePercent: "0",
-    commentaireLigne: "",
     remiseGlobale: String(initialRemiseGlobale || 0),
     note: initialNote,
     commentaireLibre: "",
   });
+
+  const categoriesActives = useMemo(
+    () =>
+      [...categoriesProduits]
+        .filter((c) => c.actif)
+        .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle)),
+    [categoriesProduits],
+  );
+
+  const produitsSelectionnesIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const l of lignes) {
+      if (isLigneProduit(l) && l.produitId) ids.add(l.produitId);
+    }
+    return ids;
+  }, [lignes]);
+
+  const catalogueFiltre = useMemo(() => {
+    const q = rechercheProduit.trim().toLowerCase();
+    return produitsDispo
+      .filter((p) => {
+        if (filtreFamille) {
+          if (p.categorieId === filtreFamille) return true;
+          const cat = categoriesProduits.find((c) => c.id === p.categorieId);
+          if (cat?.parentId !== filtreFamille) return false;
+        }
+        return true;
+      })
+      .filter((p) => {
+        if (!q) return true;
+        return (
+          p.code.toLowerCase().includes(q) ||
+          p.libelleCourt.toLowerCase().includes(q) ||
+          p.libelleLong.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [produitsDispo, filtreFamille, rechercheProduit, categoriesProduits]);
+
+  function libelleFamille(categorieId: string) {
+    return (
+      categoriesProduits.find((c) => c.id === categorieId)?.libelle ?? "—"
+    );
+  }
 
   const totauxDraft: TotauxDocument = useMemo(() => {
     return calculerTotaux(
@@ -144,12 +215,43 @@ export function DocumentSaisieWizard({
     );
   }, [lignes, tauxTVA, acomptesTTC, assujettiTVA, form.remiseGlobale]);
 
-  function addProduitLigne() {
-    const prod = produitsDispo.find((p) => p.id === form.produitId);
-    const qte = Number(form.quantite);
-    const prix = Number(form.prixUnitaire);
-    const remise = Number(form.remisePercent) || 0;
-    if (!prod || qte <= 0 || prix < 0) return;
+  function toggleProduit(produitId: string, checked: boolean) {
+    const prod = produitsDispo.find((p) => p.id === produitId);
+    if (!prod) return;
+    setStockError(null);
+    if (!checked) {
+      setLignes((prev) =>
+        recalculerSousTotaux(
+          prev.filter((l) => !(isLigneProduit(l) && l.produitId === produitId)),
+        ),
+      );
+      return;
+    }
+    if (produitsSelectionnesIds.has(produitId)) return;
+    if (!pointDeVenteId) {
+      setStockError(
+        "Sélectionnez un point de vente avant d'ajouter un produit.",
+      );
+      return;
+    }
+    const dispo = stockRestantPourSaisie(
+      produitId,
+      pointDeVenteId,
+      entrees,
+      ventes,
+      lignes,
+    );
+    if (dispo <= 0) {
+      setStockError(
+        `Stock insuffisant pour « ${prod.libelleCourt} » (disponible : 0 ${prod.unite}).`,
+      );
+      return;
+    }
+    const prix = resolvePrixVenteHT(prod, {
+      clientId,
+      quantite: 1,
+      tarifsClients,
+    });
     setLignes((prev) =>
       recalculerSousTotaux([
         ...prev,
@@ -159,21 +261,13 @@ export function DocumentSaisieWizard({
           produitId: prod.id,
           codeProduit: prod.code,
           designation: designationFacture(prod),
-          quantite: qte,
+          quantite: 1,
           prixUnitaire: prix,
           unite: prod.unite,
           tauxTVA: assujettiTVA ? prod.tauxTVA : 0,
-          remisePercent: remise > 0 ? remise : undefined,
-          commentaire: form.commentaireLigne.trim() || undefined,
         },
       ]),
     );
-    setForm((f) => ({
-      ...f,
-      quantite: "1",
-      remisePercent: "0",
-      commentaireLigne: "",
-    }));
   }
 
   function addLigneSpeciale(type: TypeLigneDocument) {
@@ -226,11 +320,54 @@ export function DocumentSaisieWizard({
   }
 
   function updateLigne(key: string, patch: Partial<DraftLigne>) {
-    setLignes((prev) =>
-      recalculerSousTotaux(
-        prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
-      ),
-    );
+    setStockError(null);
+    setLignes((prev) => {
+      const next = prev.map((l) => {
+        if (l.key !== key) return l;
+        const merged = { ...l, ...patch };
+        if (
+          isLigneProduit(merged) &&
+          merged.produitId &&
+          patch.quantite !== undefined
+        ) {
+          const max = stockRestantPourSaisie(
+            merged.produitId,
+            pointDeVenteId,
+            entrees,
+            ventes,
+            prev,
+            key,
+          );
+          merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
+        }
+        return merged;
+      });
+      return recalculerSousTotaux(next);
+    });
+  }
+
+  function validerStocksLignes(): string | null {
+    if (!pointDeVenteId) {
+      return "Sélectionnez un point de vente avant de continuer.";
+    }
+    for (const l of lignes) {
+      if (!isLigneProduit(l) || !l.produitId) continue;
+      const max = stockRestantPourSaisie(
+        l.produitId,
+        pointDeVenteId,
+        entrees,
+        ventes,
+        lignes,
+        l.key,
+      );
+      if (l.quantite <= 0) {
+        return `Quantité invalide pour « ${l.designation} ».`;
+      }
+      if (l.quantite > max) {
+        return `Stock insuffisant pour « ${l.designation} » (disponible : ${formatNumber(max)} ${l.unite}).`;
+      }
+    }
+    return null;
   }
 
   function removeLigne(key: string) {
@@ -275,12 +412,24 @@ export function DocumentSaisieWizard({
 
   function allerPrevalidation() {
     if (!lignes.some((l) => isLigneProduit(l))) return;
+    const err = validerStocksLignes();
+    if (err) {
+      setStockError(err);
+      return;
+    }
+    setStockError(null);
     setLignes((prev) => recalculerSousTotaux(prev));
     setEtape("prevalidation");
   }
 
   function confirmer() {
     if (!lignes.some((l) => isLigneProduit(l))) return;
+    const err = validerStocksLignes();
+    if (err) {
+      setStockError(err);
+      setEtape("saisie");
+      return;
+    }
     const remiseGlobale = Number(form.remiseGlobale) || 0;
     onConfirm({
       lignes: draftToLignes(recalculerSousTotaux(lignes)),
@@ -312,83 +461,182 @@ export function DocumentSaisieWizard({
           {headerFields}
 
           <div className="rounded-lg border border-line p-3">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
-              Ajouter un produit
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-              <select
-                className="select lg:col-span-2"
-                value={form.produitId}
-                onChange={(e) => {
-                  const prod = produitsDispo.find((p) => p.id === e.target.value);
-                  const qte = Number(form.quantite) || 1;
-                  setForm({
-                    ...form,
-                    produitId: e.target.value,
-                    prixUnitaire: prod
-                      ? String(
-                          resolvePrixVenteHT(prod, {
-                            clientId,
-                            quantite: qte,
-                            tarifsClients,
-                          }),
-                        )
-                      : form.prixUnitaire,
-                  });
-                }}
-              >
-                {produitsDispo.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} — {p.libelleCourt} ({prixVenteCatalogue(p)} Ar)
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                step="0.1"
-                className="input"
-                placeholder="Qté"
-                value={form.quantite}
-                onChange={(e) => setForm({ ...form, quantite: e.target.value })}
-              />
-              <input
-                type="number"
-                step="100"
-                className="input"
-                placeholder="P.U. HT"
-                value={form.prixUnitaire}
-                onChange={(e) =>
-                  setForm({ ...form, prixUnitaire: e.target.value })
-                }
-              />
-              <input
-                type="number"
-                min={0}
-                max={100}
-                className="input"
-                placeholder="Remise %"
-                value={form.remisePercent}
-                onChange={(e) =>
-                  setForm({ ...form, remisePercent: e.target.value })
-                }
-              />
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
+                  Catalogue produits
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Cochez les articles — ils apparaissent ci-dessous pour saisir
+                  quantité, remise, etc.
+                </p>
+              </div>
+              <p className="text-xs text-muted">
+                {produitsSelectionnesIds.size} sélectionné
+                {produitsSelectionnesIds.size > 1 ? "s" : ""} ·{" "}
+                {catalogueFiltre.length} affiché
+                {catalogueFiltre.length > 1 ? "s" : ""}
+              </p>
+            </div>
+
+            <div className="mb-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={addProduitLigne}
+                className={`btn ${filtreFamille === "" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setFiltreFamille("")}
               >
-                <Plus className="h-4 w-4" />
-                Produit
+                Toutes les familles
               </button>
+              {categoriesActives.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`btn ${filtreFamille === c.id ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setFiltreFamille(c.id)}
+                >
+                  {c.libelle}
+                </button>
+              ))}
             </div>
-            <input
-              className="input mt-2"
-              placeholder="Commentaire sur cette ligne (optionnel)"
-              value={form.commentaireLigne}
-              onChange={(e) =>
-                setForm({ ...form, commentaireLigne: e.target.value })
-              }
-            />
+
+            <label className="mb-3 block text-xs font-semibold text-muted">
+              Recherche
+              <input
+                className="input mt-1"
+                placeholder="Code, libellé…"
+                value={rechercheProduit}
+                onChange={(e) => setRechercheProduit(e.target.value)}
+              />
+            </label>
+
+            {!pointDeVenteId && (
+              <p className="mb-2 text-xs text-muted">
+                Sélectionnez un point de vente pour afficher le stock.
+              </p>
+            )}
+
+            <div className="table-shell max-h-[320px] overflow-auto">
+              <table className="data">
+                <thead className="sticky top-0 z-10 bg-card">
+                  <tr>
+                    <th className="w-10">
+                      <span className="sr-only">Sélection</span>
+                    </th>
+                    <th>Code</th>
+                    <th>Désignation</th>
+                    <th>Famille</th>
+                    <th>Stock</th>
+                    <th>Unité</th>
+                    <th>P.U. HT</th>
+                    {assujettiTVA && <th>TVA</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogueFiltre.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={assujettiTVA ? 8 : 7}
+                        className="text-muted"
+                      >
+                        Aucun produit pour ce filtre.
+                      </td>
+                    </tr>
+                  ) : (
+                    catalogueFiltre.map((p) => {
+                      const checked = produitsSelectionnesIds.has(p.id);
+                      const stock = stockDisponible(
+                        p.id,
+                        pointDeVenteId,
+                        entrees,
+                        ventes,
+                      );
+                      const restant = stockRestantPourSaisie(
+                        p.id,
+                        pointDeVenteId,
+                        entrees,
+                        ventes,
+                        lignes,
+                      );
+                      const indispo = !checked && restant <= 0;
+                      const prix = resolvePrixVenteHT(p, {
+                        clientId,
+                        quantite: 1,
+                        tarifsClients,
+                      });
+                      return (
+                        <tr
+                          key={p.id}
+                          className={
+                            checked
+                              ? "bg-sea-50/60"
+                              : indispo
+                                ? "opacity-55"
+                                : undefined
+                          }
+                        >
+                          <td>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-sea-700"
+                              checked={checked}
+                              disabled={indispo}
+                              onChange={(e) =>
+                                toggleProduit(p.id, e.target.checked)
+                              }
+                              aria-label={`Sélectionner ${p.libelleCourt}`}
+                              title={
+                                indispo
+                                  ? "Produit indisponible en stock"
+                                  : undefined
+                              }
+                            />
+                          </td>
+                          <td className="font-mono text-xs">{p.code}</td>
+                          <td>
+                            <p className="font-medium">{p.libelleCourt}</p>
+                            {p.libelleLong &&
+                              p.libelleLong !== p.libelleCourt && (
+                                <p className="text-xs text-muted">
+                                  {p.libelleLong}
+                                </p>
+                              )}
+                            {indispo && (
+                              <p className="text-xs font-medium text-danger">
+                                Rupture de stock
+                              </p>
+                            )}
+                          </td>
+                          <td className="text-sm">
+                            {libelleFamille(p.categorieId)}
+                          </td>
+                          <td
+                            className={`font-semibold tabular-nums ${
+                              stock <= 0 ? "text-danger" : ""
+                            }`}
+                          >
+                            {formatNumber(stock)}
+                          </td>
+                          <td>{p.unite}</td>
+                          <td className="font-semibold">
+                            {formatCurrency(prix)}
+                          </td>
+                          {assujettiTVA && (
+                            <td className="text-sm text-muted">
+                              {`${formatNumber(p.tauxTVA)} %`}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {stockError && (
+              <p className="mt-2 text-xs font-medium text-danger">{stockError}</p>
+            )}
+
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -448,7 +696,7 @@ export function DocumentSaisieWizard({
                 {lignes.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="text-muted">
-                      Aucune ligne. Ajoutez des produits ou éléments.
+                      Aucune ligne. Cochez des produits dans le catalogue.
                     </td>
                   </tr>
                 ) : (
@@ -551,11 +799,32 @@ export function DocumentSaisieWizard({
                         </tr>
                       );
                     }
+                    const stockLigne = l.produitId
+                      ? stockDisponible(
+                          l.produitId,
+                          pointDeVenteId,
+                          entrees,
+                          ventes,
+                        )
+                      : 0;
+                    const maxLigne = l.produitId
+                      ? stockRestantPourSaisie(
+                          l.produitId,
+                          pointDeVenteId,
+                          entrees,
+                          ventes,
+                          lignes,
+                          l.key,
+                        )
+                      : 0;
                     return (
                       <tr key={l.key} className={rowClass} {...dropProps}>
                         {handle}
                         <td>
                           <p className="font-medium">{l.designation}</p>
+                          <p className="text-xs text-muted">
+                            Stock : {formatNumber(stockLigne)} {l.unite}
+                          </p>
                           <input
                             className="input mt-1 text-xs"
                             placeholder="Commentaire ligne"
@@ -571,6 +840,8 @@ export function DocumentSaisieWizard({
                           <input
                             type="number"
                             className="input w-20"
+                            min={0}
+                            max={maxLigne}
                             value={l.quantite}
                             onChange={(e) =>
                               updateLigne(l.key, {
@@ -671,7 +942,9 @@ export function DocumentSaisieWizard({
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg bg-card px-3 py-2">
-                <p className="text-[11px] text-muted">Montant HT</p>
+                <p className="text-[11px] text-muted">
+                  {assujettiTVA ? "Montant HT" : "Montant"}
+                </p>
                 <p className="font-display text-lg font-semibold">
                   {formatCurrency(totauxDraft.totalHT)}
                 </p>
@@ -682,12 +955,14 @@ export function DocumentSaisieWizard({
                   {formatCurrency(totauxDraft.totalRemise)}
                 </p>
               </div>
-              <div className="rounded-lg bg-card px-3 py-2">
-                <p className="text-[11px] text-muted">Total TVA</p>
-                <p className="font-display text-lg font-semibold">
-                  {formatCurrency(totauxDraft.montantTVA)}
-                </p>
-              </div>
+              {assujettiTVA && (
+                <div className="rounded-lg bg-card px-3 py-2">
+                  <p className="text-[11px] text-muted">Total TVA</p>
+                  <p className="font-display text-lg font-semibold">
+                    {formatCurrency(totauxDraft.montantTVA)}
+                  </p>
+                </div>
+              )}
               {showAcomptes && (
                 <div className="rounded-lg bg-card px-3 py-2">
                   <p className="text-[11px] text-muted">Acompte(s) payé(s)</p>
@@ -699,15 +974,21 @@ export function DocumentSaisieWizard({
                   )}
                 </div>
               )}
-              <div className="rounded-lg bg-card px-3 py-2">
-                <p className="text-[11px] text-muted">Total TTC</p>
-                <p className="font-display text-lg font-semibold">
-                  {formatCurrency(totauxDraft.totalTTC)}
-                </p>
-              </div>
+              {assujettiTVA && (
+                <div className="rounded-lg bg-card px-3 py-2">
+                  <p className="text-[11px] text-muted">Total TTC</p>
+                  <p className="font-display text-lg font-semibold">
+                    {formatCurrency(totauxDraft.totalTTC)}
+                  </p>
+                </div>
+              )}
               <div className="rounded-lg bg-sea-800 px-3 py-2 text-white">
                 <p className="text-[11px] text-sea-200">
-                  {showAcomptes ? "Montant à payer" : "Montant TTC"}
+                  {showAcomptes
+                    ? "Montant à payer"
+                    : assujettiTVA
+                      ? "Montant TTC"
+                      : "Total"}
                 </p>
                 <p className="font-display text-lg font-semibold">
                   {formatCurrency(
@@ -797,6 +1078,41 @@ export function DocumentSaisieWizard({
               <strong>Commentaire général :</strong> {form.note}
             </p>
           )}
+
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
+                Prévisualisation PDF (obligatoire avant enregistrement)
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => window.print()}
+              >
+                <FileText className="h-4 w-4" />
+                Imprimer / PDF
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-muted">
+              Aperçu provisoire — non enregistré ({previewMeta.numero})
+            </p>
+            <DocumentPreview
+              type={previewMeta.type}
+              numero={previewMeta.numero}
+              date={previewMeta.date}
+              echeance={previewMeta.echeance}
+              client={previewMeta.client}
+              pdv={previewMeta.pdv}
+              parametres={previewMeta.parametres}
+              modele={previewMeta.modele}
+              lignes={draftToLignes(recalculerSousTotaux(lignes))}
+              totaux={totauxDraft}
+              conditionsPaiement={previewMeta.conditionsPaiement}
+              note={form.note.trim() || undefined}
+              referenceDevis={previewMeta.referenceDevis}
+              referenceCommande={previewMeta.referenceCommande}
+            />
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary" onClick={confirmer}>

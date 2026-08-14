@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import {
+  ACOMPTE_STATUTS,
   MODES_PAIEMENT,
+  appliqueTVA,
   nextNumero,
   splitTTC,
 } from "@/lib/commercial";
@@ -13,7 +16,24 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { ModePaiement } from "@/lib/types";
 
+type FiltreAcompte = "tous" | "enregistre" | "impute" | "annule";
+
+const FILTRES: { id: FiltreAcompte; label: string }[] = [
+  { id: "tous", label: "Tous" },
+  { id: "enregistre", label: "Enregistrés" },
+  { id: "impute", label: "Imputés" },
+  { id: "annule", label: "Annulés" },
+];
+
+function filtreDepuisQuery(statut: string | null): FiltreAcompte {
+  if (statut && FILTRES.some((f) => f.id === statut)) {
+    return statut as FiltreAcompte;
+  }
+  return "tous";
+}
+
 export default function AcomptesPage() {
+  const searchParams = useSearchParams();
   const {
     acomptes,
     clients,
@@ -28,6 +48,14 @@ export default function AcomptesPage() {
     addFacture,
   } = useStore();
 
+  const [filtre, setFiltre] = useState<FiltreAcompte>(() =>
+    filtreDepuisQuery(searchParams.get("statut")),
+  );
+
+  useEffect(() => {
+    setFiltre(filtreDepuisQuery(searchParams.get("statut")));
+  }, [searchParams]);
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     clientId: clients[0]?.id ?? "",
@@ -40,13 +68,19 @@ export default function AcomptesPage() {
     note: "",
   });
 
+  const acomptesFiltres = useMemo(() => {
+    return [...acomptes]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .filter((a) => (filtre === "tous" ? true : a.statut === filtre));
+  }, [acomptes, filtre]);
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     const montantTTC = Number(form.montantTTC);
     if (!form.clientId || montantTTC <= 0) return;
 
     const assujetti =
-      parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+      appliqueTVA(parametres);
     const { ht } = splitTTC(montantTTC, parametres.tauxTVA, assujetti);
 
     const numeroAco = nextNumero(
@@ -279,6 +313,19 @@ export default function AcomptesPage() {
         </form>
       )}
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {FILTRES.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            className={`btn ${filtre === f.id ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setFiltre(f.id)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="table-shell">
         <table className="data">
           <thead>
@@ -294,9 +341,14 @@ export default function AcomptesPage() {
             </tr>
           </thead>
           <tbody>
-            {[...acomptes]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((a) => {
+            {acomptesFiltres.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="text-muted">
+                  Aucun acompte pour ce filtre.
+                </td>
+              </tr>
+            ) : (
+              acomptesFiltres.map((a) => {
                 const client = clients.find((c) => c.id === a.clientId);
                 const fac = factures.find(
                   (f) => f.id === a.factureAcompteId || f.id === a.factureId,
@@ -330,9 +382,11 @@ export default function AcomptesPage() {
                           })
                         }
                       >
-                        <option value="enregistre">Enregistré</option>
-                        <option value="impute">Imputé</option>
-                        <option value="annule">Annulé</option>
+                        {Object.entries(ACOMPTE_STATUTS).map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
                       </select>
                     </td>
                     <td>
@@ -349,7 +403,8 @@ export default function AcomptesPage() {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
           </tbody>
         </table>
       </div>

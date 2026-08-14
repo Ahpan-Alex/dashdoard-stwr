@@ -1,42 +1,50 @@
 "use client";
 
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import {
   DocumentSaisieWizard,
 } from "@/components/document-saisie-wizard";
+import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import {
-  DEVIS_STATUTS,
-  nextNumero,
-  totauxDevis,
-} from "@/lib/commercial";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { appliqueTVA, nextNumero } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
-import type { DevisStatut } from "@/lib/types";
 
 export default function DevisPage() {
   const {
     devis,
     clients,
     produits,
+    categoriesProduits,
     pointsDeVente,
     parametres,
-    commandes,
+    modelesDocuments,
     tarifsClients,
+    entrees,
+    ventes,
     addDevis,
-    updateDevis,
-    deleteDevis,
-    addCommande,
   } = useStore();
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
     date: new Date().toISOString().slice(0, 10),
     validiteJours: "15",
   });
+  const [wizardKey, setWizardKey] = useState(0);
+
+  const modele = modelesDocuments.find((m) => m.type === "devis" && m.actif);
+  const numeroProvisoire = nextNumero(
+    "DEV",
+    devis.map((d) => d.numero),
+  );
+  const echeanceProvisoire = (() => {
+    const d = new Date(`${meta.date}T12:00:00`);
+    d.setDate(d.getDate() + (Number(meta.validiteJours) || 15));
+    return d.toISOString();
+  })();
 
   function ouvrirFormulaire() {
     setMeta({
@@ -45,40 +53,16 @@ export default function DevisPage() {
       date: new Date().toISOString().slice(0, 10),
       validiteJours: "15",
     });
+    setWizardKey((k) => k + 1);
     setOpen(true);
   }
 
-  function convertirEnCommande(devisId: string) {
-    const d = devis.find((x) => x.id === devisId);
-    if (!d) return;
-    addCommande({
-      numero: nextNumero(
-        "CMD",
-        commandes.map((c) => c.numero),
-      ),
-      clientId: d.clientId,
-      pointDeVenteId: d.pointDeVenteId,
-      date: new Date().toISOString(),
-      statut: "confirmee",
-      devisId: d.id,
-      tauxTVA: d.tauxTVA ?? parametres.tauxTVA,
-      conditionsPaiement:
-        d.conditionsPaiement || parametres.conditionsPaiementDefaut,
-      lignes: d.lignes.map((l) => ({ ...l, id: `cl-${l.id}` })),
-      remiseGlobale: d.remiseGlobale,
-      note: d.note,
-    });
-    updateDevis(d.id, { statut: "accepte" });
-    alert("Commande créée à partir du devis.");
-  }
-
-  const assujettiTVA =
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+  const assujettiTVA = appliqueTVA(parametres);
 
   return (
     <div>
       <PageHeader
-        title="Devis"
+        title="Nouveau devis"
         description="Propositions commerciales — convertibles en commandes."
         actions={
           <button className="btn btn-primary" onClick={ouvrirFormulaire}>
@@ -88,15 +72,33 @@ export default function DevisPage() {
         }
       />
 
-      {open && (
+      <DevisSubnav />
+
+      {open ? (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
           <DocumentSaisieWizard
+            key={wizardKey}
             titre="Nouveau devis"
             produits={produits}
+            categoriesProduits={categoriesProduits}
             clientId={meta.clientId}
             tarifsClients={tarifsClients}
+            pointDeVenteId={meta.pointDeVenteId}
+            entrees={entrees}
+            ventes={ventes}
             tauxTVA={parametres.tauxTVA}
             assujettiTVA={assujettiTVA}
+            previewMeta={{
+              type: "devis",
+              numero: numeroProvisoire,
+              date: new Date(`${meta.date}T12:00:00`).toISOString(),
+              echeance: echeanceProvisoire,
+              client: clients.find((c) => c.id === meta.clientId),
+              pdv: pointsDeVente.find((p) => p.id === meta.pointDeVenteId),
+              parametres,
+              modele,
+              conditionsPaiement: parametres.conditionsPaiementDefaut,
+            }}
             confirmLabel="Enregistrer le devis"
             onCancel={() => setOpen(false)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
@@ -183,83 +185,18 @@ export default function DevisPage() {
             }
           />
         </div>
+      ) : (
+        <p className="mb-4 text-sm text-muted">
+          Consultez et modifiez les devis dans{" "}
+          <Link
+            href="/devis/liste"
+            className="font-semibold text-sea-700 underline"
+          >
+            Liste des devis
+          </Link>
+          .
+        </p>
       )}
-
-      <div className="table-shell">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>PDV</th>
-              <th>Montant</th>
-              <th>Statut</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...devis]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((d) => {
-                const client = clients.find((c) => c.id === d.clientId);
-                const pdv = pointsDeVente.find(
-                  (p) => p.id === d.pointDeVenteId,
-                );
-                return (
-                  <tr key={d.id}>
-                    <td className="font-medium">{d.numero}</td>
-                    <td>{formatDate(d.date)}</td>
-                    <td>{client?.nom ?? "—"}</td>
-                    <td>{pdv?.nom ?? "—"}</td>
-                    <td className="font-semibold">
-                      {formatCurrency(totauxDevis(d, parametres).totalTTC)}
-                    </td>
-                    <td>
-                      <select
-                        className="select max-w-[160px]"
-                        value={d.statut}
-                        onChange={(e) =>
-                          updateDevis(d.id, {
-                            statut: e.target.value as DevisStatut,
-                          })
-                        }
-                      >
-                        {Object.entries(DEVIS_STATUTS).map(([id, label]) => (
-                          <option key={id} value={id}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        {d.statut !== "refuse" && d.statut !== "expire" && (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => convertirEnCommande(d.id)}
-                          >
-                            → Commande
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-ghost"
-                          onClick={() => {
-                            if (confirm(`Supprimer ${d.numero} ?`)) {
-                              deleteDevis(d.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-danger" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

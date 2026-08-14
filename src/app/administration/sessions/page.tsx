@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { RequirePermission } from "@/components/require-permission";
@@ -20,7 +20,12 @@ function SessionsContent() {
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentSessionId = useAuthStore((s) => s.currentSessionId);
   const revokeSession = useAuthStore((s) => s.revokeSession);
+  const refreshSessions = useAuthStore((s) => s.refreshSessions);
   const me = currentUser();
+
+  useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
 
   const rows = useMemo(() => {
     return sessions

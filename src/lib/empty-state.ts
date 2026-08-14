@@ -1,0 +1,90 @@
+import { createDefaultModeles } from "./document-templates";
+import { seedCategoriesProduits } from "./produits";
+import type { AppState } from "./types";
+
+/** État métier vide — plus de données fake côté client. */
+export function emptyAppState(): AppState {
+  return {
+    pointDeVenteActifId: "tous",
+    parametres: {
+      nomEntreprise: "",
+      formeJuridique: "SARL",
+      capital: 0,
+      devise: "Ar",
+      nif: "",
+      stat: "",
+      rcs: "",
+      adresse: "",
+      ville: "",
+      telephone: "",
+      email: "",
+      rib: "",
+      banque: "",
+      tauxTVA: 20,
+      assujettiTVA: true,
+      regimeFiscal: "tva",
+      seuilMargePalier1Percent: 25,
+      seuilMargePalier2Percent: 5,
+      conditionsPaiementDefaut:
+        "Paiement à 30 jours. Acompte de 30 % à la commande. Espèces, virement ou Mobile Money.",
+    },
+    modelesDocuments: createDefaultModeles(),
+    bilanInitial: {
+      date: new Date().toISOString(),
+      immobilisations: 0,
+      stocks: 0,
+      creancesClients: 0,
+      disponibilites: 0,
+      capital: 0,
+      dettesFournisseurs: 0,
+      dettesSociales: 0,
+      emprunts: 0,
+      resultatReporte: 0,
+    },
+    immobilisations: [],
+    clients: [],
+    fournisseurs: [],
+    devis: [],
+    commandes: [],
+    bonsDeLivraison: [],
+    factures: [],
+    acomptes: [],
+    pointsDeVente: [],
+    categoriesProduits: seedCategoriesProduits(),
+    produits: [],
+    tarifsClients: [],
+    historiquesPrix: [],
+    journalAudit: [],
+    entrees: [],
+    ventes: [],
+    charges: [],
+    rapportsFinJournee: [],
+  };
+}
+
+export function pickAppState(state: AppState): AppState {
+  return {
+    parametres: state.parametres,
+    modelesDocuments: state.modelesDocuments,
+    bilanInitial: state.bilanInitial,
+    immobilisations: state.immobilisations,
+    clients: state.clients,
+    fournisseurs: state.fournisseurs,
+    devis: state.devis,
+    commandes: state.commandes,
+    bonsDeLivraison: state.bonsDeLivraison,
+    factures: state.factures,
+    acomptes: state.acomptes,
+    pointsDeVente: state.pointsDeVente,
+    categoriesProduits: state.categoriesProduits,
+    produits: state.produits,
+    tarifsClients: state.tarifsClients,
+    historiquesPrix: state.historiquesPrix,
+    journalAudit: state.journalAudit,
+    entrees: state.entrees,
+    ventes: state.ventes,
+    charges: state.charges,
+    rapportsFinJournee: state.rapportsFinJournee ?? [],
+    pointDeVenteActifId: state.pointDeVenteActifId,
+  };
+}

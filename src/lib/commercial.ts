@@ -8,7 +8,9 @@ import type {
   FactureStatut,
   LigneDocument,
   Parametres,
+  RegimeFiscal,
   TypeLigneDocument,
+  Vente,
 } from "./types";
 
 export type TotauxDocument = {
@@ -115,7 +117,7 @@ export function totauxDevis(devis: Devis, parametres: Parametres) {
     devis.lignes,
     devis.tauxTVA ?? parametres.tauxTVA,
     0,
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva",
+    appliqueTVA(parametres),
     devis.remiseGlobale ?? 0,
   );
 }
@@ -136,7 +138,7 @@ export function totauxCommande(
     commande.lignes,
     commande.tauxTVA ?? parametres.tauxTVA,
     acomptesTTC,
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva",
+    appliqueTVA(parametres),
     commande.remiseGlobale ?? 0,
   );
 }
@@ -158,7 +160,7 @@ export function totauxBonDeLivraison(
     bl.lignes,
     bl.tauxTVA ?? parametres.tauxTVA,
     acomptesTTC,
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva",
+    appliqueTVA(parametres),
     bl.remiseGlobale ?? 0,
   );
 }
@@ -168,8 +170,7 @@ export function totauxFacture(
   parametres: Parametres,
   acomptes: Acompte[] = [],
 ) {
-  const assujetti =
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+  const assujetti = appliqueTVA(parametres);
 
   // Facture d'acompte : document de l'opération d'acompte (montant = lignes).
   // Le règlement ultérieur ne modifie pas le net imprimé.
@@ -512,6 +513,67 @@ export const FACTURE_TYPES: Record<string, string> = {
   proforma: "Proforma",
 };
 
+export const ACOMPTE_STATUTS: Record<string, string> = {
+  enregistre: "Enregistré",
+  impute: "Imputé",
+  annule: "Annulé",
+};
+
+export type CouleurStatutDoc =
+  | "sand"
+  | "sea"
+  | "success"
+  | "coral"
+  | "danger"
+  | "warning";
+
+/** Couleur de pastille selon le statut d'un document commercial. */
+export function couleurStatutDocument(statut: string): CouleurStatutDoc {
+  switch (statut) {
+    case "brouillon":
+    case "enregistre":
+      return "sand";
+    case "envoye":
+    case "proforma":
+    case "en_cours":
+    case "prepare":
+    case "expedie":
+    case "partiellement_payee":
+    case "emise":
+      return "warning";
+    case "accepte":
+    case "confirmee":
+    case "livree":
+    case "livre":
+    case "validee":
+    case "envoyee":
+    case "payee":
+    case "impute":
+      return "success";
+    case "refuse":
+    case "expire":
+    case "annulee":
+    case "annule":
+    case "en_retard":
+      return "danger";
+    default:
+      return "sea";
+  }
+}
+
+export function compterDocumentsParStatut(
+  docs: { statut: string }[],
+): { statut: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const d of docs) {
+    const key = d.statut || "inconnu";
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([statut, count]) => ({ statut, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export const MODES_PAIEMENT: Record<string, string> = {
   especes: "Espèces",
   virement: "Virement",
@@ -531,6 +593,67 @@ export const IMMO_CATEGORIES: Record<string, string> = {
 
 export const REGIMES_FISCAUX: Record<string, string> = {
   tva: "Assujetti TVA",
-  imp: "Régime IMP (marchés publics)",
-  franchise: "Franchise / non assujetti",
+  ei: "EI — Entrepreneur individuel (sans TVA)",
+  ir: "IR — Impôt sur les revenus (sans TVA)",
+  franchise: "Franchise de TVA / non assujetti",
+  imp: "IMP (marchés publics)",
 };
+
+/** TVA collectée uniquement en régime « Assujetti TVA ». */
+export function appliqueTVA(parametres: Pick<Parametres, "assujettiTVA" | "regimeFiscal">) {
+  return parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+}
+
+/** Régimes sans TVA (EI, IR, franchise…). */
+export function regimeSansTVA(regime: RegimeFiscal) {
+  return regime === "ei" || regime === "ir" || regime === "franchise";
+}
+
+/**
+ * Une facture fiscale validée (ou un avoir) alimente CA + stock.
+ * Exclus : brouillon, proforma, acompte, annulée.
+ */
+export function factureImpacteExploitation(f: Pick<Facture, "type" | "statut">) {
+  if (f.type === "acompte" || f.type === "proforma") return false;
+  if (
+    f.statut === "brouillon" ||
+    f.statut === "proforma" ||
+    f.statut === "annulee"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** Convertit les lignes produits d'une facture en mouvements de vente. */
+export function ventesDepuisFacture(
+  facture: Facture,
+): Omit<Vente, "id">[] {
+  if (!factureImpacteExploitation(facture)) return [];
+  const signe = facture.type === "avoir" ? -1 : 1;
+  return facture.lignes
+    .filter((l) => isLigneProduit(l) && l.produitId && l.quantite)
+    .map((l) => ({
+      pointDeVenteId: facture.pointDeVenteId,
+      produitId: l.produitId!,
+      quantite: signe * Math.abs(l.quantite),
+      prixUnitaire: l.prixUnitaire,
+      date: facture.date,
+      clientId: facture.clientId,
+      factureId: facture.id,
+    }));
+}
+
+/** Reconstruit toutes les ventes dérivées des factures (source de vérité). */
+export function rebuildVentesDepuisFactures(factures: Facture[]): Vente[] {
+  const out: Vente[] = [];
+  for (const f of factures) {
+    ventesDepuisFacture(f).forEach((v, i) => {
+      out.push({
+        ...v,
+        id: `v-${f.id}-${v.produitId}-${i}`,
+      });
+    });
+  }
+  return out;
+}

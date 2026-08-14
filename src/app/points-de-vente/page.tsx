@@ -77,9 +77,27 @@ export default function PointsDeVentePage() {
                   <dd className="font-semibold">{formatCurrency(caMois)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted">Objectif mois</dt>
+                  <dt className="text-xs text-muted">Objectif CA mois</dt>
                   <dd className="font-semibold">
                     {formatCurrency(pdv.objectifCAMensuel ?? 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Objectif CA année</dt>
+                  <dd className="font-semibold">
+                    {formatCurrency(pdv.objectifCAAnnuel ?? 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Objectif marge mois</dt>
+                  <dd className="font-semibold">
+                    {formatCurrency(pdv.objectifMargeMensuel ?? 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Objectif marge année</dt>
+                  <dd className="font-semibold">
+                    {formatCurrency(pdv.objectifMargeAnnuel ?? 0)}
                   </dd>
                 </div>
                 <div>

@@ -20,17 +20,15 @@ function AuthSessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const currentSessionId = useAuthStore((s) => s.currentSessionId);
-  const sessions = useAuthStore((s) => s.sessions);
-  const users = useAuthStore((s) => s.users);
+  const userState = useAuthStore((s) => s.user);
   const touchSession = useAuthStore((s) => s.touchSession);
   const logout = useAuthStore((s) => s.logout);
   const sessionValide = useAuthStore((s) => s.sessionValide);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const bootstrap = useAuthStore((s) => s.bootstrap);
 
   const publicAuth = isPublicAuthPath(pathname);
-  // sessions / users / currentSessionId force re-render on auth changes
-  void sessions;
-  void users;
+  void userState;
   const valid = sessionValide();
   const user = currentUser();
 
@@ -40,7 +38,7 @@ function AuthSessionGuard({ children }: { children: ReactNode }) {
       return;
     }
     if (!valid) {
-      if (currentSessionId) logout();
+      if (currentSessionId) void logout();
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
   }, [publicAuth, valid, currentSessionId, logout, pathname, router]);
@@ -51,9 +49,13 @@ function AuthSessionGuard({ children }: { children: ReactNode }) {
     const onActivity = () => touchSession();
     window.addEventListener("pointerdown", onActivity);
     window.addEventListener("keydown", onActivity);
-    const interval = window.setInterval(() => {
-      if (!useAuthStore.getState().sessionValide()) {
-        useAuthStore.getState().logout();
+    const interval = window.setInterval(async () => {
+      try {
+        const { apiFetch } = await import("@/lib/api");
+        await apiFetch("/auth/me");
+        touchSession();
+      } catch {
+        await useAuthStore.getState().logout();
         router.replace("/login?reason=idle");
       }
     }, 60_000);
@@ -62,7 +64,7 @@ function AuthSessionGuard({ children }: { children: ReactNode }) {
       window.removeEventListener("keydown", onActivity);
       window.clearInterval(interval);
     };
-  }, [valid, publicAuth, touchSession, router]);
+  }, [valid, publicAuth, touchSession, router, bootstrap]);
 
   useEffect(() => {
     if (!valid || publicAuth || !user?.mustChangePassword) return;

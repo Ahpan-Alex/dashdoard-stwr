@@ -1,29 +1,58 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { hashPassword, validerMotDePasse, verifyPassword } from "./auth/password";
-import {
-  LOCK_MINUTES,
-  MAX_LOGIN_ATTEMPTS,
-  ROLE_LABELS,
-  SESSION_IDLE_MS,
-  SESSION_MAX_MS,
-  RESET_TOKEN_TTL_MS,
-  roleHasPermission,
-  type Permission,
-  type RoleId,
-} from "./auth/rbac";
+import { apiFetch, ApiError } from "./api";
+import { roleHasPermission, type Permission, type RoleId } from "./auth/rbac";
 import type {
   AppUser,
   AuthAuditEntry,
   AuthSession,
-  PasswordResetToken,
   Tenant,
 } from "./auth/types";
 
-function uid(prefix: string) {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
+export const DEMO_PASSWORD = "Demo2026!STWR";
+
+type MeResponse = {
+  user: Omit<
+    AppUser,
+    "passwordHash" | "passwordSalt" | "passwordHistory" | "failedAttempts" | "lockedUntil"
+  > & {
+    lastLoginAt: string | null;
+    mustChangePassword: boolean;
+    photoData?: string | null;
+  };
+  tenant: Tenant;
+  permissions: Permission[];
+  session: {
+    id: string;
+    createdAt: string;
+    lastActivityAt: string;
+    expiresAt: string;
+    deviceLabel: string;
+  };
+};
+
+type PublicUser = MeResponse["user"];
+
+function toAppUser(u: PublicUser): AppUser {
+  return {
+    id: u.id,
+    tenantId: u.tenantId,
+    email: u.email,
+    nom: u.nom,
+    role: u.role,
+    pointDeVenteIds: u.pointDeVenteIds ?? [],
+    passwordHash: "",
+    passwordSalt: "",
+    passwordHistory: [],
+    actif: u.actif,
+    mfaRequired: u.mfaRequired,
+    failedAttempts: 0,
+    mustChangePassword: u.mustChangePassword,
+    lastLoginAt: u.lastLoginAt ?? undefined,
+    createdAt: u.createdAt,
+    photoData: u.photoData ?? null,
+  };
 }
 
 function deviceLabel() {
@@ -35,28 +64,37 @@ function deviceLabel() {
   return "Navigateur";
 }
 
-const DEMO_PASSWORD = "Demo2026!STWR";
-
 type AuthStore = {
-  tenants: Tenant[];
+  ready: boolean;
+  bootstrapped: boolean;
+  user: AppUser | null;
+  tenant: Tenant | null;
+  permissions: Permission[];
+  currentSessionId: string | null;
   users: AppUser[];
   sessions: AuthSession[];
   audit: AuthAuditEntry[];
-  resetTokens: PasswordResetToken[];
-  currentSessionId: string | null;
+  /** @deprecated always true once API is up — kept for login UX */
   passwordsReady: boolean;
 
+  bootstrap: () => Promise<void>;
   ensureDemoPasswords: () => Promise<void>;
   login: (
     email: string,
     password: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   touchSession: () => void;
   sessionValide: () => boolean;
   currentUser: () => AppUser | null;
   currentTenant: () => Tenant | null;
   hasPermission: (p: Permission) => boolean;
+
+  refreshUsers: () => Promise<void>;
+  refreshSessions: () => Promise<void>;
+  refreshAudit: () => Promise<void>;
+  exportAuditOlderThan: (olderThanDays: number) => Promise<AuthAuditEntry[]>;
+  purgeAuditOlderThan: (olderThanDays: number) => Promise<number>;
 
   createUser: (data: {
     email: string;
@@ -69,12 +107,9 @@ type AuthStore = {
   updateUser: (
     id: string,
     data: Partial<
-      Pick<
-        AppUser,
-        "nom" | "role" | "pointDeVenteIds" | "actif" | "mfaRequired"
-      >
+      Pick<AppUser, "nom" | "role" | "pointDeVenteIds" | "actif" | "mfaRequired">
     >,
-  ) => void;
+  ) => Promise<void>;
   resetPasswordAdmin: (
     id: string,
     newPassword: string,
@@ -90,571 +125,356 @@ type AuthStore = {
     current: string,
     next: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  revokeSession: (sessionId: string) => void;
-  revokeOtherSessions: () => void;
+  updateOwnPhoto: (
+    photoData: string | null,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  revokeSession: (sessionId: string) => Promise<void>;
+  revokeOtherSessions: () => Promise<void>;
 };
 
-function pushAudit(
-  state: AuthStore,
-  entry: Omit<AuthAuditEntry, "id" | "date">,
-): AuthAuditEntry[] {
-  return [
-    {
-      id: uid("aud"),
-      date: new Date().toISOString(),
-      ...entry,
-    },
-    ...state.audit,
-  ].slice(0, 500);
+function applyMe(set: (p: Partial<AuthStore>) => void, me: MeResponse) {
+  set({
+    user: toAppUser(me.user),
+    tenant: me.tenant,
+    permissions: me.permissions,
+    currentSessionId: me.session.id,
+    sessions: [
+      {
+        id: me.session.id,
+        userId: me.user.id,
+        tenantId: me.user.tenantId,
+        createdAt: me.session.createdAt,
+        lastActivityAt: me.session.lastActivityAt,
+        expiresAt: me.session.expiresAt,
+        deviceLabel: me.session.deviceLabel,
+      },
+    ],
+    ready: true,
+  });
 }
 
-const seedTenant: Tenant = {
-  id: "tenant-stwr",
-  slug: "stwr",
-  nom: "STWR Poissonnerie",
-  nif: "5000123456",
-  actif: true,
-};
-
-function seedUserStub(
-  partial: Omit<
-    AppUser,
-    | "passwordHash"
-    | "passwordSalt"
-    | "passwordHistory"
-    | "failedAttempts"
-    | "createdAt"
-  > & { id: string },
-): AppUser {
-  return {
-    ...partial,
-    passwordHash: "",
-    passwordSalt: "",
-    passwordHistory: [],
-    failedAttempts: 0,
-    createdAt: new Date().toISOString(),
-  };
+function clearAuth(set: (p: Partial<AuthStore>) => void) {
+  set({
+    user: null,
+    tenant: null,
+    permissions: [],
+    currentSessionId: null,
+    users: [],
+    sessions: [],
+    audit: [],
+    ready: true,
+  });
 }
 
-export const useAuthStore = create<AuthStore>()(
-  persist(
-    (set, get) => ({
-      tenants: [seedTenant],
-      users: [
-        seedUserStub({
-          id: "usr-admin",
-          tenantId: seedTenant.id,
-          email: "admin@stwr.mg",
-          nom: "Administrateur STWR",
-          role: "admin_entreprise",
-          pointDeVenteIds: [],
-          actif: true,
-          mfaRequired: false,
-        }),
-        seedUserStub({
-          id: "usr-compta",
-          tenantId: seedTenant.id,
-          email: "comptable@stwr.mg",
-          nom: "Comptable STWR",
-          role: "comptable",
-          pointDeVenteIds: [],
-          actif: true,
-          mfaRequired: false,
-        }),
-        seedUserStub({
-          id: "usr-caisse",
-          tenantId: seedTenant.id,
-          email: "caisse@stwr.mg",
-          nom: "Caissier Marché",
-          role: "caissier",
-          pointDeVenteIds: ["pdv-marche"],
-          actif: true,
-          mfaRequired: false,
-        }),
-        seedUserStub({
-          id: "usr-lecture",
-          tenantId: seedTenant.id,
-          email: "lecture@stwr.mg",
-          nom: "Consultation direction",
-          role: "lecture_seule",
-          pointDeVenteIds: [],
-          actif: true,
-          mfaRequired: false,
-        }),
-      ],
-      sessions: [],
-      audit: [],
-      resetTokens: [],
-      currentSessionId: null,
-      passwordsReady: false,
+export const useAuthStore = create<AuthStore>()((set, get) => ({
+  ready: false,
+  bootstrapped: false,
+  user: null,
+  tenant: null,
+  permissions: [],
+  currentSessionId: null,
+  users: [],
+  sessions: [],
+  audit: [],
+  passwordsReady: true,
 
-      ensureDemoPasswords: async () => {
-        const state = get();
-        const need = state.users.some((u) => !u.passwordHash);
-        if (!need) {
-          if (!state.passwordsReady) set({ passwordsReady: true });
-          return;
-        }
-        const users: AppUser[] = [];
-        for (const u of state.users) {
-          if (u.passwordHash) {
-            users.push(u);
-            continue;
-          }
-          const { hash, salt } = await hashPassword(DEMO_PASSWORD);
-          users.push({
-            ...u,
-            passwordHash: hash,
-            passwordSalt: salt,
-            passwordHistory: [`${salt}:${hash}`],
-          });
-        }
-        set({ users, passwordsReady: true });
-      },
+  bootstrap: async () => {
+    if (get().bootstrapped) return;
+    try {
+      const me = await apiFetch<MeResponse>("/auth/me");
+      applyMe(set, me);
+    } catch {
+      clearAuth(set);
+    } finally {
+      set({ bootstrapped: true, passwordsReady: true });
+    }
+  },
 
-      login: async (email, password) => {
-        await get().ensureDemoPasswords();
-        const normalized = email.trim().toLowerCase();
-        const user = get().users.find(
-          (u) => u.email.toLowerCase() === normalized,
-        );
-        if (!user) {
-          set((s) => ({
-            audit: pushAudit(s, {
-              tenantId: seedTenant.id,
-              email: normalized,
-              action: "login_fail",
-              detail: "Email inconnu",
-            }),
-          }));
-          return { ok: false, error: "Identifiants incorrects." };
-        }
-        if (!user.actif) {
-          return { ok: false, error: "Compte désactivé." };
-        }
-        if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-          return {
-            ok: false,
-            error: `Compte verrouillé jusqu'à ${new Date(user.lockedUntil).toLocaleString("fr-FR")}.`,
-          };
-        }
+  ensureDemoPasswords: async () => {
+    await get().bootstrap();
+  },
 
-        const ok = await verifyPassword(
-          password,
-          user.passwordHash,
-          user.passwordSalt,
-        );
-        if (!ok) {
-          const failed = user.failedAttempts + 1;
-          const locked =
-            failed >= MAX_LOGIN_ATTEMPTS
-              ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
-              : undefined;
-          set((s) => ({
-            users: s.users.map((u) =>
-              u.id === user.id
-                ? {
-                    ...u,
-                    failedAttempts: failed,
-                    lockedUntil: locked,
-                  }
-                : u,
-            ),
-            audit: pushAudit(s, {
-              tenantId: user.tenantId,
-              userId: user.id,
-              email: user.email,
-              action: locked ? "lock" : "login_fail",
-              detail: locked
-                ? `Verrouillage après ${failed} échecs`
-                : `Échec ${failed}/${MAX_LOGIN_ATTEMPTS}`,
-            }),
-          }));
-          return {
-            ok: false,
-            error: locked
-              ? `Trop de tentatives. Compte verrouillé ${LOCK_MINUTES} min.`
-              : "Identifiants incorrects.",
-          };
-        }
-
-        const now = Date.now();
-        const session: AuthSession = {
-          id: uid("ses"),
-          userId: user.id,
-          tenantId: user.tenantId,
-          createdAt: new Date(now).toISOString(),
-          lastActivityAt: new Date(now).toISOString(),
-          expiresAt: new Date(now + SESSION_MAX_MS).toISOString(),
-          deviceLabel: deviceLabel(),
-        };
-
-        set((s) => ({
-          currentSessionId: session.id,
-          sessions: [session, ...s.sessions.filter((x) => x.userId !== user.id || Date.now() < new Date(x.expiresAt).getTime())].slice(0, 20),
-          users: s.users.map((u) =>
-            u.id === user.id
-              ? {
-                  ...u,
-                  failedAttempts: 0,
-                  lockedUntil: undefined,
-                  lastLoginAt: new Date().toISOString(),
-                }
-              : u,
-          ),
-          audit: pushAudit(s, {
-            tenantId: user.tenantId,
-            userId: user.id,
-            email: user.email,
-            action: "login_ok",
-            detail: `${ROLE_LABELS[user.role]} · ${session.deviceLabel}`,
-          }),
-        }));
-        return { ok: true };
-      },
-
-      logout: () => {
-        const s = get();
-        const session = s.sessions.find((x) => x.id === s.currentSessionId);
-        const user = session
-          ? s.users.find((u) => u.id === session.userId)
-          : null;
-        set({
-          currentSessionId: null,
-          sessions: session
-            ? s.sessions.filter((x) => x.id !== session.id)
-            : s.sessions,
-          audit: user
-            ? pushAudit(s, {
-                tenantId: user.tenantId,
-                userId: user.id,
-                email: user.email,
-                action: "logout",
-              })
-            : s.audit,
-        });
-      },
-
-      touchSession: () => {
-        const s = get();
-        if (!s.currentSessionId) return;
-        const now = Date.now();
-        set({
-          sessions: s.sessions.map((ses) =>
-            ses.id === s.currentSessionId
-              ? { ...ses, lastActivityAt: new Date(now).toISOString() }
-              : ses,
-          ),
-        });
-      },
-
-      sessionValide: () => {
-        const s = get();
-        if (!s.currentSessionId) return false;
-        const ses = s.sessions.find((x) => x.id === s.currentSessionId);
-        if (!ses) return false;
-        const now = Date.now();
-        if (now > new Date(ses.expiresAt).getTime()) return false;
-        if (now - new Date(ses.lastActivityAt).getTime() > SESSION_IDLE_MS) {
-          return false;
-        }
-        const user = s.users.find((u) => u.id === ses.userId);
-        return Boolean(user?.actif);
-      },
-
-      currentUser: () => {
-        const s = get();
-        if (!s.sessionValide()) return null;
-        const ses = s.sessions.find((x) => x.id === s.currentSessionId);
-        if (!ses) return null;
-        return s.users.find((u) => u.id === ses.userId) ?? null;
-      },
-
-      currentTenant: () => {
-        const user = get().currentUser();
-        if (!user) return null;
-        return get().tenants.find((t) => t.id === user.tenantId) ?? null;
-      },
-
-      hasPermission: (p) => {
-        const user = get().currentUser();
-        if (!user) return false;
-        return roleHasPermission(user.role, p);
-      },
-
-      createUser: async (data) => {
-        const actor = get().currentUser();
-        if (!actor || !roleHasPermission(actor.role, "users.gerer")) {
-          return { ok: false, error: "Permission refusée." };
-        }
-        const email = data.email.trim().toLowerCase();
-        if (get().users.some((u) => u.email.toLowerCase() === email)) {
-          return { ok: false, error: "Cet e-mail existe déjà." };
-        }
-        const errs = validerMotDePasse(data.password);
-        if (errs.length) return { ok: false, error: errs.join(" · ") };
-        const { hash, salt } = await hashPassword(data.password);
-        const id = uid("usr");
-        const user: AppUser = {
-          id,
-          tenantId: actor.tenantId,
+  login: async (email, password) => {
+    try {
+      const me = await apiFetch<MeResponse>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
           email,
-          nom: data.nom.trim(),
-          role: data.role,
-          pointDeVenteIds: data.pointDeVenteIds,
-          passwordHash: hash,
-          passwordSalt: salt,
-          passwordHistory: [`${salt}:${hash}`],
-          actif: true,
-          mfaRequired: data.mfaRequired ?? false,
-          failedAttempts: 0,
-          mustChangePassword: true,
-          createdAt: new Date().toISOString(),
-        };
-        set((s) => ({
-          users: [user, ...s.users],
-          audit: pushAudit(s, {
-            tenantId: actor.tenantId,
-            userId: actor.id,
-            email: actor.email,
-            action: "user_create",
-            detail: `${email} · ${ROLE_LABELS[data.role]}`,
-          }),
-        }));
-        return { ok: true, id };
-      },
+          password,
+          deviceLabel: deviceLabel(),
+        }),
+      });
+      applyMe(set, me);
+      return { ok: true };
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.message : "Impossible de se connecter.";
+      return { ok: false, error: msg };
+    }
+  },
 
-      updateUser: (id, data) => {
-        const actor = get().currentUser();
-        if (!actor || !roleHasPermission(actor.role, "users.gerer")) return;
-        set((s) => ({
-          users: s.users.map((u) =>
-            u.id === id && u.tenantId === actor.tenantId
-              ? { ...u, ...data }
-              : u,
-          ),
-          audit: pushAudit(s, {
-            tenantId: actor.tenantId,
-            userId: actor.id,
-            email: actor.email,
-            action: data.actif === false ? "user_deactivate" : "user_update",
-            detail: id,
-          }),
-        }));
-      },
+  logout: async () => {
+    try {
+      await apiFetch("/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    clearAuth(set);
+  },
 
-      resetPasswordAdmin: async (id, newPassword) => {
-        const actor = get().currentUser();
-        if (!actor || !roleHasPermission(actor.role, "users.gerer")) {
-          return { ok: false, error: "Permission refusée." };
-        }
-        const errs = validerMotDePasse(newPassword);
-        if (errs.length) return { ok: false, error: errs.join(" · ") };
-        const { hash, salt } = await hashPassword(newPassword);
-        set((s) => ({
-          users: s.users.map((u) => {
-            if (u.id !== id || u.tenantId !== actor.tenantId) return u;
-            const hist = [`${salt}:${hash}`, ...u.passwordHistory].slice(0, 5);
-            return {
-              ...u,
-              passwordHash: hash,
-              passwordSalt: salt,
-              passwordHistory: hist,
-              mustChangePassword: true,
-              failedAttempts: 0,
-              lockedUntil: undefined,
-            };
-          }),
-          sessions: s.sessions.filter((ses) => ses.userId !== id),
-          audit: pushAudit(s, {
-            tenantId: actor.tenantId,
-            userId: actor.id,
-            email: actor.email,
-            action: "password_reset_ok",
-            detail: `Admin reset · ${id}`,
-          }),
-        }));
-        return { ok: true };
-      },
+  touchSession: () => {
+    if (!get().currentSessionId) return;
+    void apiFetch("/auth/session/touch", { method: "POST" }).catch(() => {
+      /* idle check will catch invalid session */
+    });
+  },
 
-      requestPasswordReset: async (email) => {
-        await get().ensureDemoPasswords();
-        const normalized = email.trim().toLowerCase();
-        const user = get().users.find(
-          (u) => u.email.toLowerCase() === normalized && u.actif,
-        );
-        // Réponse générique
-        if (!user) {
-          set((s) => ({
-            audit: pushAudit(s, {
-              tenantId: seedTenant.id,
-              email: normalized,
-              action: "password_reset_request",
-              detail: "Email inconnu (réponse neutre)",
-            }),
-          }));
-          return { ok: true };
-        }
-        const raw = crypto.randomUUID() + crypto.randomUUID();
-        const { hash, salt } = await hashPassword(raw);
-        const token: PasswordResetToken = {
-          id: uid("rst"),
-          userId: user.id,
-          tokenHash: `${salt}:${hash}`,
-          expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString(),
-        };
-        set((s) => ({
-          resetTokens: [token, ...s.resetTokens].slice(0, 50),
-          audit: pushAudit(s, {
-            tenantId: user.tenantId,
-            userId: user.id,
-            email: user.email,
-            action: "password_reset_request",
-            detail: "Lien généré (TTL 60 min)",
-          }),
-        }));
-        return { ok: true, demoToken: `${token.id}.${raw}` };
-      },
+  sessionValide: () => {
+    const s = get();
+    return Boolean(s.user?.actif && s.currentSessionId && s.tenant?.actif);
+  },
 
-      completePasswordReset: async (tokenComposite, newPassword) => {
-        const dot = tokenComposite.indexOf(".");
-        if (dot < 0) {
-          return { ok: false, error: "Lien invalide." };
-        }
-        const tokenId = tokenComposite.slice(0, dot);
-        const raw = tokenComposite.slice(dot + 1);
-        if (!tokenId || !raw) {
-          return { ok: false, error: "Lien invalide." };
-        }
-        const tokenFull = get().resetTokens.find((t) => t.id === tokenId);
-        if (!tokenFull || tokenFull.usedAt) {
-          return { ok: false, error: "Lien invalide ou déjà utilisé." };
-        }
-        if (new Date(tokenFull.expiresAt) < new Date()) {
-          return { ok: false, error: "Lien expiré." };
-        }
-        const [salt, hash] = tokenFull.tokenHash.split(":");
-        if (!salt || !hash) {
-          return { ok: false, error: "Lien invalide." };
-        }
-        const valid = await verifyPassword(raw, hash, salt);
-        if (!valid) return { ok: false, error: "Lien invalide." };
+  currentUser: () => (get().sessionValide() ? get().user : null),
 
-        const errs = validerMotDePasse(newPassword);
-        if (errs.length) return { ok: false, error: errs.join(" · ") };
+  currentTenant: () => (get().sessionValide() ? get().tenant : null),
 
-        const { hash: ph, salt: ps } = await hashPassword(newPassword);
-        const userId = tokenFull.userId;
-        set((s) => ({
-          users: s.users.map((u) =>
-            u.id === userId
-              ? {
-                  ...u,
-                  passwordHash: ph,
-                  passwordSalt: ps,
-                  passwordHistory: [`${ps}:${ph}`, ...u.passwordHistory].slice(
-                    0,
-                    5,
-                  ),
-                  mustChangePassword: false,
-                  failedAttempts: 0,
-                  lockedUntil: undefined,
-                }
-              : u,
-          ),
-          resetTokens: s.resetTokens.map((t) =>
-            t.id === tokenId ? { ...t, usedAt: new Date().toISOString() } : t,
-          ),
-          sessions: s.sessions.filter((ses) => ses.userId !== userId),
-          currentSessionId:
-            s.sessions.find((x) => x.id === s.currentSessionId)?.userId ===
-            userId
-              ? null
-              : s.currentSessionId,
-          audit: pushAudit(s, {
-            tenantId:
-              s.users.find((u) => u.id === userId)?.tenantId ?? seedTenant.id,
-            userId,
-            action: "password_reset_ok",
-            detail: "Réinitialisation via lien",
-          }),
-        }));
-        return { ok: true };
-      },
+  hasPermission: (p) => {
+    const user = get().currentUser();
+    if (!user) return false;
+    if (get().permissions.includes(p)) return true;
+    const role =
+      (user.role as string) === "admin"
+        ? ("admin_entreprise" as RoleId)
+        : user.role;
+    return roleHasPermission(role, p);
+  },
 
-      changeOwnPassword: async (current, next) => {
-        const user = get().currentUser();
-        if (!user) return { ok: false, error: "Non connecté." };
-        const ok = await verifyPassword(
-          current,
-          user.passwordHash,
-          user.passwordSalt,
-        );
-        if (!ok) return { ok: false, error: "Mot de passe actuel incorrect." };
-        const errs = validerMotDePasse(next);
-        if (errs.length) return { ok: false, error: errs.join(" · ") };
-        const { hash, salt } = await hashPassword(next);
-        set((s) => ({
-          users: s.users.map((u) =>
-            u.id === user.id
-              ? {
-                  ...u,
-                  passwordHash: hash,
-                  passwordSalt: salt,
-                  passwordHistory: [`${salt}:${hash}`, ...u.passwordHistory].slice(
-                    0,
-                    5,
-                  ),
-                  mustChangePassword: false,
-                }
-              : u,
-          ),
-          audit: pushAudit(s, {
-            tenantId: user.tenantId,
-            userId: user.id,
-            email: user.email,
-            action: "password_change",
-          }),
-        }));
-        return { ok: true };
-      },
+  refreshUsers: async () => {
+    try {
+      const res = await apiFetch<{ users: PublicUser[] }>("/users");
+      set({ users: res.users.map(toAppUser) });
+    } catch {
+      /* no permission or offline */
+    }
+  },
 
-      revokeSession: (sessionId) => {
-        const actor = get().currentUser();
-        set((s) => ({
-          sessions: s.sessions.filter((x) => x.id !== sessionId),
-          currentSessionId:
-            s.currentSessionId === sessionId ? null : s.currentSessionId,
-          audit: actor
-            ? pushAudit(s, {
-                tenantId: actor.tenantId,
-                userId: actor.id,
-                email: actor.email,
-                action: "session_revoke",
-                detail: sessionId,
-              })
-            : s.audit,
-        }));
-      },
+  refreshSessions: async () => {
+    try {
+      const res = await apiFetch<{
+        sessions: Array<{
+          id: string;
+          userId: string;
+          tenantId: string;
+          createdAt: string;
+          lastActivityAt: string;
+          expiresAt: string;
+          deviceLabel: string;
+          userEmail: string;
+          userNom: string;
+          isCurrent: boolean;
+        }>;
+      }>("/admin/sessions");
+      set({
+        sessions: res.sessions.map((s) => ({
+          id: s.id,
+          userId: s.userId,
+          tenantId: s.tenantId,
+          createdAt: s.createdAt,
+          lastActivityAt: s.lastActivityAt,
+          expiresAt: s.expiresAt,
+          deviceLabel: s.deviceLabel,
+        })),
+        users: [
+          ...get().users,
+          ...res.sessions.map((s) => ({
+            id: s.userId,
+            tenantId: s.tenantId,
+            email: s.userEmail,
+            nom: s.userNom,
+            role: "lecture_seule" as RoleId,
+            pointDeVenteIds: [],
+            passwordHash: "",
+            passwordSalt: "",
+            passwordHistory: [],
+            actif: true,
+            mfaRequired: false,
+            failedAttempts: 0,
+            createdAt: s.createdAt,
+          })),
+        ].filter(
+          (u, i, arr) => arr.findIndex((x) => x.id === u.id) === i,
+        ),
+        currentSessionId:
+          res.sessions.find((s) => s.isCurrent)?.id ?? get().currentSessionId,
+      });
+    } catch {
+      /* ignore */
+    }
+  },
 
-      revokeOtherSessions: () => {
-        const s = get();
-        if (!s.currentSessionId) return;
-        const current = s.sessions.find((x) => x.id === s.currentSessionId);
-        if (!current) return;
-        set({
-          sessions: s.sessions.filter(
-            (x) => x.id === s.currentSessionId || x.userId !== current.userId,
-          ),
-        });
-      },
-    }),
-    {
-      name: "stwr-auth-v1",
-      skipHydration: true,
-      version: 1,
-    },
-  ),
-);
+  refreshAudit: async () => {
+    try {
+      const res = await apiFetch<{ audit: AuthAuditEntry[] }>(
+        "/admin/audit?limit=2000",
+      );
+      set({ audit: res.audit });
+    } catch {
+      /* ignore */
+    }
+  },
 
-export { DEMO_PASSWORD };
+  exportAuditOlderThan: async (olderThanDays: number) => {
+    const res = await apiFetch<{ audit: AuthAuditEntry[] }>(
+      `/admin/audit?limit=5000&olderThanDays=${olderThanDays}`,
+    );
+    return res.audit;
+  },
+
+  purgeAuditOlderThan: async (olderThanDays: number) => {
+    const res = await apiFetch<{
+      ok: boolean;
+      deleted: number;
+      olderThanDays: number;
+    }>("/admin/audit", {
+      method: "DELETE",
+      body: JSON.stringify({ olderThanDays }),
+    });
+    await get().refreshAudit();
+    return res.deleted;
+  },
+
+  createUser: async (data) => {
+    try {
+      const res = await apiFetch<{ user: PublicUser }>("/users", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      await get().refreshUsers();
+      return { ok: true, id: res.user.id };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "Création impossible.",
+      };
+    }
+  },
+
+  updateUser: async (id, data) => {
+    try {
+      await apiFetch(`/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+      await get().refreshUsers();
+    } catch {
+      /* ignore */
+    }
+  },
+
+  resetPasswordAdmin: async (id, newPassword) => {
+    try {
+      await apiFetch(`/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      await get().refreshUsers();
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "Reset impossible.",
+      };
+    }
+  },
+
+  requestPasswordReset: async (email) => {
+    try {
+      return await apiFetch<{ ok: true; demoToken?: string }>(
+        "/auth/password/forgot",
+        {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        },
+      );
+    } catch {
+      return { ok: true };
+    }
+  },
+
+  completePasswordReset: async (token, newPassword) => {
+    try {
+      await apiFetch("/auth/password/reset", {
+        method: "POST",
+        body: JSON.stringify({ token, newPassword }),
+      });
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "Lien invalide.",
+      };
+    }
+  },
+
+  changeOwnPassword: async (current, next) => {
+    try {
+      await apiFetch("/auth/password/change", {
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: current,
+          newPassword: next,
+        }),
+      });
+      const me = await apiFetch<MeResponse>("/auth/me");
+      applyMe(set, me);
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "Changement impossible.",
+      };
+    }
+  },
+
+  updateOwnPhoto: async (photoData) => {
+    try {
+      const res = await apiFetch<{ user: PublicUser }>("/auth/me/photo", {
+        method: "PATCH",
+        body: JSON.stringify({ photoData }),
+      });
+      const current = get().user;
+      if (current) {
+        set({ user: { ...current, photoData: res.user.photoData ?? null } });
+      }
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof ApiError ? e.message : "Photo non enregistrée.",
+      };
+    }
+  },
+
+  revokeSession: async (sessionId) => {
+    try {
+      await apiFetch(`/admin/sessions/${sessionId}`, { method: "DELETE" });
+      if (get().currentSessionId === sessionId) {
+        clearAuth(set);
+      } else {
+        await get().refreshSessions();
+      }
+    } catch {
+      /* ignore */
+    }
+  },
+
+  revokeOtherSessions: async () => {
+    const current = get().currentSessionId;
+    const mine = get().sessions.filter(
+      (s) => s.userId === get().user?.id && s.id !== current,
+    );
+    for (const s of mine) {
+      await get().revokeSession(s.id);
+    }
+  },
+}));

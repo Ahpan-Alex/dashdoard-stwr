@@ -1,15 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, FileMinus2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { DocumentPreview } from "@/components/document-preview";
 import { FacturesSubnav } from "@/components/factures-subnav";
+import {
+  ExportDocumentPdfButton,
+} from "@/components/export-documents-pdf";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import {
   ETATS_PAIEMENT_FACTURE,
   etatPaiementFacture,
   FACTURE_STATUTS,
   FACTURE_TYPES,
+  appliqueTVA,
   htDepuisTTC,
   montantAvoirRestantTTC,
   resteAPayer,
@@ -24,27 +30,78 @@ import {
   nextNumeroDocumentCommercial,
   statutEffectifFacture,
 } from "@/lib/facturation-mg";
+import { presentationPourFacture } from "@/lib/document-presentation";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
-import type { Facture, FactureStatut, LigneDocument } from "@/lib/types";
+import type { Facture, FactureStatut, FactureType, LigneDocument } from "@/lib/types";
 
 type FiltreListe =
   | "tous"
   | EtatPaiementFacture
   | "brouillon"
   | "proforma"
-  | "en_retard";
+  | "en_retard"
+  | "validee"
+  | "envoyee"
+  | "emise";
+
+/** Filtre par nature du document (indépendant du statut / paiement). */
+type FiltreType =
+  | "tous"
+  | "doit"
+  | "acompte"
+  | "solde"
+  | "avoir"
+  | "proforma";
 
 const FILTRES: { id: FiltreListe; label: string }[] = [
   { id: "tous", label: "Toutes" },
   { id: "brouillon", label: "Brouillons" },
   { id: "proforma", label: "Proformas" },
+  { id: "validee", label: "Validées" },
+  { id: "envoyee", label: "Envoyées" },
   { id: "impayee", label: "Impayées" },
   { id: "en_retard", label: "En retard" },
   { id: "partiellement_payee", label: "Partiellement payées" },
   { id: "payee", label: "Payées" },
   { id: "annulee", label: "Annulées" },
 ];
+
+const FILTRES_TYPE: { id: FiltreType; label: string }[] = [
+  { id: "tous", label: "Tous types" },
+  { id: "doit", label: "Facture de doit" },
+  { id: "acompte", label: "Facture d'acompte" },
+  { id: "solde", label: "Facture de solde" },
+  { id: "avoir", label: "Facture d'avoir" },
+  { id: "proforma", label: "Proforma" },
+];
+
+function filtreDepuisQuery(statut: string | null): FiltreListe {
+  if (statut && FILTRES.some((f) => f.id === statut)) {
+    return statut as FiltreListe;
+  }
+  if (statut && statut in FACTURE_STATUTS) {
+    return statut as FiltreListe;
+  }
+  return "tous";
+}
+
+function filtreTypeDepuisQuery(type: string | null): FiltreType {
+  if (type && FILTRES_TYPE.some((f) => f.id === type)) {
+    return type as FiltreType;
+  }
+  return "tous";
+}
+
+function matchFiltreType(type: FactureType, filtre: FiltreType): boolean {
+  if (filtre === "tous") return type !== "avoir";
+  if (filtre === "doit") return type === "standard";
+  if (filtre === "acompte") return type === "acompte";
+  if (filtre === "solde") return type === "solde";
+  if (filtre === "avoir") return type === "avoir";
+  if (filtre === "proforma") return type === "proforma";
+  return true;
+}
 
 function badgeEtat(etat: EtatPaiementFacture) {
   if (etat === "payee")
@@ -66,6 +123,7 @@ function badgeStatut(statut: FactureStatut) {
 }
 
 export default function ListeFacturesPage() {
+  const searchParams = useSearchParams();
   const {
     factures,
     clients,
@@ -79,7 +137,18 @@ export default function ListeFacturesPage() {
     addFacture,
   } = useStore();
 
-  const [filtre, setFiltre] = useState<FiltreListe>("tous");
+  const [filtre, setFiltre] = useState<FiltreListe>(() =>
+    filtreDepuisQuery(searchParams.get("statut")),
+  );
+  const [filtreType, setFiltreType] = useState<FiltreType>(() =>
+    filtreTypeDepuisQuery(searchParams.get("type")),
+  );
+
+  useEffect(() => {
+    setFiltre(filtreDepuisQuery(searchParams.get("statut")));
+    setFiltreType(filtreTypeDepuisQuery(searchParams.get("type")));
+  }, [searchParams]);
+
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [avoirFactureId, setAvoirFactureId] = useState<string | null>(null);
   const [modeAvoir, setModeAvoir] = useState<"total" | "partiel">("total");
@@ -88,7 +157,7 @@ export default function ListeFacturesPage() {
 
   const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
   const assujetti =
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+    appliqueTVA(parametres);
 
   const factureAvoir = factures.find((f) => f.id === avoirFactureId);
   const maxAvoirTTC = factureAvoir
@@ -97,7 +166,7 @@ export default function ListeFacturesPage() {
 
   const lignes = useMemo(() => {
     return [...factures]
-      .filter((f) => f.type !== "avoir")
+      .filter((f) => matchFiltreType(f.type, filtreType))
       .sort((a, b) => b.date.localeCompare(a.date))
       .map((f) => {
         const t = totauxFacture(f, parametres, acomptes);
@@ -122,9 +191,19 @@ export default function ListeFacturesPage() {
             row.statutAffiche === "proforma" || row.f.type === "proforma"
           );
         if (filtre === "en_retard") return row.statutAffiche === "en_retard";
-        return row.etat === filtre;
+        if (
+          filtre === "validee" ||
+          filtre === "envoyee" ||
+          filtre === "emise"
+        ) {
+          return row.f.statut === filtre || row.statutAffiche === filtre;
+        }
+        if (filtre in ETATS_PAIEMENT_FACTURE) {
+          return row.etat === filtre;
+        }
+        return row.f.statut === filtre || row.statutAffiche === filtre;
       });
-  }, [factures, parametres, acomptes, filtre]);
+  }, [factures, parametres, acomptes, filtre, filtreType]);
 
   const resume = useMemo(() => {
     const base = factures.filter((f) => f.type !== "avoir");
@@ -406,12 +485,15 @@ export default function ListeFacturesPage() {
   const previewParent = preview?.factureParenteId
     ? factures.find((f) => f.id === preview.factureParenteId)
     : undefined;
+  const previewPresentation = preview
+    ? presentationPourFacture(preview, parametres, modele)
+    : null;
 
   return (
     <div>
       <PageHeader
         title="Liste des factures"
-        description="La facture matérialise l'opération commerciale (document figé). Le règlement du solde ne change que le statut — le PDF conserve acomptes et reste à payer d'origine."
+        description="Factures fiscales figées à la validation (logo, signature, mentions). Brouillons / proformas et devis / commandes / BL suivent les paramètres courants."
       />
 
       <FacturesSubnav />
@@ -447,17 +529,40 @@ export default function ListeFacturesPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {FILTRES.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            className={`btn ${filtre === f.id ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => setFiltre(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="mb-3">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+          Type de facture
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {FILTRES_TYPE.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`btn ${filtreType === f.id ? "btn-primary" : "btn-secondary"}`}
+              onClick={() => setFiltreType(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+          Statut / paiement
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {FILTRES.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`btn ${filtre === f.id ? "btn-primary" : "btn-secondary"}`}
+              onClick={() => setFiltre(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="table-shell">
@@ -542,13 +647,64 @@ export default function ListeFacturesPage() {
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-1">
-                        <button
-                          className="btn btn-ghost"
-                          title="Aperçu"
+                        <IconButton
+                          label="Aperçu de la facture"
                           onClick={() => setPreviewId(f.id)}
                         >
                           <Eye className="h-4 w-4" />
-                        </button>
+                        </IconButton>
+                        <ExportDocumentPdfButton
+                          label={`Exporter PDF ${f.numero}`}
+                        >
+                          {(() => {
+                            const pres = presentationPourFacture(
+                              f,
+                              parametres,
+                              modele,
+                            );
+                            return (
+                              <DocumentPreview
+                                type="facture"
+                                factureType={f.type}
+                                estProforma={
+                                  f.type === "proforma" ||
+                                  f.statut === "proforma"
+                                }
+                                numero={f.numero}
+                                date={f.date}
+                                echeance={f.echeance}
+                                client={clients.find((c) => c.id === f.clientId)}
+                                pdv={pointsDeVente.find(
+                                  (p) => p.id === f.pointDeVenteId,
+                                )}
+                                parametres={pres.parametres}
+                                modele={pres.modele}
+                                lignes={f.lignes}
+                                totaux={totauxFacture(f, parametres, acomptes)}
+                                conditionsPaiement={f.conditionsPaiement}
+                                note={f.note}
+                                referenceFacture={
+                                  f.factureParenteId
+                                    ? factures.find(
+                                        (x) => x.id === f.factureParenteId,
+                                      )?.numero
+                                    : undefined
+                                }
+                                referenceDevis={
+                                  devis.find((d) => d.id === f.devisId)?.numero
+                                }
+                                referenceCommande={
+                                  commandes.find((c) => c.id === f.commandeId)
+                                    ?.numero
+                                }
+                                acomptesDetail={detailAcomptesDocument(
+                                  f,
+                                  acomptes,
+                                )}
+                              />
+                            );
+                          })()}
+                        </ExportDocumentPdfButton>
                         {estNonFiscal && (
                           <button
                             className="btn btn-primary"
@@ -718,8 +874,8 @@ export default function ListeFacturesPage() {
               echeance={preview.echeance}
               client={clients.find((c) => c.id === preview.clientId)}
               pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
-              parametres={parametres}
-              modele={modele}
+              parametres={previewPresentation!.parametres}
+              modele={previewPresentation!.modele}
               lignes={preview.lignes}
               totaux={totauxFacture(preview, parametres, acomptes)}
               conditionsPaiement={preview.conditionsPaiement}

@@ -154,8 +154,9 @@ export const RUBRIQUES_CATALOGUE: {
   },
   {
     id: "signature_cachet",
-    label: "Signature / cachet",
-    description: "Zone de signature",
+    label: "Signature électronique",
+    description:
+      "Affiche la signature paramétrée (Paramètres → Entreprise) en bas du document",
   },
 ];
 

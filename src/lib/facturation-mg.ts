@@ -65,8 +65,19 @@ export const FACTURE_STATUTS_MG: Record<string, string> = {
 };
 
 export function mentionRegimeFiscal(parametres: Parametres) {
-  if (parametres.regimeFiscal === "franchise" || !parametres.assujettiTVA) {
-    return "Non assujetti à la TVA — facture sans TVA collectée.";
+  if (
+    parametres.regimeFiscal === "ei" ||
+    parametres.regimeFiscal === "ir" ||
+    parametres.regimeFiscal === "franchise" ||
+    !parametres.assujettiTVA
+  ) {
+    if (parametres.regimeFiscal === "ei") {
+      return "Régime EI — non assujetti à la TVA.";
+    }
+    if (parametres.regimeFiscal === "ir") {
+      return "Régime IR — non assujetti à la TVA.";
+    }
+    return "Non assujetti à la TVA — document sans TVA collectée.";
   }
   if (parametres.regimeFiscal === "imp") {
     return `Régime IMP — TVA ${parametres.tauxTVA} % applicable selon opération.`;

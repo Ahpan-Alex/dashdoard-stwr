@@ -9,6 +9,12 @@ export type PointDeVente = {
   actif: boolean;
   /** Objectif de CA mensuel (Ar) */
   objectifCAMensuel: number;
+  /** Objectif de CA annuel (Ar) */
+  objectifCAAnnuel: number;
+  /** Objectif de marge brute mensuelle (CA − CMV) en Ar */
+  objectifMargeMensuel: number;
+  /** Objectif de marge brute annuelle (CA − CMV) en Ar */
+  objectifMargeAnnuel: number;
 };
 
 export type CategorieProduit = {
@@ -102,6 +108,8 @@ export type Vente = {
   prixUnitaire: number;
   date: string;
   clientId?: string;
+  /** Facture d'origine (CA / stock dérivés de la facturation). */
+  factureId?: string;
 };
 
 export type ChargeCategorie =
@@ -143,7 +151,7 @@ export type Charge = {
   note?: string;
 };
 
-export type RegimeFiscal = "tva" | "imp" | "franchise";
+export type RegimeFiscal = "tva" | "ei" | "ir" | "imp" | "franchise";
 
 export type Parametres = {
   nomEntreprise: string;
@@ -167,6 +175,10 @@ export type Parametres = {
   conditionsPaiementDefaut: string;
   /** Logo entreprise (data URL) affiché sur devis / commandes / factures */
   logoDataUrl?: string;
+  /** Signature électronique (image data URL) pour les documents */
+  signatureDataUrl?: string;
+  /** Nom / qualité sous la signature (ex. Le Gérant) */
+  signatureNom?: string;
   /** Seuil d'alerte taux marge Palier 1 (%) */
   seuilMargePalier1Percent?: number;
   /** Seuil d'alerte taux marge Palier 2 / résultat net (%) */
@@ -348,6 +360,37 @@ export type AcompteDocumentLigne = {
   mode?: string;
 };
 
+export type SnapshotParametresDocument = Pick<
+  Parametres,
+  | "nomEntreprise"
+  | "formeJuridique"
+  | "nif"
+  | "stat"
+  | "rcs"
+  | "adresse"
+  | "ville"
+  | "telephone"
+  | "email"
+  | "rib"
+  | "banque"
+  | "logoDataUrl"
+  | "signatureDataUrl"
+  | "signatureNom"
+  | "conditionsPaiementDefaut"
+  | "regimeFiscal"
+  | "assujettiTVA"
+  | "tauxTVA"
+>;
+
+export type SnapshotPresentationDocument = {
+  parametres: SnapshotParametresDocument;
+  modele?: {
+    rubriques: import("./document-templates").DocumentRubriqueId[];
+    mentionsLegales: string;
+    piedDePage: string;
+  };
+};
+
 export type Facture = {
   id: string;
   numero: string;
@@ -387,6 +430,12 @@ export type Facture = {
    * ultérieurs ne modifient pas ce snapshot ni le net à payer imprimé.
    */
   acomptesDocument?: AcompteDocumentLigne[];
+  /**
+   * Présentation figée à la validation fiscale (logo, signature, mentions…).
+   * Devis / commandes / BL et brouillons / proformas suivent les paramètres
+   * courants ; les factures validées ne sont plus impactées.
+   */
+  presentation?: SnapshotPresentationDocument;
 };
 
 export type JournalAuditAction =
@@ -436,6 +485,27 @@ export type Acompte = {
   note?: string;
 };
 
+/**
+ * Saisie de clôture journalière (écarts / pertes) par point de vente.
+ * Les ventes et la marge sont calculées automatiquement.
+ */
+export type RapportFinJournee = {
+  id: string;
+  /** Jour civil YYYY-MM-DD */
+  dateJour: string;
+  pointDeVenteId: string;
+  /** Écart de stock inventaire (négatif = manque) — Ar */
+  ecartStockAr: number;
+  /** Vol constaté — Ar */
+  volAr: number;
+  /** Écart de caisse (négatif = manque) — Ar */
+  ecartCaisseAr: number;
+  /** Invendus / casse / pertes fraîcheur — Ar */
+  invenduAr: number;
+  note?: string;
+  updatedAt: string;
+};
+
 export type AppState = {
   parametres: Parametres;
   modelesDocuments: ModeleDocument[];
@@ -457,5 +527,6 @@ export type AppState = {
   entrees: EntreeStock[];
   ventes: Vente[];
   charges: Charge[];
+  rapportsFinJournee: RapportFinJournee[];
   pointDeVenteActifId: string | "tous";
 };

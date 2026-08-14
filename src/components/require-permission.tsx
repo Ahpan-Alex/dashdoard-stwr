@@ -16,9 +16,9 @@ export function RequirePermission({
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const currentSessionId = useAuthStore((s) => s.currentSessionId);
-  const users = useAuthStore((s) => s.users);
+  const user = useAuthStore((s) => s.user);
   void currentSessionId;
-  void users;
+  void user;
   const needed = Array.isArray(permission) ? permission : [permission];
   const ok = needed.some((p) => hasPermission(p));
 

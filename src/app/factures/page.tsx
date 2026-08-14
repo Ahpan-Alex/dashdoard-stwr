@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/page-header";
 import { DocumentPreview } from "@/components/document-preview";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
+  appliqueTVA,
   calculerTotaux,
   creerSnapshotAcomptesDocument,
   isLigneProduit,
@@ -32,6 +33,10 @@ import {
   resolvePrixVenteHT,
 } from "@/lib/produits";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import {
+  stockDisponible,
+  stockRestantPourSaisie,
+} from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import type { FactureStatut, LigneDocument, TypeLigneDocument } from "@/lib/types";
 
@@ -62,9 +67,12 @@ export default function FacturesPage() {
     commandes,
     devis,
     tarifsClients,
+    entrees,
+    ventes,
     addFacture,
   } = useStore();
 
+  const avecTVA = appliqueTVA(parametres);
   const produitsDispo = produitsActifs(produits);
   const categoriesActives = useMemo(
     () =>
@@ -94,6 +102,7 @@ export default function FacturesPage() {
   const [lignes, setLignes] = useState<DraftLigne[]>([]);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
 
   const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
 
@@ -119,10 +128,10 @@ export default function FacturesPage() {
       lignesDoc,
       parametres.tauxTVA,
       0,
-      parametres.assujettiTVA && parametres.regimeFiscal === "tva",
+      avecTVA,
       Number(form.remiseGlobale) || 0,
     );
-  }, [lignes, parametres, form.remiseGlobale]);
+  }, [lignes, parametres.tauxTVA, avecTVA, form.remiseGlobale]);
 
   const acomptePayeNum = Math.max(0, Number(form.acomptePaye) || 0);
   const resteAPayerDraft = Math.max(0, totauxDraft.totalTTC - acomptePayeNum);
@@ -133,6 +142,7 @@ export default function FacturesPage() {
     setLignes([]);
     setFiltreFamille("");
     setRechercheProduit("");
+    setStockError(null);
     setForm((f) => ({
       ...f,
       commandeId: "",
@@ -210,6 +220,7 @@ export default function FacturesPage() {
   function toggleProduitSurFacture(produitId: string, checked: boolean) {
     const prod = produitsDispo.find((p) => p.id === produitId);
     if (!prod) return;
+    setStockError(null);
     if (!checked) {
       setLignes((prev) =>
         recalculerSousTotaux(
@@ -219,8 +230,24 @@ export default function FacturesPage() {
       return;
     }
     if (produitsSelectionnesIds.has(produitId)) return;
-    const assujetti =
-      parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+    if (!form.pointDeVenteId) {
+      setStockError("Sélectionnez un point de vente avant d'ajouter un produit.");
+      return;
+    }
+    const dispo = stockRestantPourSaisie(
+      produitId,
+      form.pointDeVenteId,
+      entrees,
+      ventes,
+      lignes,
+    );
+    if (dispo <= 0) {
+      setStockError(
+        `Stock insuffisant pour « ${prod.libelleCourt} » (disponible : 0 ${prod.unite}).`,
+      );
+      return;
+    }
+    const assujetti = avecTVA;
     const prix = resolvePrixVenteHT(prod, {
       clientId: form.clientId,
       quantite: 1,
@@ -294,11 +321,54 @@ export default function FacturesPage() {
   }
 
   function updateLigne(key: string, patch: Partial<DraftLigne>) {
-    setLignes((prev) =>
-      recalculerSousTotaux(
-        prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
-      ),
-    );
+    setStockError(null);
+    setLignes((prev) => {
+      const next = prev.map((l) => {
+        if (l.key !== key) return l;
+        const merged = { ...l, ...patch };
+        if (
+          isLigneProduit(merged) &&
+          merged.produitId &&
+          patch.quantite !== undefined
+        ) {
+          const max = stockRestantPourSaisie(
+            merged.produitId,
+            form.pointDeVenteId,
+            entrees,
+            ventes,
+            prev,
+            key,
+          );
+          merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
+        }
+        return merged;
+      });
+      return recalculerSousTotaux(next);
+    });
+  }
+
+  function validerStocksLignes(): string | null {
+    if (!form.pointDeVenteId) {
+      return "Sélectionnez un point de vente avant de continuer.";
+    }
+    for (const l of lignes) {
+      if (!isLigneProduit(l) || !l.produitId) continue;
+      const max = stockRestantPourSaisie(
+        l.produitId,
+        form.pointDeVenteId,
+        entrees,
+        ventes,
+        lignes,
+        l.key,
+      );
+      if (l.quantite <= 0) {
+        return `Quantité invalide pour « ${l.designation} ».`;
+      }
+      if (l.quantite > max) {
+        return `Stock insuffisant pour « ${l.designation} » (disponible : ${formatNumber(max)} ${l.unite}).`;
+      }
+    }
+    return null;
   }
 
   function removeLigne(key: string) {
@@ -343,6 +413,12 @@ export default function FacturesPage() {
 
   function allerPrevalidation() {
     if (!form.clientId || !lignes.some((l) => isLigneProduit(l))) return;
+    const err = validerStocksLignes();
+    if (err) {
+      setStockError(err);
+      return;
+    }
+    setStockError(null);
     setLignes((prev) => recalculerSousTotaux(prev));
     setEtape("prevalidation");
   }
@@ -698,21 +774,36 @@ export default function FacturesPage() {
                         <th>Code</th>
                         <th>Désignation</th>
                         <th>Famille</th>
+                        <th>Stock</th>
                         <th>Unité</th>
                         <th>P.U. HT</th>
-                        <th>TVA</th>
+                        {avecTVA && <th>TVA</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {catalogueFiltre.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-muted">
+                          <td colSpan={avecTVA ? 8 : 7} className="text-muted">
                             Aucun produit pour ce filtre.
                           </td>
                         </tr>
                       ) : (
                         catalogueFiltre.map((p) => {
                           const checked = produitsSelectionnesIds.has(p.id);
+                          const stock = stockDisponible(
+                            p.id,
+                            form.pointDeVenteId,
+                            entrees,
+                            ventes,
+                          );
+                          const restant = stockRestantPourSaisie(
+                            p.id,
+                            form.pointDeVenteId,
+                            entrees,
+                            ventes,
+                            lignes,
+                          );
+                          const indispo = !checked && restant <= 0;
                           const prix = resolvePrixVenteHT(p, {
                             clientId: form.clientId,
                             quantite: 1,
@@ -721,13 +812,20 @@ export default function FacturesPage() {
                           return (
                             <tr
                               key={p.id}
-                              className={checked ? "bg-sea-50/60" : undefined}
+                              className={
+                                checked
+                                  ? "bg-sea-50/60"
+                                  : indispo
+                                    ? "opacity-55"
+                                    : undefined
+                              }
                             >
                               <td>
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 accent-sea-700"
                                   checked={checked}
+                                  disabled={indispo}
                                   onChange={(e) =>
                                     toggleProduitSurFacture(
                                       p.id,
@@ -735,6 +833,11 @@ export default function FacturesPage() {
                                     )
                                   }
                                   aria-label={`Sélectionner ${p.libelleCourt}`}
+                                  title={
+                                    indispo
+                                      ? "Produit indisponible en stock"
+                                      : undefined
+                                  }
                                 />
                               </td>
                               <td className="font-mono text-xs">{p.code}</td>
@@ -746,20 +849,31 @@ export default function FacturesPage() {
                                       {p.libelleLong}
                                     </p>
                                   )}
+                                {indispo && (
+                                  <p className="text-xs font-medium text-danger">
+                                    Rupture de stock
+                                  </p>
+                                )}
                               </td>
                               <td className="text-sm">
                                 {libelleFamille(p.categorieId)}
+                              </td>
+                              <td
+                                className={`font-semibold tabular-nums ${
+                                  stock <= 0 ? "text-danger" : ""
+                                }`}
+                              >
+                                {formatNumber(stock)}
                               </td>
                               <td>{p.unite}</td>
                               <td className="font-semibold">
                                 {formatCurrency(prix)}
                               </td>
-                              <td className="text-sm text-muted">
-                                {parametres.assujettiTVA &&
-                                parametres.regimeFiscal === "tva"
-                                  ? `${formatNumber(p.tauxTVA)} %`
-                                  : "—"}
-                              </td>
+                              {avecTVA && (
+                                <td className="text-sm text-muted">
+                                  {`${formatNumber(p.tauxTVA)} %`}
+                                </td>
+                              )}
                             </tr>
                           );
                         })
@@ -767,6 +881,12 @@ export default function FacturesPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {stockError && (
+                  <p className="mt-2 text-xs font-medium text-danger">
+                    {stockError}
+                  </p>
+                )}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
@@ -944,6 +1064,21 @@ export default function FacturesPage() {
                               <p className="font-medium">{l.designation}</p>
                               <p className="text-xs text-muted">
                                 Unité : {l.unite || "—"}
+                                {l.produitId && (
+                                  <>
+                                    {" "}
+                                    · Stock :{" "}
+                                    {formatNumber(
+                                      stockDisponible(
+                                        l.produitId,
+                                        form.pointDeVenteId,
+                                        entrees,
+                                        ventes,
+                                      ),
+                                    )}{" "}
+                                    {l.unite}
+                                  </>
+                                )}
                               </p>
                               <input
                                 className="input mt-1 text-xs"
@@ -960,6 +1095,19 @@ export default function FacturesPage() {
                               <input
                                 type="number"
                                 className="input w-20"
+                                min={0}
+                                max={
+                                  l.produitId
+                                    ? stockRestantPourSaisie(
+                                        l.produitId,
+                                        form.pointDeVenteId,
+                                        entrees,
+                                        ventes,
+                                        lignes,
+                                        l.key,
+                                      )
+                                    : undefined
+                                }
                                 value={l.quantite}
                                 onChange={(e) =>
                                   updateLigne(l.key, {
@@ -1109,7 +1257,9 @@ export default function FacturesPage() {
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="rounded-lg bg-card px-3 py-2">
-                    <p className="text-[11px] text-muted">Montant HT</p>
+                    <p className="text-[11px] text-muted">
+                      {avecTVA ? "Montant HT" : "Montant"}
+                    </p>
                     <p className="font-display text-lg font-semibold">
                       {formatCurrency(totauxDraft.totalHT)}
                     </p>
@@ -1120,12 +1270,14 @@ export default function FacturesPage() {
                       {formatCurrency(totauxDraft.totalRemise)}
                     </p>
                   </div>
-                  <div className="rounded-lg bg-card px-3 py-2">
-                    <p className="text-[11px] text-muted">Total TVA</p>
-                    <p className="font-display text-lg font-semibold">
-                      {formatCurrency(totauxDraft.montantTVA)}
-                    </p>
-                  </div>
+                  {avecTVA && (
+                    <div className="rounded-lg bg-card px-3 py-2">
+                      <p className="text-[11px] text-muted">Total TVA</p>
+                      <p className="font-display text-lg font-semibold">
+                        {formatCurrency(totauxDraft.montantTVA)}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg bg-card px-3 py-2">
                     <p className="text-[11px] text-muted">Acompte(s) payé(s)</p>
                     <input
@@ -1143,12 +1295,14 @@ export default function FacturesPage() {
                       </p>
                     )}
                   </div>
-                  <div className="rounded-lg bg-card px-3 py-2">
-                    <p className="text-[11px] text-muted">Total TTC</p>
-                    <p className="font-display text-lg font-semibold">
-                      {formatCurrency(totauxDraft.totalTTC)}
-                    </p>
-                  </div>
+                  {avecTVA && (
+                    <div className="rounded-lg bg-card px-3 py-2">
+                      <p className="text-[11px] text-muted">Total TTC</p>
+                      <p className="font-display text-lg font-semibold">
+                        {formatCurrency(totauxDraft.totalTTC)}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg bg-sea-800 px-3 py-2 text-white">
                     <p className="text-[11px] text-sea-200">Reste à payer</p>
                     <p className="font-display text-lg font-semibold">
@@ -1239,6 +1393,78 @@ export default function FacturesPage() {
                 </p>
               )}
 
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
+                    Prévisualisation PDF (obligatoire avant enregistrement)
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => window.print()}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Imprimer / PDF
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setPreviewDraft(true)}
+                    >
+                      Plein écran
+                    </button>
+                  </div>
+                </div>
+                <p className="mb-3 text-xs text-muted">
+                  Aperçu provisoire — non enregistré ({numeroProvisoire})
+                </p>
+                <DocumentPreview
+                  type="facture"
+                  factureType={acomptePayeNum > 0 ? "solde" : "standard"}
+                  numero={numeroProvisoire}
+                  date={new Date(`${form.date}T12:00:00`).toISOString()}
+                  echeance={new Date(`${form.echeance}T12:00:00`).toISOString()}
+                  client={clients.find((c) => c.id === form.clientId)}
+                  pdv={pointsDeVente.find((p) => p.id === form.pointDeVenteId)}
+                  parametres={parametres}
+                  modele={modele}
+                  lignes={lignesDraftDoc}
+                  totaux={totauxAvecAcompte}
+                  conditionsPaiement={parametres.conditionsPaiementDefaut}
+                  note={form.note.trim() || undefined}
+                  referenceDevis={
+                    devis.find((d) => d.id === form.devisId)?.numero
+                  }
+                  referenceCommande={
+                    commandes.find((c) => c.id === form.commandeId)?.numero
+                  }
+                  acomptesDetail={
+                    acomptePayeNum > 0
+                      ? [
+                          ...acomptesLies.map((a) => ({
+                            numero: a.numero,
+                            date: a.date,
+                            montant: a.montantTTC,
+                            mode: a.modePaiement,
+                          })),
+                          ...(acomptePayeNum > acomptesTTC
+                            ? [
+                                {
+                                  numero: "À l'émission",
+                                  date: new Date(
+                                    `${form.date}T12:00:00`,
+                                  ).toISOString(),
+                                  montant: acomptePayeNum - acomptesTTC,
+                                },
+                              ]
+                            : []),
+                        ]
+                      : []
+                  }
+                />
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <button type="submit" className="btn btn-primary">
                   Valider &amp; émettre (série FAC)
@@ -1256,14 +1482,6 @@ export default function FacturesPage() {
                   onClick={() => enregistrerDocument("brouillon")}
                 >
                   Sauver brouillon
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setPreviewDraft(true)}
-                >
-                  <FileText className="h-4 w-4" />
-                  Prévisualiser PDF
                 </button>
                 <button
                   type="button"

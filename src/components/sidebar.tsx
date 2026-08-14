@@ -26,9 +26,19 @@ import {
   LogOut,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuthStore } from "@/lib/auth-store";
 import { ROLE_LABELS, type Permission } from "@/lib/auth/rbac";
+import {
+  ACOMPTE_STATUTS,
+  BL_STATUTS,
+  COMMANDE_STATUTS,
+  DEVIS_STATUTS,
+  FACTURE_STATUTS,
+  compterDocumentsParStatut,
+  couleurStatutDocument,
+} from "@/lib/commercial";
+import { useStore } from "@/lib/store";
 
 type NavChild = {
   href: string;
@@ -69,6 +79,11 @@ const sections: { title: string; links: NavLink[] }[] = [
             label: "CA objectif par point de vente",
           },
           {
+            href: "/tableau-de-bord/marge-objectifs",
+            label: "Marge objectif par point de vente",
+            permission: "rentabilite.lire",
+          },
+          {
             href: "/tableau-de-bord/rentabilite",
             label: "Rentabilité (2 paliers)",
             permission: "rentabilite.lire",
@@ -77,6 +92,10 @@ const sections: { title: string; links: NavLink[] }[] = [
             href: "/tableau-de-bord/marge",
             label: "Marge produits (historique)",
             permission: "rentabilite.lire",
+          },
+          {
+            href: "/tableau-de-bord/rapport-journalier",
+            label: "Rapport de fin de journée",
           },
         ],
       },
@@ -122,18 +141,30 @@ const sections: { title: string; links: NavLink[] }[] = [
         label: "Devis",
         icon: FileText,
         permission: "commercial.lire",
+        children: [
+          { href: "/devis", label: "Nouveau devis", exact: true },
+          { href: "/devis/liste", label: "Liste des devis" },
+        ],
       },
       {
         href: "/commandes",
         label: "Commandes",
         icon: ClipboardList,
         permission: "commercial.lire",
+        children: [
+          { href: "/commandes", label: "Nouvelle commande", exact: true },
+          { href: "/commandes/liste", label: "Liste des commandes" },
+        ],
       },
       {
         href: "/bons-de-livraison",
         label: "Bons de livraison",
         icon: Package,
         permission: "commercial.lire",
+        children: [
+          { href: "/bons-de-livraison", label: "Nouveau BL", exact: true },
+          { href: "/bons-de-livraison/liste", label: "Liste des BL" },
+        ],
       },
       {
         href: "/acomptes",
@@ -200,6 +231,11 @@ const sections: { title: string; links: NavLink[] }[] = [
             label: "Objectifs de revenu",
           },
           {
+            href: "/parametres/objectifs-marge",
+            label: "Objectifs de marge",
+            permission: "rentabilite.lire",
+          },
+          {
             href: "/parametres/rentabilite",
             label: "Seuils de rentabilité",
             permission: "rentabilite.lire",
@@ -211,6 +247,11 @@ const sections: { title: string; links: NavLink[] }[] = [
           {
             href: "/parametres/bilan-initial",
             label: "Bilan initial",
+          },
+          {
+            href: "/parametres/utilisateurs",
+            label: "Utilisateurs & historiques",
+            permission: "audit.lire",
           },
         ],
       },
@@ -285,17 +326,116 @@ function canSee(
   return true;
 }
 
+function StatusPastilles({
+  docs,
+  labels,
+  listeHref,
+}: {
+  docs: { statut: string }[];
+  labels: Record<string, string>;
+  /** Liste cible, ex. /devis/liste */
+  listeHref: string;
+}) {
+  const router = useRouter();
+  const counts = compterDocumentsParStatut(docs);
+
+  // Boutons (pas <Link>) : évite les <a> imbriqués dans la nav et l’erreur d’hydratation.
+  if (!counts.length) {
+    return (
+      <button
+        type="button"
+        className="badge badge-muted ml-auto shrink-0 cursor-pointer hover:opacity-90"
+        title="Voir la liste"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          router.push(listeHref);
+        }}
+      >
+        0
+      </button>
+    );
+  }
+  return (
+    <span className="ml-auto flex max-w-[7.5rem] flex-wrap justify-end gap-0.5">
+      {counts.map(({ statut, count }) => (
+        <button
+          type="button"
+          key={statut}
+          className={`badge badge-${couleurStatutDocument(statut)} cursor-pointer transition-opacity hover:opacity-90`}
+          title={`${labels[statut] ?? statut} : ${count} — ouvrir la liste`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(
+              `${listeHref}?statut=${encodeURIComponent(statut)}`,
+            );
+          }}
+        >
+          {count}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [openMenus, setOpenMenus] = useState(() => initialOpenState(pathname));
   const currentSessionId = useAuthStore((s) => s.currentSessionId);
-  const users = useAuthStore((s) => s.users);
+  const userState = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const currentUser = useAuthStore((s) => s.currentUser);
   const logout = useAuthStore((s) => s.logout);
   const user = currentUser();
   const roleKey = user?.role ?? "anon";
+
+  const devis = useStore((s) => s.devis);
+  const commandes = useStore((s) => s.commandes);
+  const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
+  const acomptes = useStore((s) => s.acomptes);
+  const factures = useStore((s) => s.factures);
+
+  const pastillesParHref = useMemo(() => {
+    return {
+      "/devis": (
+        <StatusPastilles
+          docs={devis}
+          labels={DEVIS_STATUTS}
+          listeHref="/devis/liste"
+        />
+      ),
+      "/commandes": (
+        <StatusPastilles
+          docs={commandes}
+          labels={COMMANDE_STATUTS}
+          listeHref="/commandes/liste"
+        />
+      ),
+      "/bons-de-livraison": (
+        <StatusPastilles
+          docs={bonsDeLivraison}
+          labels={BL_STATUTS}
+          listeHref="/bons-de-livraison/liste"
+        />
+      ),
+      "/acomptes": (
+        <StatusPastilles
+          docs={acomptes}
+          labels={ACOMPTE_STATUTS}
+          listeHref="/acomptes"
+        />
+      ),
+      "/factures": (
+        <StatusPastilles
+          docs={factures}
+          labels={FACTURE_STATUTS}
+          listeHref="/factures/liste"
+        />
+      ),
+    } as Record<string, ReactNode>;
+  }, [devis, commandes, bonsDeLivraison, acomptes, factures]);
 
   const visibleSections = useMemo(() => {
     return sections
@@ -309,7 +449,7 @@ export function Sidebar() {
           })),
       }))
       .filter((s) => s.links.length > 0);
-  }, [hasPermission, roleKey, currentSessionId, users]);
+  }, [hasPermission, roleKey, currentSessionId, userState]);
 
   useEffect(() => {
     setOpenMenus((prev) => {
@@ -364,7 +504,7 @@ export function Sidebar() {
                       <div className="flex items-center gap-0.5">
                         <Link
                           href={href}
-                          className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                             parentExact
                               ? "bg-sea-700 text-white"
                               : groupActive
@@ -373,8 +513,9 @@ export function Sidebar() {
                           }`}
                         >
                           <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                          <span className="truncate">{label}</span>
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
                         </Link>
+                        {pastillesParHref[href]}
                         <button
                           type="button"
                           aria-label={
@@ -426,18 +567,37 @@ export function Sidebar() {
                 }
 
                 const active = isActive(pathname, href);
+                const pastilles = pastillesParHref[href];
+                if (pastilles) {
+                  return (
+                    <div key={href} className="flex items-center gap-0.5">
+                      <Link
+                        href={href}
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          active
+                            ? "bg-sea-700 text-white"
+                            : "text-sea-200 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                        <span className="min-w-0 flex-1 truncate">{label}</span>
+                      </Link>
+                      {pastilles}
+                    </div>
+                  );
+                }
                 return (
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                       active
                         ? "bg-sea-700 text-white"
                         : "text-sea-200 hover:bg-white/5 hover:text-white"
                     }`}
                   >
                     <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                    {label}
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
                   </Link>
                 );
               })}
@@ -450,7 +610,16 @@ export function Sidebar() {
         {user && (
           <div className="rounded-lg bg-white/5 p-3">
             <div className="flex items-start gap-2">
-              <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-sea-400" />
+              {user.photoData ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.photoData}
+                  alt=""
+                  className="mt-0.5 h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                />
+              ) : (
+                <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-sea-400" />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-white">
                   {user.nom}
@@ -469,8 +638,7 @@ export function Sidebar() {
                     type="button"
                     className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-sea-200 hover:bg-white/10 hover:text-white"
                     onClick={() => {
-                      logout();
-                      router.replace("/login");
+                      void logout().then(() => router.replace("/login"));
                     }}
                   >
                     <LogOut className="h-3 w-3" />
@@ -484,9 +652,9 @@ export function Sidebar() {
         <div className="flex items-start gap-2 rounded-lg bg-white/5 p-3">
           <Waves className="mt-0.5 h-4 w-4 text-sea-400" />
           <div>
-            <p className="text-xs font-semibold text-white">Auth locale (démo)</p>
+            <p className="text-xs font-semibold text-white">Auth serveur</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-sea-300">
-              Session navigateur · RBAC phase 1.
+              Session cookie · API Node · RBAC.
             </p>
           </div>
         </div>

@@ -1,20 +1,26 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import type { ModeleDocument } from "./document-templates";
-import { createDefaultModeles } from "./document-templates";
 import {
   creerEntreeHistorique,
-  LEGACY_CATEGORIE_MAP,
-  migrateProduitLegacy,
   produitEstReference,
-  seedCategoriesProduits,
 } from "./produits";
 import { creerEntreeJournal } from "./facturation-mg";
-import { seedData } from "./seed-data";
+import {
+  resetBusinessState,
+  scheduleBusinessSave,
+  setBusinessSyncEnabled,
+} from "./business-api";
+import { rebuildVentesDepuisFactures } from "./commercial";
+import {
+  avecPresentationSiBesoin,
+  creerSnapshotPresentation,
+} from "./document-presentation";
+import { emptyAppState, pickAppState } from "./empty-state";
 import type {
   Acompte,
+  AppState,
   BilanInitial,
   BonDeLivraison,
   CategorieProduit,
@@ -31,6 +37,7 @@ import type {
   Parametres,
   PointDeVente,
   Produit,
+  RapportFinJournee,
   TarifClient,
   Vente,
 } from "./types";
@@ -56,6 +63,7 @@ type Store = {
   entrees: EntreeStock[];
   ventes: Vente[];
   charges: Charge[];
+  rapportsFinJournee: RapportFinJournee[];
   pointDeVenteActifId: string | "tous";
 
   setPointDeVenteActif: (id: string | "tous") => void;
@@ -78,8 +86,15 @@ type Store = {
   updateCharge: (id: string, data: Partial<Charge>) => void;
   deleteCharge: (id: string) => void;
 
+  /** Crée ou met à jour la clôture du jour pour un PDV. */
+  upsertRapportFinJournee: (
+    data: Omit<RapportFinJournee, "id" | "updatedAt"> & { id?: string },
+  ) => void;
+  deleteRapportFinJournee: (id: string) => void;
+
   addCategorieProduit: (cat: Omit<CategorieProduit, "id">) => void;
   updateCategorieProduit: (id: string, data: Partial<CategorieProduit>) => void;
+  deleteCategorieProduit: (id: string) => { ok: boolean; reason?: string };
 
   addProduit: (produit: Omit<Produit, "id">) => void;
   updateProduit: (
@@ -130,27 +145,42 @@ type Store = {
   ) => void;
   deleteFacture: (id: string) => void;
   addJournalAudit: (entry: Omit<JournalAudit, "id">) => void;
+  /** Purge les entrées journal métier plus anciennes que N jours. Retourne le nombre supprimé. */
+  purgeJournalAuditOlderThan: (days: number) => number;
 
   addAcompte: (acompte: Omit<Acompte, "id">) => void;
   updateAcompte: (id: string, data: Partial<Acompte>) => void;
   deleteAcompte: (id: string) => void;
 
-  resetDemo: () => void;
+  /** Remplace l'état métier (hydratation API). */
+  applyBusinessData: (data: AppState) => void;
+  clearBusinessData: () => void;
+  /** Remet l'état démo via API (admin). */
+  resetDemo: () => Promise<void>;
 };
 
 function uid(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-export const useStore = create<Store>()(
-  persist(
-    (set, get) => ({
-      ...seedData,
+export const useStore = create<Store>()((set, get) => ({
+      ...emptyAppState(),
       setPointDeVenteActif: (id) => set({ pointDeVenteActifId: id }),
       updateParametres: (data) =>
-        set((state) => ({
-          parametres: { ...state.parametres, ...data },
-        })),
+        set((state) => {
+          const modele = state.modelesDocuments.find(
+            (m) => m.type === "facture" && m.actif,
+          );
+          // Avant d'appliquer les nouveaux params : figer les factures fiscales
+          // encore sans snapshot (état précédent = non impactées par la modif).
+          const factures = state.factures.map((f) =>
+            avecPresentationSiBesoin(f, state.parametres, modele),
+          );
+          return {
+            parametres: { ...state.parametres, ...data },
+            factures,
+          };
+        }),
       updateBilanInitial: (data) =>
         set((state) => ({
           bilanInitial: { ...state.bilanInitial, ...data },
@@ -164,11 +194,20 @@ export const useStore = create<Store>()(
           ],
         })),
       updateModeleDocument: (id, data) =>
-        set((state) => ({
-          modelesDocuments: state.modelesDocuments.map((m) =>
-            m.id === id ? { ...m, ...data } : m,
-          ),
-        })),
+        set((state) => {
+          const modeleFacture = state.modelesDocuments.find(
+            (m) => m.type === "facture" && m.actif,
+          );
+          const factures = state.factures.map((f) =>
+            avecPresentationSiBesoin(f, state.parametres, modeleFacture),
+          );
+          return {
+            factures,
+            modelesDocuments: state.modelesDocuments.map((m) =>
+              m.id === id ? { ...m, ...data } : m,
+            ),
+          };
+        }),
       deleteModeleDocument: (id) =>
         set((state) => ({
           modelesDocuments: state.modelesDocuments.filter((m) => m.id !== id),
@@ -218,6 +257,50 @@ export const useStore = create<Store>()(
       deleteCharge: (id) =>
         set((state) => ({
           charges: state.charges.filter((c) => c.id !== id),
+        })),
+
+      upsertRapportFinJournee: (data) =>
+        set((state) => {
+          const updatedAt = new Date().toISOString();
+          const existing =
+            (data.id
+              ? state.rapportsFinJournee.find((r) => r.id === data.id)
+              : undefined) ??
+            state.rapportsFinJournee.find(
+              (r) =>
+                r.dateJour === data.dateJour &&
+                r.pointDeVenteId === data.pointDeVenteId,
+            );
+          if (existing) {
+            return {
+              rapportsFinJournee: state.rapportsFinJournee.map((r) =>
+                r.id === existing.id
+                  ? {
+                      ...r,
+                      ...data,
+                      id: existing.id,
+                      updatedAt,
+                    }
+                  : r,
+              ),
+            };
+          }
+          return {
+            rapportsFinJournee: [
+              {
+                ...data,
+                id: uid("rfj"),
+                updatedAt,
+              },
+              ...state.rapportsFinJournee,
+            ],
+          };
+        }),
+      deleteRapportFinJournee: (id) =>
+        set((state) => ({
+          rapportsFinJournee: state.rapportsFinJournee.filter(
+            (r) => r.id !== id,
+          ),
         })),
 
       addProduit: (produit) =>
@@ -309,6 +392,31 @@ export const useStore = create<Store>()(
             c.id === id ? { ...c, ...data } : c,
           ),
         })),
+      deleteCategorieProduit: (id) => {
+        const state = get();
+        const enfants = state.categoriesProduits.filter(
+          (c) => c.parentId === id,
+        );
+        if (enfants.length > 0) {
+          return {
+            ok: false,
+            reason: `Cette famille a ${enfants.length} sous-famille(s). Supprimez-les d'abord.`,
+          };
+        }
+        const nbProduits = state.produits.filter(
+          (p) => p.categorieId === id,
+        ).length;
+        if (nbProduits > 0) {
+          return {
+            ok: false,
+            reason: `${nbProduits} produit(s) y sont rattachés. Réassignez-les avant de supprimer.`,
+          };
+        }
+        set((s) => ({
+          categoriesProduits: s.categoriesProduits.filter((c) => c.id !== id),
+        }));
+        return { ok: true };
+      },
 
       addTarifClient: (tarif) =>
         set((state) => ({
@@ -441,48 +549,111 @@ export const useStore = create<Store>()(
 
       addFacture: (facture, audit) => {
         const id = uid("fac");
-        set((state) => ({
-          factures: [{ ...facture, id }, ...state.factures],
-          journalAudit: [
-            {
-              id: uid("aud"),
-              ...creerEntreeJournal({
-                action:
-                  audit?.action ??
-                  (facture.statut === "proforma"
-                    ? "facture_proforma"
-                    : facture.statut === "brouillon"
-                      ? "facture_brouillon"
-                      : "facture_validee"),
-                entiteId: id,
-                numero: facture.numero,
-                detail: audit?.detail,
-              }),
-            },
-            ...state.journalAudit,
-          ],
-        }));
+        set((state) => {
+          const modele = state.modelesDocuments.find(
+            (m) => m.type === "facture" && m.actif,
+          );
+          const complete = avecPresentationSiBesoin(
+            { ...facture, id },
+            state.parametres,
+            modele,
+          );
+          const factures = [complete, ...state.factures];
+          return {
+            factures,
+            ventes: rebuildVentesDepuisFactures(factures),
+            journalAudit: [
+              {
+                id: uid("aud"),
+                ...creerEntreeJournal({
+                  action:
+                    audit?.action ??
+                    (facture.statut === "proforma"
+                      ? "facture_proforma"
+                      : facture.statut === "brouillon"
+                        ? "facture_brouillon"
+                        : "facture_validee"),
+                  entiteId: id,
+                  numero: facture.numero,
+                  detail: audit?.detail,
+                }),
+              },
+              ...state.journalAudit,
+            ],
+          };
+        });
         return id;
       },
       updateFacture: (id, data, audit) =>
         set((state) => {
           const prev = state.factures.find((f) => f.id === id);
+          if (!prev) return state;
+
+          /** Contenu figé dès création : seuls suivi paiement / statut / validation sont autorisés. */
+          const {
+            lignes: _lignes,
+            clientId: _clientId,
+            pointDeVenteId: _pointDeVenteId,
+            date: _date,
+            echeance: _echeance,
+            tauxTVA: _tauxTVA,
+            conditionsPaiement: _conditionsPaiement,
+            note: _note,
+            remiseGlobale: _remiseGlobale,
+            devisId: _devisId,
+            commandeId: _commandeId,
+            bonDeLivraisonId: _bonDeLivraisonId,
+            factureParenteId: _factureParenteId,
+            acomptesDocument: acomptesDocumentPatch,
+            presentation: presentationPatch,
+            ...suiviAutorise
+          } = data;
+
+          const patch: Partial<typeof prev> = { ...suiviAutorise };
+
+          // Validation brouillon/proforma → fiscale : numéro / type / acomptes / présentation figés
+          const estConversionFiscale =
+            (prev.statut === "brouillon" ||
+              prev.statut === "proforma" ||
+              prev.type === "proforma") &&
+            (data.statut === "validee" ||
+              data.statut === "envoyee" ||
+              data.statut === "payee" ||
+              data.statut === "partiellement_payee");
+          if (estConversionFiscale) {
+            if (data.numero !== undefined) patch.numero = data.numero;
+            if (data.type !== undefined) patch.type = data.type;
+            if (data.dateValidation !== undefined)
+              patch.dateValidation = data.dateValidation;
+            if (acomptesDocumentPatch !== undefined)
+              patch.acomptesDocument = acomptesDocumentPatch;
+            const modele = state.modelesDocuments.find(
+              (m) => m.type === "facture" && m.actif,
+            );
+            patch.presentation =
+              presentationPatch ??
+              prev.presentation ??
+              creerSnapshotPresentation(state.parametres, modele);
+          }
+
           const journal = [...state.journalAudit];
-          if (audit && prev) {
+          if (audit) {
             journal.unshift({
               id: uid("aud"),
               ...creerEntreeJournal({
                 action: audit.action,
                 entiteId: id,
-                numero: data.numero ?? prev.numero,
+                numero: patch.numero ?? prev.numero,
                 detail: audit.detail,
               }),
             });
           }
+          const factures = state.factures.map((f) =>
+            f.id === id ? { ...f, ...patch } : f,
+          );
           return {
-            factures: state.factures.map((f) =>
-              f.id === id ? { ...f, ...data } : f,
-            ),
+            factures,
+            ventes: rebuildVentesDepuisFactures(factures),
             journalAudit: journal,
           };
         }),
@@ -494,6 +665,15 @@ export const useStore = create<Store>()(
         set((state) => ({
           journalAudit: [{ ...entry, id: uid("aud") }, ...state.journalAudit],
         })),
+      purgeJournalAuditOlderThan: (days) => {
+        const cutoff = Date.now() - days * 86_400_000;
+        const before = get().journalAudit;
+        const kept = before.filter(
+          (e) => new Date(e.date).getTime() >= cutoff,
+        );
+        set({ journalAudit: kept });
+        return before.length - kept.length;
+      },
 
       addAcompte: (acompte) =>
         set((state) => ({
@@ -510,127 +690,47 @@ export const useStore = create<Store>()(
           acomptes: state.acomptes.filter((a) => a.id !== id),
         })),
 
-      resetDemo: () => set({ ...seedData }),
-    }),
-    {
-      name: "stwr-poissonnerie-v4",
-      skipHydration: true,
-      version: 7,
-      migrate: (persisted, version) => {
-        const state = persisted as Partial<Store>;
-        if (version < 1 && state.pointsDeVente) {
-          state.pointsDeVente = state.pointsDeVente.map((pdv) => ({
-            ...pdv,
-            objectifCAMensuel:
-              typeof pdv.objectifCAMensuel === "number"
-                ? pdv.objectifCAMensuel
-                : 0,
-          }));
-        }
-        if (version < 2 && state.modelesDocuments) {
-          state.modelesDocuments = state.modelesDocuments.map((m) => {
-            if (m.rubriques.includes("logo")) return m;
-            const i = m.rubriques.indexOf("entete_entreprise");
-            const rubriques = [...m.rubriques];
-            rubriques.splice(i >= 0 ? i + 1 : 0, 0, "logo");
-            return { ...m, rubriques };
+      applyBusinessData: (data) =>
+        set((state) => {
+          const modele =
+            data.modelesDocuments.find((m) => m.type === "facture" && m.actif) ??
+            state.modelesDocuments.find((m) => m.type === "facture" && m.actif);
+          const parametres = data.parametres ?? state.parametres;
+          const factures = data.factures.map((f) =>
+            avecPresentationSiBesoin(f, parametres, modele, {
+              legacySansSignature: true,
+            }),
+          );
+          const merged = pickAppState({ ...data, factures });
+          return {
+            ...merged,
+            ventes: rebuildVentesDepuisFactures(factures),
+          };
+        }),
+      clearBusinessData: () => set({ ...emptyAppState() }),
+      resetDemo: async () => {
+        setBusinessSyncEnabled(false);
+        try {
+          const res = await resetBusinessState("demo");
+          set({
+            ...pickAppState(res.data),
+            ventes: rebuildVentesDepuisFactures(res.data.factures),
           });
+        } finally {
+          setBusinessSyncEnabled(true);
         }
-        if (version < 3) {
-          if (!state.categoriesProduits?.length) {
-            state.categoriesProduits = seedCategoriesProduits();
-          }
-          if (!state.tarifsClients) state.tarifsClients = [];
-          if (!state.historiquesPrix) state.historiquesPrix = [];
-          const taux = state.parametres?.tauxTVA ?? 20;
-          if (state.produits?.length) {
-            state.produits = state.produits.map((p) =>
-              migrateProduitLegacy(
-                p as unknown as Record<string, unknown>,
-                LEGACY_CATEGORIE_MAP,
-                taux,
-              ),
-            );
-          }
-        }
-        if (version < 4) {
-          if (!state.journalAudit) state.journalAudit = [];
-          if (state.factures?.length) {
-            state.factures = state.factures.map((f) => ({
-              ...f,
-              statut:
-                f.statut === "emise"
-                  ? ("validee" as const)
-                  : f.statut,
-            }));
-          }
-        }
-        if (version < 5) {
-          if (!state.bonsDeLivraison) state.bonsDeLivraison = [];
-          if (
-            state.modelesDocuments &&
-            !state.modelesDocuments.some((m) => m.type === "bon_de_livraison")
-          ) {
-            state.modelesDocuments = [
-              ...state.modelesDocuments,
-              ...createDefaultModeles().filter(
-                (m) => m.type === "bon_de_livraison",
-              ),
-            ];
-          }
-        }
-        if (version < 6 && state.factures?.length) {
-          const acomptes = state.acomptes ?? [];
-          state.factures = state.factures.map((f) => {
-            if (f.acomptesDocument !== undefined) return f;
-            if (f.type === "acompte" || f.type === "avoir") {
-              return { ...f, acomptesDocument: [] };
-            }
-            const detail = acomptes
-              .filter(
-                (a) =>
-                  a.statut !== "annule" &&
-                  (a.factureId === f.id ||
-                    (f.commandeId && a.commandeId === f.commandeId) ||
-                    (f.devisId && a.devisId === f.devisId)),
-              )
-              .map((a) => ({
-                numero: a.numero,
-                date: a.date,
-                montant: a.montantTTC,
-                mode: a.modePaiement,
-              }));
-            return { ...f, acomptesDocument: detail };
-          });
-        }
-        if (version < 7) {
-          if (state.parametres) {
-            if (state.parametres.seuilMargePalier1Percent == null) {
-              state.parametres.seuilMargePalier1Percent = 25;
-            }
-            if (state.parametres.seuilMargePalier2Percent == null) {
-              state.parametres.seuilMargePalier2Percent = 5;
-            }
-          }
-          if (state.charges?.length) {
-            state.charges = state.charges.map((c) => ({
-              ...c,
-              natureEconomique:
-                c.natureEconomique ??
-                (c.categorie === "emballage" || c.categorie === "transport"
-                  ? ("variable_vente" as const)
-                  : c.categorie === "interets"
-                    ? ("financiere" as const)
-                    : c.categorie === "exceptionnel"
-                      ? ("exceptionnelle" as const)
-                      : c.categorie === "impot_benefice"
-                        ? ("impot_benefice" as const)
-                        : ("fixe_structure" as const)),
-            }));
-          }
-        }
-        return state as Store;
       },
-    },
-  ),
-);
+}));
+
+/** Sync automatique vers l'API après chaque mutation métier. */
+if (typeof window !== "undefined") {
+  useStore.subscribe((state) => {
+    scheduleBusinessSave(pickAppState(state));
+  });
+  // Purge de l'ancien cache localStorage (seed front).
+  try {
+    localStorage.removeItem("stwr-poissonnerie-v4");
+  } catch {
+    /* ignore */
+  }
+}

@@ -996,6 +996,7 @@ export function stockDisponible(
   entrees: EntreeStock[],
   ventes: Vente[],
 ) {
+  if (!pointDeVenteId || pointDeVenteId === "tous") return 0;
   const entree = entrees
     .filter(
       (e) => e.pointDeVenteId === pointDeVenteId && e.produitId === produitId,
@@ -1007,6 +1008,40 @@ export function stockDisponible(
     )
     .reduce((s, v) => s + v.quantite, 0);
   return Math.max(0, entree - vendu);
+}
+
+/**
+ * Stock encore saisissable sur un document :
+ * stock physique − quantités déjà placées sur les autres lignes du document.
+ */
+export function stockRestantPourSaisie(
+  produitId: string,
+  pointDeVenteId: string,
+  entrees: EntreeStock[],
+  ventes: Vente[],
+  lignesEnCours: {
+    key?: string;
+    produitId?: string;
+    quantite: number;
+    type?: string;
+  }[],
+  excludeKey?: string,
+) {
+  const dispo = stockDisponible(
+    produitId,
+    pointDeVenteId,
+    entrees,
+    ventes,
+  );
+  const reserve = lignesEnCours
+    .filter(
+      (l) =>
+        (l.type ?? "produit") === "produit" &&
+        l.produitId === produitId &&
+        l.key !== excludeKey,
+    )
+    .reduce((s, l) => s + (Number(l.quantite) || 0), 0);
+  return Math.max(0, dispo - reserve);
 }
 
 /** Prix de vente suggéré à partir du dernier lot entré (sinon catalogue). */

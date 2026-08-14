@@ -2,7 +2,7 @@
 
 import { hasRubrique, type ModeleDocument } from "@/lib/document-templates";
 import type { TotauxDocument } from "@/lib/commercial";
-import { FACTURE_TYPES, MODES_PAIEMENT } from "@/lib/commercial";
+import { FACTURE_TYPES, MODES_PAIEMENT, appliqueTVA } from "@/lib/commercial";
 import { mentionRegimeFiscal } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type {
@@ -271,6 +271,25 @@ export function DocumentPreview({
               <span>Montant (régime IMP)</span>
               <span>{formatCurrency(totaux.totalTTC)}</span>
             </div>
+          ) : !appliqueTVA(parametres) ? (
+            <>
+              {totaux.totalRemise > 0 && (
+                <>
+                  <div className="flex justify-between text-muted">
+                    <span>Brut</span>
+                    <span>{formatCurrency(totaux.brutHT)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted">
+                    <span>Total remise</span>
+                    <span>− {formatCurrency(totaux.totalRemise)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between border-t border-line pt-1 font-semibold">
+                <span>Total</span>
+                <span>{formatCurrency(totaux.totalTTC)}</span>
+              </div>
+            </>
           ) : (
             <>
               {totaux.totalRemise > 0 && (
@@ -289,14 +308,10 @@ export function DocumentPreview({
                 <span>Total HT</span>
                 <span>{formatCurrency(totaux.totalHT)}</span>
               </div>
-              {parametres.assujettiTVA ? (
-                <div className="flex justify-between">
-                  <span>TVA ({totaux.tauxTVA} %)</span>
-                  <span>{formatCurrency(totaux.montantTVA)}</span>
-                </div>
-              ) : (
-                <p className="text-xs text-muted">TVA non applicable</p>
-              )}
+              <div className="flex justify-between">
+                <span>TVA ({totaux.tauxTVA} %)</span>
+                <span>{formatCurrency(totaux.montantTVA)}</span>
+              </div>
               <div className="flex justify-between border-t border-line pt-1 font-semibold">
                 <span>Total TTC</span>
                 <span>{formatCurrency(totaux.totalTTC)}</span>
@@ -398,8 +413,30 @@ export function DocumentPreview({
 
       {show("signature_cachet") && (
         <div className="mt-8 flex justify-end">
-          <div className="w-48 border-t border-line pt-2 text-center text-xs text-muted">
-            Signature / cachet
+          <div className="min-w-[12rem] max-w-[16rem] text-center">
+            {parametres.signatureDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={parametres.signatureDataUrl}
+                alt="Signature électronique"
+                className="mx-auto mb-1 h-16 w-auto max-w-full object-contain"
+              />
+            ) : (
+              <div className="mb-1 flex h-16 items-end justify-center border-b border-dashed border-line">
+                <span className="pb-1 text-[10px] text-muted">
+                  Signature non paramétrée
+                </span>
+              </div>
+            )}
+            <div
+              className={`pt-2 text-xs ${
+                parametres.signatureDataUrl
+                  ? "border-t border-line text-muted"
+                  : "text-muted"
+              }`}
+            >
+              {parametres.signatureNom?.trim() || "Signature / cachet"}
+            </div>
           </div>
         </div>
       )}

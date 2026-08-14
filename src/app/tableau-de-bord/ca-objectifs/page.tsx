@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Settings } from "lucide-react";
 import {
@@ -23,19 +23,26 @@ import {
 } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
+type Horizon = "mois" | "annee";
+
 export default function CaObjectifsPage() {
-  const { ventes, pointsDeVente } = useStore();
+  const ventes = useStore((s) => s.ventes);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const [horizon, setHorizon] = useState<Horizon>("mois");
 
   const lignes = useMemo(
     () =>
       pointsDeVente.map((pdv) => {
-        const realise = chiffreAffaires(ventes, pdv.id, "mois");
-        const objectif = pdv.objectifCAMensuel ?? 0;
+        const realise = chiffreAffaires(ventes, pdv.id, horizon);
+        const objectif =
+          horizon === "mois"
+            ? (pdv.objectifCAMensuel ?? 0)
+            : (pdv.objectifCAAnnuel ?? 0);
         const taux = objectif > 0 ? realise / objectif : 0;
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pointsDeVente, ventes],
+    [pointsDeVente, ventes, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);
@@ -48,11 +55,13 @@ export default function CaObjectifsPage() {
     objectif: l.objectif,
   }));
 
+  const horizonLabel = horizon === "mois" ? "mensuel" : "annuel";
+
   return (
     <div>
       <PageHeader
         title="CA objectif par point de vente"
-        description="Suivi du CA mensuel réalisé face à l'objectif fixé pour chaque point de vente."
+        description="Suivi du CA réalisé face aux objectifs mensuels et annuels fixés pour chaque point de vente."
         actions={
           <Link
             href="/parametres/objectifs-revenu"
@@ -64,13 +73,35 @@ export default function CaObjectifsPage() {
         }
       />
 
+      <div className="mb-4 flex flex-wrap gap-1 rounded-[var(--radius)] border border-line bg-card p-1 w-fit">
+        {(
+          [
+            ["mois", "Mois"],
+            ["annee", "Année"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              horizon === key
+                ? "bg-sea-700 text-white"
+                : "text-muted hover:bg-sea-50 hover:text-ink"
+            }`}
+            onClick={() => setHorizon(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="CA réalisé (mois)"
+          label={`CA réalisé (${horizon === "mois" ? "mois" : "année"})`}
           value={formatCurrency(totalRealise)}
         />
         <StatCard
-          label="Objectif total"
+          label={`Objectif ${horizonLabel}`}
           value={formatCurrency(totalObjectif)}
         />
         <StatCard
@@ -90,7 +121,9 @@ export default function CaObjectifsPage() {
         <h2 className="mb-1 font-display text-lg font-semibold">
           Réalisé vs objectif
         </h2>
-        <p className="mb-4 text-xs text-muted">Mois en cours (Ar)</p>
+        <p className="mb-4 text-xs text-muted">
+          Horizon {horizonLabel} (Ar)
+        </p>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
@@ -140,7 +173,7 @@ export default function CaObjectifsPage() {
             <tr>
               <th>Point de vente</th>
               <th>CA réalisé</th>
-              <th>Objectif mensuel</th>
+              <th>Objectif {horizonLabel}</th>
               <th>Écart</th>
               <th>Atteinte</th>
             </tr>

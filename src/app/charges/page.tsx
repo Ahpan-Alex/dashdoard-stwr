@@ -3,6 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { FileSpreadsheet, Plus, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import {
   CHARGE_CATEGORIES,
@@ -406,9 +407,8 @@ export default function ChargesPage() {
                       {formatCurrency(c.montant)}
                     </td>
                     <td>
-                      <button
-                        className="btn btn-ghost"
-                        title="Supprimer"
+                      <IconButton
+                        label="Supprimer cette charge"
                         onClick={() => {
                           if (confirm(`Supprimer « ${c.libelle} » ?`)) {
                             deleteCharge(c.id);
@@ -416,7 +416,7 @@ export default function ChargesPage() {
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-danger" />
-                      </button>
+                      </IconButton>
                     </td>
                   </tr>
                 );

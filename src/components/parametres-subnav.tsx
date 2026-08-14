@@ -33,6 +33,10 @@ export const PARAMETRES_MENUS = [
     label: "Objectifs de revenu",
   },
   {
+    href: "/parametres/objectifs-marge",
+    label: "Objectifs de marge",
+  },
+  {
     href: "/parametres/rentabilite",
     label: "Seuils de rentabilité",
   },
@@ -43,6 +47,10 @@ export const PARAMETRES_MENUS = [
   {
     href: "/parametres/bilan-initial",
     label: "Bilan initial",
+  },
+  {
+    href: "/parametres/utilisateurs",
+    label: "Utilisateurs & historiques",
   },
 ] as const;
 

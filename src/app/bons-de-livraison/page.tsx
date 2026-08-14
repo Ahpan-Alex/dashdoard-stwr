@@ -1,24 +1,17 @@
 "use client";
 
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Eye, Plus, Trash2 } from "lucide-react";
 import {
   DocumentSaisieWizard,
   lignesToDraft,
   type DraftLigne,
 } from "@/components/document-saisie-wizard";
-import { DocumentPreview } from "@/components/document-preview";
+import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import {
-  BL_STATUTS,
-  creerSnapshotAcomptesDocument,
-  nextNumero,
-  totauxBonDeLivraison,
-} from "@/lib/commercial";
-import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { appliqueTVA, nextNumero } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
-import type { BonDeLivraisonStatut } from "@/lib/types";
 
 export default function BonsDeLivraisonPage() {
   const {
@@ -30,18 +23,15 @@ export default function BonsDeLivraisonPage() {
     pointsDeVente,
     parametres,
     modelesDocuments,
-    acomptes,
-    factures,
     tarifsClients,
+    categoriesProduits,
+    entrees,
+    ventes,
     addBonDeLivraison,
-    updateBonDeLivraison,
-    deleteBonDeLivraison,
     updateCommande,
-    addFacture,
   } = useStore();
 
-  const [open, setOpen] = useState(false);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
   const [wizardKey, setWizardKey] = useState(0);
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
@@ -59,9 +49,7 @@ export default function BonsDeLivraisonPage() {
   const modele = modelesDocuments.find(
     (m) => m.type === "bon_de_livraison" && m.actif,
   );
-
-  const assujettiTVA =
-    parametres.assujettiTVA && parametres.regimeFiscal === "tva";
+  const assujettiTVA = appliqueTVA(parametres);
 
   function ouvrirFormulaire() {
     setMeta({
@@ -101,71 +89,11 @@ export default function BonsDeLivraisonPage() {
     setWizardKey((k) => k + 1);
   }
 
-  function convertirEnFacture(blId: string) {
-    const bl = bonsDeLivraison.find((x) => x.id === blId);
-    if (!bl) return;
-    const echeance = new Date();
-    echeance.setDate(echeance.getDate() + 30);
-    const t = totauxBonDeLivraison(bl, parametres, acomptes);
-    const acomptesDoc = creerSnapshotAcomptesDocument(
-      acomptes
-        .filter(
-          (a) =>
-            a.statut !== "annule" &&
-            ((bl.commandeId && a.commandeId === bl.commandeId) ||
-              (bl.devisId && a.devisId === bl.devisId)),
-        )
-        .map((a) => ({
-          numero: a.numero,
-          date: a.date,
-          montant: a.montantTTC,
-          mode: a.modePaiement,
-        })),
-    );
-    addFacture({
-      numero: nextNumeroDocumentCommercial({
-        prefix: "FAC",
-        pointDeVenteId: bl.pointDeVenteId,
-        pointsDeVente,
-        existing: factures.map((f) => f.numero),
-      }),
-      type: t.acomptesTTC > 0 ? "solde" : "standard",
-      clientId: bl.clientId,
-      pointDeVenteId: bl.pointDeVenteId,
-      date: new Date().toISOString(),
-      echeance: echeance.toISOString(),
-      statut:
-        t.acomptesTTC >= t.totalTTC - 1
-          ? "payee"
-          : t.acomptesTTC > 0
-            ? "partiellement_payee"
-            : "validee",
-      montantPaye: t.acomptesTTC,
-      devisId: bl.devisId,
-      commandeId: bl.commandeId,
-      bonDeLivraisonId: bl.id,
-      tauxTVA: bl.tauxTVA,
-      conditionsPaiement: bl.conditionsPaiement,
-      dateValidation: new Date().toISOString(),
-      acomptesDocument: acomptesDoc,
-      lignes: bl.lignes.map((l) => ({ ...l, id: `fl-${l.id}` })),
-      remiseGlobale: bl.remiseGlobale,
-      note: bl.note,
-    });
-    updateBonDeLivraison(bl.id, { statut: "livre" });
-    if (bl.commandeId) {
-      updateCommande(bl.commandeId, { statut: "livree" });
-    }
-    alert("Facture créée depuis le bon de livraison (document figé à l'émission).");
-  }
-
-  const preview = bonsDeLivraison.find((b) => b.id === previewId);
-
   return (
     <div>
       <PageHeader
-        title="Bons de livraison"
-        description="Livraisons clients — étape entre commande et facture (même logique que devis / commandes)."
+        title="Nouveau bon de livraison"
+        description="Livraisons clients — étape entre commande et facture."
         actions={
           <button className="btn btn-primary" onClick={ouvrirFormulaire}>
             <Plus className="h-4 w-4" />
@@ -174,20 +102,48 @@ export default function BonsDeLivraisonPage() {
         }
       />
 
-      {open && (
+      <BonsDeLivraisonSubnav />
+
+      {open ? (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
           <DocumentSaisieWizard
             key={wizardKey}
             titre="Nouveau bon de livraison"
             produits={produits}
+            categoriesProduits={categoriesProduits}
             clientId={meta.clientId}
             tarifsClients={tarifsClients}
+            pointDeVenteId={meta.pointDeVenteId}
+            entrees={entrees}
+            ventes={ventes}
             tauxTVA={parametres.tauxTVA}
             assujettiTVA={assujettiTVA}
-            confirmLabel="Enregistrer le BL"
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
             initialNote={seed.note}
+            previewMeta={{
+              type: "bon_de_livraison",
+              numero: nextNumero(
+                "BL",
+                bonsDeLivraison.map((b) => b.numero),
+              ),
+              date: new Date(`${meta.date}T12:00:00`).toISOString(),
+              echeance: meta.dateLivraison
+                ? new Date(`${meta.dateLivraison}T12:00:00`).toISOString()
+                : undefined,
+              client: clients.find((c) => c.id === meta.clientId),
+              pdv: pointsDeVente.find((p) => p.id === meta.pointDeVenteId),
+              parametres,
+              modele,
+              conditionsPaiement: parametres.conditionsPaiementDefaut,
+              referenceCommande: commandes.find((c) => c.id === meta.commandeId)
+                ?.numero,
+              referenceDevis: (() => {
+                const cmd = commandes.find((c) => c.id === meta.commandeId);
+                return devis.find((d) => d.id === cmd?.devisId)?.numero;
+              })(),
+            }}
+            confirmLabel="Enregistrer le BL"
             onCancel={() => setOpen(false)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
               if (!meta.clientId) return;
@@ -299,133 +255,17 @@ export default function BonsDeLivraisonPage() {
             }
           />
         </div>
-      )}
-
-      <div className="table-shell">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>Commande</th>
-              <th>Total TTC</th>
-              <th>Statut</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...bonsDeLivraison]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((bl) => {
-                const client = clients.find((x) => x.id === bl.clientId);
-                const cmd = commandes.find((c) => c.id === bl.commandeId);
-                const t = totauxBonDeLivraison(bl, parametres, acomptes);
-                return (
-                  <tr key={bl.id}>
-                    <td className="font-medium">{bl.numero}</td>
-                    <td>
-                      {formatDate(bl.date)}
-                      {bl.dateLivraison && (
-                        <span className="mt-0.5 block text-xs text-muted">
-                          Livr. {formatDate(bl.dateLivraison)}
-                        </span>
-                      )}
-                    </td>
-                    <td>{client?.nom}</td>
-                    <td>{cmd?.numero ?? "—"}</td>
-                    <td className="font-semibold">
-                      {formatCurrency(t.totalTTC)}
-                    </td>
-                    <td>
-                      <select
-                        className="select max-w-[140px]"
-                        value={bl.statut}
-                        onChange={(e) =>
-                          updateBonDeLivraison(bl.id, {
-                            statut: e.target.value as BonDeLivraisonStatut,
-                          })
-                        }
-                      >
-                        {Object.entries(BL_STATUTS).map(([id, label]) => (
-                          <option key={id} value={id}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <button
-                          className="btn btn-ghost"
-                          title="Aperçu"
-                          onClick={() => setPreviewId(bl.id)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        {bl.statut !== "annule" && (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => convertirEnFacture(bl.id)}
-                          >
-                            → Facture
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-ghost"
-                          onClick={() => {
-                            if (confirm(`Supprimer ${bl.numero} ?`)) {
-                              deleteBonDeLivraison(bl.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-danger" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
-
-      {preview && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-3xl">
-            <div className="mb-3 flex justify-end gap-2">
-              <button className="btn btn-primary" onClick={() => window.print()}>
-                Imprimer
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setPreviewId(null)}
-              >
-                Fermer
-              </button>
-            </div>
-            <DocumentPreview
-              type="bon_de_livraison"
-              numero={preview.numero}
-              date={preview.date}
-              echeance={preview.dateLivraison}
-              client={clients.find((c) => c.id === preview.clientId)}
-              pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
-              parametres={parametres}
-              modele={modele}
-              lignes={preview.lignes}
-              totaux={totauxBonDeLivraison(preview, parametres, acomptes)}
-              conditionsPaiement={preview.conditionsPaiement}
-              note={preview.note}
-              referenceDevis={
-                devis.find((d) => d.id === preview.devisId)?.numero
-              }
-              referenceCommande={
-                commandes.find((c) => c.id === preview.commandeId)?.numero
-              }
-            />
-          </div>
-        </div>
+      ) : (
+        <p className="mb-4 text-sm text-muted">
+          Consultez et modifiez les BL dans{" "}
+          <Link
+            href="/bons-de-livraison/liste"
+            className="font-semibold text-sea-700 underline"
+          >
+            Liste des BL
+          </Link>
+          .
+        </p>
       )}
     </div>
   );

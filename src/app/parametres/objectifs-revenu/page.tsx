@@ -8,11 +8,19 @@ import { chiffreAffaires } from "@/lib/calculations";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
+function parseAr(value: string) {
+  return Math.max(0, Number(value) || 0);
+}
+
 export default function ObjectifsRevenuPage() {
   const { pointsDeVente, ventes, updatePointDeVente } = useStore();
 
-  const totalObjectif = pointsDeVente.reduce(
+  const totalMensuel = pointsDeVente.reduce(
     (s, p) => s + (p.objectifCAMensuel ?? 0),
+    0,
+  );
+  const totalAnnuel = pointsDeVente.reduce(
+    (s, p) => s + (p.objectifCAAnnuel ?? 0),
     0,
   );
 
@@ -20,7 +28,7 @@ export default function ObjectifsRevenuPage() {
     <div>
       <PageHeader
         title="Objectifs de revenu"
-        description="Définissez l'objectif de chiffre d'affaires mensuel pour chaque point de vente."
+        description="Définissez les objectifs de chiffre d'affaires mensuel et annuel pour chaque point de vente."
         showPosSelector={false}
         actions={
           <Link
@@ -35,20 +43,24 @@ export default function ObjectifsRevenuPage() {
 
       <ParametresSubnav />
 
-      <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-sea-50/60 px-4 py-3 text-sm text-sea-900">
-        <div className="flex items-start gap-2">
-          <Target className="mt-0.5 h-4 w-4 shrink-0 text-sea-700" />
-          <p>
-            Objectif global mensuel :{" "}
-            <strong>{formatCurrency(totalObjectif)}</strong>
-            {pointsDeVente.length > 0 && (
-              <span className="text-muted">
-                {" "}
-                · {pointsDeVente.length} point
-                {pointsDeVente.length > 1 ? "s" : ""} de vente
-              </span>
-            )}
-          </p>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[var(--radius)] border border-sea-200 bg-sea-50/60 px-4 py-3 text-sm text-sea-900">
+          <div className="flex items-start gap-2">
+            <Target className="mt-0.5 h-4 w-4 shrink-0 text-sea-700" />
+            <p>
+              Objectif global mensuel :{" "}
+              <strong>{formatCurrency(totalMensuel)}</strong>
+            </p>
+          </div>
+        </div>
+        <div className="rounded-[var(--radius)] border border-sea-200 bg-sea-50/60 px-4 py-3 text-sm text-sea-900">
+          <div className="flex items-start gap-2">
+            <Target className="mt-0.5 h-4 w-4 shrink-0 text-sea-700" />
+            <p>
+              Objectif global annuel :{" "}
+              <strong>{formatCurrency(totalAnnuel)}</strong>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -57,7 +69,7 @@ export default function ObjectifsRevenuPage() {
           <p className="text-sm text-muted">
             Aucun point de vente. Créez-en un pour fixer des objectifs.
           </p>
-          <Link href="/points-de-vente" className="btn btn-primary mt-4">
+          <Link href="/parametres/points-de-vente" className="btn btn-primary mt-4">
             <MapPin className="h-4 w-4" />
             Points de vente
           </Link>
@@ -65,9 +77,12 @@ export default function ObjectifsRevenuPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {pointsDeVente.map((pdv) => {
-            const objectif = pdv.objectifCAMensuel ?? 0;
-            const realise = chiffreAffaires(ventes, pdv.id, "mois");
-            const taux = objectif > 0 ? realise / objectif : 0;
+            const objMois = pdv.objectifCAMensuel ?? 0;
+            const objAnnee = pdv.objectifCAAnnuel ?? 0;
+            const caMois = chiffreAffaires(ventes, pdv.id, "mois");
+            const caAnnee = chiffreAffaires(ventes, pdv.id, "annee");
+            const tauxMois = objMois > 0 ? caMois / objMois : 0;
+            const tauxAnnee = objAnnee > 0 ? caAnnee / objAnnee : 0;
 
             return (
               <article
@@ -96,34 +111,56 @@ export default function ObjectifsRevenuPage() {
                   </span>
                 </div>
 
-                <label className="mt-5 block text-xs font-semibold text-muted">
-                  Objectif de revenu mensuel (Ar)
-                  <input
-                    type="number"
-                    min={0}
-                    step={100000}
-                    className="input mt-1.5"
-                    value={objectif}
-                    onChange={(e) =>
-                      updatePointDeVente(pdv.id, {
-                        objectifCAMensuel: Math.max(
-                          0,
-                          Number(e.target.value) || 0,
-                        ),
-                      })
-                    }
-                  />
-                </label>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <label className="block text-xs font-semibold text-muted">
+                    Objectif mensuel (Ar)
+                    <input
+                      type="number"
+                      min={0}
+                      step={100000}
+                      className="input mt-1.5"
+                      value={objMois}
+                      onChange={(e) =>
+                        updatePointDeVente(pdv.id, {
+                          objectifCAMensuel: parseAr(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Objectif annuel (Ar)
+                    <input
+                      type="number"
+                      min={0}
+                      step={1000000}
+                      className="input mt-1.5"
+                      value={objAnnee}
+                      onChange={(e) =>
+                        updatePointDeVente(pdv.id, {
+                          objectifCAAnnuel: parseAr(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
 
                 <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 text-sm">
                   <div>
-                    <dt className="text-xs text-muted">CA réalisé (mois)</dt>
-                    <dd className="font-semibold">{formatCurrency(realise)}</dd>
+                    <dt className="text-xs text-muted">CA mois / atteinte</dt>
+                    <dd className="font-semibold">
+                      {formatCurrency(caMois)}
+                      <span className="ml-1 text-xs font-normal text-muted">
+                        ({objMois > 0 ? formatPercent(tauxMois) : "—"})
+                      </span>
+                    </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted">Atteinte</dt>
+                    <dt className="text-xs text-muted">CA année / atteinte</dt>
                     <dd className="font-semibold">
-                      {objectif > 0 ? formatPercent(taux) : "—"}
+                      {formatCurrency(caAnnee)}
+                      <span className="ml-1 text-xs font-normal text-muted">
+                        ({objAnnee > 0 ? formatPercent(tauxAnnee) : "—"})
+                      </span>
                     </dd>
                   </div>
                 </dl>

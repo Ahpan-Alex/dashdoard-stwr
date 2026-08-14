@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -317,13 +318,12 @@ export default function EntreesPage() {
                     {formatCurrency(e.quantite * e.prixAchatUnitaire)}
                   </td>
                   <td>
-                    <button
-                      className="btn btn-ghost"
+                    <IconButton
+                      label="Supprimer cette entrée"
                       onClick={() => deleteEntree(e.id)}
-                      title="Supprimer"
                     >
                       <Trash2 className="h-4 w-4 text-danger" />
-                    </button>
+                    </IconButton>
                   </td>
                 </tr>
               );

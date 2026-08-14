@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { RequirePermission } from "@/components/require-permission";
@@ -32,7 +32,13 @@ export default function AuditPage() {
 function AuditContent() {
   const audit = useAuthStore((s) => s.audit);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const refreshAudit = useAuthStore((s) => s.refreshAudit);
   const me = currentUser();
+
+  useEffect(() => {
+    void refreshAudit();
+  }, [refreshAudit]);
+
   const rows = useMemo(
     () => audit.filter((a) => a.tenantId === me?.tenantId).slice(0, 200),
     [audit, me?.tenantId],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { RequirePermission } from "@/components/require-permission";
@@ -24,8 +24,13 @@ function UtilisateursContent() {
   const createUser = useAuthStore((s) => s.createUser);
   const updateUser = useAuthStore((s) => s.updateUser);
   const resetPasswordAdmin = useAuthStore((s) => s.resetPasswordAdmin);
+  const refreshUsers = useAuthStore((s) => s.refreshUsers);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const me = currentUser();
+
+  useEffect(() => {
+    void refreshUsers();
+  }, [refreshUsers]);
 
   const tenantUsers = useMemo(
     () => users.filter((u) => u.tenantId === me?.tenantId),

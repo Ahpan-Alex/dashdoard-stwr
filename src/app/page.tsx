@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   Banknote,
   Package,
@@ -29,6 +30,7 @@ import {
   chiffreAffaires,
   totalAchats,
 } from "@/lib/calculations";
+import { rebuildVentesDepuisFactures } from "@/lib/commercial";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -48,8 +50,24 @@ function trendLabel(current: number, previous: number) {
 }
 
 export default function DashboardPage() {
-  const { ventes, entrees, produits, pointsDeVente, pointDeVenteActifId } =
-    useStore();
+  const ventes = useStore((s) => s.ventes);
+  const entrees = useStore((s) => s.entrees);
+  const produits = useStore((s) => s.produits);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
+  const factures = useStore((s) => s.factures);
+
+  // Recalcule CA / stock depuis les factures validées (source de vérité).
+  useEffect(() => {
+    const rebuilt = rebuildVentesDepuisFactures(factures);
+    const current = useStore.getState().ventes;
+    if (
+      rebuilt.length !== current.length ||
+      rebuilt.some((v, i) => v.id !== current[i]?.id)
+    ) {
+      useStore.setState({ ventes: rebuilt });
+    }
+  }, [factures]);
 
   const caSemaine = chiffreAffaires(ventes, pointDeVenteActifId, "semaine");
   const caMois = chiffreAffaires(ventes, pointDeVenteActifId, "mois");
@@ -90,7 +108,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Tableau de bord"
-        description="Vue d'ensemble des entrées, stocks et performances commerciales (ariary)."
+        description="Vue d'ensemble des entrées, stocks et performances commerciales (CA issu des factures validées)."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

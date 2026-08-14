@@ -1,0 +1,22 @@
+# Compose Dokploy — dashboard seul.
+# Type Compose, fichier = docker-compose.dokploy.yml
+# Assigner le domaine du dashboard au service `web`.
+#
+# NEXT_PUBLIC_API_URL est un argument de BUILD : URL publique HTTPS de l'API.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+    expose:
+      - "3000"

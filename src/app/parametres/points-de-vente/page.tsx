@@ -17,6 +17,9 @@ export default function ParametresPointsDeVentePage() {
     ville: "",
     telephone: "",
     objectifCAMensuel: "",
+    objectifCAAnnuel: "",
+    objectifMargeMensuel: "",
+    objectifMargeAnnuel: "",
   });
 
   function onSubmit(e: FormEvent) {
@@ -29,6 +32,9 @@ export default function ParametresPointsDeVentePage() {
       telephone: form.telephone.trim(),
       actif: true,
       objectifCAMensuel: Math.max(0, Number(form.objectifCAMensuel) || 0),
+      objectifCAAnnuel: Math.max(0, Number(form.objectifCAAnnuel) || 0),
+      objectifMargeMensuel: Math.max(0, Number(form.objectifMargeMensuel) || 0),
+      objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
     });
     setForm({
       nom: "",
@@ -36,6 +42,9 @@ export default function ParametresPointsDeVentePage() {
       ville: "",
       telephone: "",
       objectifCAMensuel: "",
+      objectifCAAnnuel: "",
+      objectifMargeMensuel: "",
+      objectifMargeAnnuel: "",
     });
     setOpen(false);
   }
@@ -99,7 +108,7 @@ export default function ParametresPointsDeVentePage() {
                 onChange={(e) => setForm({ ...form, ville: e.target.value })}
               />
             </label>
-            <label className="block text-xs font-semibold text-muted sm:col-span-2">
+            <label className="block text-xs font-semibold text-muted">
               Objectif CA mensuel (Ar)
               <input
                 type="number"
@@ -111,6 +120,48 @@ export default function ParametresPointsDeVentePage() {
                   setForm({ ...form, objectifCAMensuel: e.target.value })
                 }
                 placeholder="Ex. 20000000"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Objectif CA annuel (Ar)
+              <input
+                type="number"
+                min={0}
+                step={1000000}
+                className="input mt-1"
+                value={form.objectifCAAnnuel}
+                onChange={(e) =>
+                  setForm({ ...form, objectifCAAnnuel: e.target.value })
+                }
+                placeholder="Ex. 240000000"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Objectif marge mensuelle (Ar)
+              <input
+                type="number"
+                min={0}
+                step={100000}
+                className="input mt-1"
+                value={form.objectifMargeMensuel}
+                onChange={(e) =>
+                  setForm({ ...form, objectifMargeMensuel: e.target.value })
+                }
+                placeholder="Ex. 5000000"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Objectif marge annuelle (Ar)
+              <input
+                type="number"
+                min={0}
+                step={1000000}
+                className="input mt-1"
+                value={form.objectifMargeAnnuel}
+                onChange={(e) =>
+                  setForm({ ...form, objectifMargeAnnuel: e.target.value })
+                }
+                placeholder="Ex. 60000000"
               />
             </label>
             <div className="flex gap-2 sm:col-span-2">
@@ -135,7 +186,8 @@ export default function ParametresPointsDeVentePage() {
             <tr>
               <th>Point de vente</th>
               <th>Contact</th>
-              <th>Objectif CA mensuel</th>
+              <th>CA mois / année</th>
+              <th>Marge mois / année</th>
               <th>Statut</th>
             </tr>
           </thead>
@@ -155,7 +207,18 @@ export default function ParametresPointsDeVentePage() {
                   </div>
                 </td>
                 <td>{pdv.telephone || "—"}</td>
-                <td>{formatCurrency(pdv.objectifCAMensuel ?? 0)}</td>
+                <td>
+                  <p>{formatCurrency(pdv.objectifCAMensuel ?? 0)}</p>
+                  <p className="text-xs text-muted">
+                    {formatCurrency(pdv.objectifCAAnnuel ?? 0)} / an
+                  </p>
+                </td>
+                <td>
+                  <p>{formatCurrency(pdv.objectifMargeMensuel ?? 0)}</p>
+                  <p className="text-xs text-muted">
+                    {formatCurrency(pdv.objectifMargeAnnuel ?? 0)} / an
+                  </p>
+                </td>
                 <td>
                   <button
                     className={`badge ${pdv.actif ? "badge-success" : "badge-sand"}`}

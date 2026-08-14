@@ -73,6 +73,61 @@ export function categoriesFeuilles(categories: CategorieProduit[]) {
   return categories.filter((c) => c.actif && !parents.has(c.id));
 }
 
+/** 0 = famille, 1 = sous-famille, 2 = sous-sous-famille */
+export function profondeurCategorie(
+  categorieId: string,
+  categories: CategorieProduit[],
+): number {
+  let depth = 0;
+  let current = categories.find((c) => c.id === categorieId);
+  const guard = new Set<string>();
+  while (current?.parentId && !guard.has(current.id)) {
+    guard.add(current.id);
+    depth += 1;
+    current = categories.find((c) => c.id === current!.parentId);
+  }
+  return depth;
+}
+
+export const MAX_PROFONDEUR_CATEGORIE = 2; // 3 niveaux : 0, 1, 2
+
+export function libelleNiveauCategorie(depth: number) {
+  if (depth <= 0) return "Famille";
+  if (depth === 1) return "Sous-famille";
+  return "Sous-sous-famille";
+}
+
+export function enfantsCategorie(
+  parentId: string | undefined,
+  categories: CategorieProduit[],
+) {
+  return categories
+    .filter((c) => (c.parentId ?? "") === (parentId ?? ""))
+    .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle));
+}
+
+/** Arbre plat trié pour affichage (pré-ordre). */
+export function categoriesEnArbre(categories: CategorieProduit[]) {
+  const out: { cat: CategorieProduit; depth: number }[] = [];
+  function walk(parentId: string | undefined, depth: number) {
+    for (const cat of enfantsCategorie(parentId, categories)) {
+      out.push({ cat, depth });
+      walk(cat.id, depth + 1);
+    }
+  }
+  walk(undefined, 0);
+  const seen = new Set(out.map((o) => o.cat.id));
+  for (const cat of categories) {
+    if (!seen.has(cat.id)) {
+      out.push({
+        cat,
+        depth: profondeurCategorie(cat.id, categories),
+      });
+    }
+  }
+  return out;
+}
+
 /** Résolution prix HT : tarif client → gros → détail */
 export function resolvePrixVenteHT(
   produit: Produit,
