@@ -7,6 +7,7 @@ import {
   GripVertical,
   MessageSquare,
   Minus,
+  Plus,
   Sigma,
   Trash2,
 } from "lucide-react";
@@ -170,12 +171,16 @@ export function DocumentSaisieWizard({
     [categoriesProduits],
   );
 
-  const produitsSelectionnesIds = useMemo(() => {
-    const ids = new Set<string>();
+  const lignesProduitParId = useMemo(() => {
+    const counts = new Map<string, number>();
+    let total = 0;
     for (const l of lignes) {
-      if (isLigneProduit(l) && l.produitId) ids.add(l.produitId);
+      if (isLigneProduit(l) && l.produitId) {
+        counts.set(l.produitId, (counts.get(l.produitId) ?? 0) + 1);
+        total += 1;
+      }
     }
-    return ids;
+    return { counts, total };
   }, [lignes]);
 
   const catalogueFiltre = useMemo(() => {
@@ -216,19 +221,10 @@ export function DocumentSaisieWizard({
     );
   }, [lignes, tauxTVA, acomptesTTC, assujettiTVA, form.remiseGlobale]);
 
-  function toggleProduit(produitId: string, checked: boolean) {
+  function ajouterProduit(produitId: string) {
     const prod = produitsDispo.find((p) => p.id === produitId);
     if (!prod) return;
     setStockError(null);
-    if (!checked) {
-      setLignes((prev) =>
-        recalculerSousTotaux(
-          prev.filter((l) => !(isLigneProduit(l) && l.produitId === produitId)),
-        ),
-      );
-      return;
-    }
-    if (produitsSelectionnesIds.has(produitId)) return;
     if (!pointDeVenteId) {
       setStockError(
         "Sélectionnez un point de vente avant d'ajouter un produit.",
@@ -468,13 +464,13 @@ export function DocumentSaisieWizard({
                   Catalogue produits
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  Cochez les articles — ils apparaissent ci-dessous pour saisir
-                  quantité, remise, etc.
+                  Ajoutez un article autant de fois que besoin (prix
+                  différents). Chaque ligne se saisit ci-dessous.
                 </p>
               </div>
               <p className="text-xs text-muted">
-                {produitsSelectionnesIds.size} sélectionné
-                {produitsSelectionnesIds.size > 1 ? "s" : ""} ·{" "}
+                {lignesProduitParId.total} ligne
+                {lignesProduitParId.total > 1 ? "s" : ""} ·{" "}
                 {catalogueFiltre.length} affiché
                 {catalogueFiltre.length > 1 ? "s" : ""}
               </p>
@@ -520,8 +516,8 @@ export function DocumentSaisieWizard({
               <table className="data">
                 <thead className="sticky top-0 z-10 bg-card">
                   <tr>
-                    <th className="w-10">
-                      <span className="sr-only">Sélection</span>
+                    <th className="w-14">
+                      <span className="sr-only">Ajouter</span>
                     </th>
                     <th>Code</th>
                     <th>Désignation</th>
@@ -544,7 +540,7 @@ export function DocumentSaisieWizard({
                     </tr>
                   ) : (
                     catalogueFiltre.map((p) => {
-                      const checked = produitsSelectionnesIds.has(p.id);
+                      const nbLignes = lignesProduitParId.counts.get(p.id) ?? 0;
                       const stock = stockDisponible(
                         p.id,
                         pointDeVenteId,
@@ -558,7 +554,7 @@ export function DocumentSaisieWizard({
                         ventes,
                         lignes,
                       );
-                      const indispo = !checked && restant <= 0;
+                      const indispo = restant <= 0;
                       const prix = resolvePrixVenteHT(p, {
                         clientId,
                         quantite: 1,
@@ -568,7 +564,7 @@ export function DocumentSaisieWizard({
                         <tr
                           key={p.id}
                           className={
-                            checked
+                            nbLignes > 0
                               ? "bg-sea-50/60"
                               : indispo
                                 ? "opacity-55"
@@ -576,21 +572,25 @@ export function DocumentSaisieWizard({
                           }
                         >
                           <td>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-sea-700"
-                              checked={checked}
+                            <button
+                              type="button"
+                              className="btn btn-secondary px-2 py-1"
                               disabled={indispo}
-                              onChange={(e) =>
-                                toggleProduit(p.id, e.target.checked)
-                              }
-                              aria-label={`Sélectionner ${p.libelleCourt}`}
+                              onClick={() => ajouterProduit(p.id)}
+                              aria-label={`Ajouter ${p.libelleCourt}`}
                               title={
                                 indispo
                                   ? "Produit indisponible en stock"
-                                  : undefined
+                                  : "Ajouter une ligne (même produit, autre prix possible)"
                               }
-                            />
+                            >
+                              <Plus className="h-4 w-4" />
+                              {nbLignes > 0 ? (
+                                <span className="ml-1 text-[11px] font-semibold">
+                                  {nbLignes}
+                                </span>
+                              ) : null}
+                            </button>
                           </td>
                           <td className="font-mono text-xs">{p.code}</td>
                           <td>
