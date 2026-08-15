@@ -16,9 +16,16 @@ npm install
 npm run dev
 ```
 
-Comptes démo : `admin@stwr.mg` / `Demo2026!STWR` (idem comptable, caisse, lecture).
+Créer le premier admin (dans `server-dashboard-stwr/.env`) :
 
-Les **données métier** (stocks, factures, etc.) sont chargées depuis l’API (`GET /business`) et synchronisées automatiquement (`PUT /business`). Plus de seed / `localStorage` côté front.
+```bash
+ADMIN_EMAIL=ton-email@stwr.mg
+ADMIN_PASSWORD=un-mot-de-passe-fort
+```
+
+puis `npm run db:seed`.
+
+Les **données métier** (stocks, factures, etc.) sont chargées depuis l’API (`GET /business`) et synchronisées automatiquement (`PUT /business`).
 
 ## Fonctionnalités
 

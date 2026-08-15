@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch, ApiError } from "./api";
 import type { AppState } from "./types";
 
 export type BusinessResponse = {
@@ -43,23 +43,29 @@ export async function putBusinessState(
   data: AppState,
   expectedRevision?: number,
 ): Promise<BusinessResponse> {
-  const res = await apiFetch<BusinessResponse>("/business", {
-    method: "PUT",
-    body: JSON.stringify({
-      data,
-      expectedRevision: expectedRevision ?? revision,
-    }),
-  });
-  revision = res.revision;
-  return res;
+  try {
+    const res = await apiFetch<BusinessResponse>("/business", {
+      method: "PUT",
+      body: JSON.stringify({
+        data,
+        expectedRevision: expectedRevision ?? revision,
+      }),
+    });
+    revision = res.revision;
+    return res;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409 && err.body && typeof err.body === "object") {
+      const body = err.body as { revision?: number };
+      if (typeof body.revision === "number") revision = body.revision;
+    }
+    throw err;
+  }
 }
 
-export async function resetBusinessState(
-  mode: "empty" | "demo" = "demo",
-): Promise<BusinessResponse> {
+export async function resetBusinessState(): Promise<BusinessResponse> {
   const res = await apiFetch<BusinessResponse>("/business/reset", {
     method: "POST",
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({}),
   });
   revision = res.revision;
   return res;
@@ -73,7 +79,7 @@ export function scheduleBusinessSave(data: AppState) {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void flushBusinessSave();
-  }, 600);
+  }, 250);
 }
 
 async function flushBusinessSave() {
@@ -104,4 +110,16 @@ export async function flushBusinessSaveNow() {
     saveTimer = null;
   }
   await flushBusinessSave();
+}
+
+export function installBusinessSaveLifecycle() {
+  if (typeof window === "undefined") return;
+  const flush = () => {
+    void flushBusinessSaveNow();
+  };
+  window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
 }

@@ -10,8 +10,6 @@ import type {
   Tenant,
 } from "./auth/types";
 
-export const DEMO_PASSWORD = "Demo2026!STWR";
-
 type MeResponse = {
   user: Omit<
     AppUser,
@@ -74,11 +72,8 @@ type AuthStore = {
   users: AppUser[];
   sessions: AuthSession[];
   audit: AuthAuditEntry[];
-  /** @deprecated always true once API is up — kept for login UX */
-  passwordsReady: boolean;
 
   bootstrap: () => Promise<void>;
-  ensureDemoPasswords: () => Promise<void>;
   login: (
     email: string,
     password: string,
@@ -116,7 +111,7 @@ type AuthStore = {
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   requestPasswordReset: (
     email: string,
-  ) => Promise<{ ok: true; demoToken?: string }>;
+  ) => Promise<{ ok: true }>;
   completePasswordReset: (
     token: string,
     newPassword: string,
@@ -176,7 +171,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   users: [],
   sessions: [],
   audit: [],
-  passwordsReady: true,
 
   bootstrap: async () => {
     if (get().bootstrapped) return;
@@ -186,12 +180,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     } catch {
       clearAuth(set);
     } finally {
-      set({ bootstrapped: true, passwordsReady: true });
+      set({ bootstrapped: true });
     }
-  },
-
-  ensureDemoPasswords: async () => {
-    await get().bootstrap();
   },
 
   login: async (email, password) => {
@@ -389,7 +379,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
   requestPasswordReset: async (email) => {
     try {
-      return await apiFetch<{ ok: true; demoToken?: string }>(
+      return await apiFetch<{ ok: true }>(
         "/auth/password/forgot",
         {
           method: "POST",

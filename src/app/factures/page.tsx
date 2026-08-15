@@ -38,6 +38,7 @@ import {
   stockRestantPourSaisie,
 } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
+import { createId } from "@/lib/id";
 import type { FactureStatut, LigneDocument, TypeLigneDocument } from "@/lib/types";
 
 type Etape = "saisie" | "prevalidation";
@@ -45,7 +46,7 @@ type Etape = "saisie" | "prevalidation";
 type DraftLigne = Omit<LigneDocument, "id"> & { key: string };
 
 function uidLocal() {
-  return `tmp-${crypto.randomUUID().slice(0, 8)}`;
+  return createId("tmp");
 }
 
 function recalculerSousTotaux(lignes: DraftLigne[]): DraftLigne[] {

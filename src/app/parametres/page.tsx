@@ -9,7 +9,7 @@ import {
 import { useStore } from "@/lib/store";
 
 export default function ParametresHubPage() {
-  const { resetDemo } = useStore();
+  const { resetBusinessData } = useStore();
 
   return (
     <div>
@@ -22,13 +22,15 @@ export default function ParametresHubPage() {
             className="btn btn-secondary"
             onClick={() => {
               if (
-                confirm("Réinitialiser toutes les données de démonstration ?")
+                confirm(
+                  "Vider toutes les données métier (stocks, factures, etc.) ? Cette action est irréversible.",
+                )
               ) {
-                resetDemo();
+                resetBusinessData();
               }
             }}
           >
-            Reset démo
+            Reset données
           </button>
         }
       />

@@ -51,6 +51,7 @@ export function HydrationGate({ children }: { children: ReactNode }) {
         console.error("[business] load failed", err);
         if (!cancelled) {
           clearBusinessData();
+          setBusinessSyncEnabled(true);
           setBusinessReady(true);
         }
       }

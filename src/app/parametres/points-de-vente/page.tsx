@@ -11,6 +11,7 @@ export default function ParametresPointsDeVentePage() {
   const { pointsDeVente, addPointDeVente, updatePointDeVente } = useStore();
 
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     nom: "",
     adresse: "",
@@ -25,17 +26,23 @@ export default function ParametresPointsDeVentePage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.nom.trim()) return;
-    addPointDeVente({
-      nom: form.nom.trim(),
-      adresse: form.adresse.trim(),
-      ville: form.ville.trim(),
-      telephone: form.telephone.trim(),
-      actif: true,
-      objectifCAMensuel: Math.max(0, Number(form.objectifCAMensuel) || 0),
-      objectifCAAnnuel: Math.max(0, Number(form.objectifCAAnnuel) || 0),
-      objectifMargeMensuel: Math.max(0, Number(form.objectifMargeMensuel) || 0),
-      objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
-    });
+    setError(null);
+    try {
+      addPointDeVente({
+        nom: form.nom.trim(),
+        adresse: form.adresse.trim(),
+        ville: form.ville.trim(),
+        telephone: form.telephone.trim(),
+        actif: true,
+        objectifCAMensuel: Math.max(0, Number(form.objectifCAMensuel) || 0),
+        objectifCAAnnuel: Math.max(0, Number(form.objectifCAAnnuel) || 0),
+        objectifMargeMensuel: Math.max(0, Number(form.objectifMargeMensuel) || 0),
+        objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Création impossible.");
+      return;
+    }
     setForm({
       nom: "",
       adresse: "",
@@ -164,7 +171,13 @@ export default function ParametresPointsDeVentePage() {
                 placeholder="Ex. 60000000"
               />
             </label>
-            <div className="flex gap-2 sm:col-span-2">
+            <div className="sm:col-span-2 space-y-3">
+              {error && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
+                  {error}
+                </p>
+              )}
+              <div className="flex gap-2">
               <button type="submit" className="btn btn-primary">
                 Créer
               </button>
@@ -175,6 +188,7 @@ export default function ParametresPointsDeVentePage() {
               >
                 Annuler
               </button>
+              </div>
             </div>
           </form>
         </div>

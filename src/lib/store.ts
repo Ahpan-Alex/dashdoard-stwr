@@ -11,6 +11,7 @@ import {
   resetBusinessState,
   scheduleBusinessSave,
   setBusinessSyncEnabled,
+  installBusinessSaveLifecycle,
 } from "./business-api";
 import { rebuildVentesDepuisFactures } from "./commercial";
 import {
@@ -18,6 +19,7 @@ import {
   creerSnapshotPresentation,
 } from "./document-presentation";
 import { emptyAppState, pickAppState } from "./empty-state";
+import { createId } from "./id";
 import type {
   Acompte,
   AppState,
@@ -155,12 +157,12 @@ type Store = {
   /** Remplace l'état métier (hydratation API). */
   applyBusinessData: (data: AppState) => void;
   clearBusinessData: () => void;
-  /** Remet l'état démo via API (admin). */
-  resetDemo: () => Promise<void>;
+  /** Remet l'état métier à vide via API (admin). */
+  resetBusinessData: () => Promise<void>;
 };
 
 function uid(prefix: string) {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
+  return createId(prefix);
 }
 
 export const useStore = create<Store>()((set, get) => ({
@@ -708,10 +710,10 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
       clearBusinessData: () => set({ ...emptyAppState() }),
-      resetDemo: async () => {
+      resetBusinessData: async () => {
         setBusinessSyncEnabled(false);
         try {
-          const res = await resetBusinessState("demo");
+          const res = await resetBusinessState();
           set({
             ...pickAppState(res.data),
             ventes: rebuildVentesDepuisFactures(res.data.factures),
@@ -727,7 +729,7 @@ if (typeof window !== "undefined") {
   useStore.subscribe((state) => {
     scheduleBusinessSave(pickAppState(state));
   });
-  // Purge de l'ancien cache localStorage (seed front).
+  installBusinessSaveLifecycle();
   try {
     localStorage.removeItem("stwr-poissonnerie-v4");
   } catch {

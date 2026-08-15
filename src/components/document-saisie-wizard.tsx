@@ -41,12 +41,13 @@ import {
   produitsActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
+import { createId } from "@/lib/id";
 
 export type DraftLigne = Omit<LigneDocument, "id"> & { key: string };
 export type EtapeDocument = "saisie" | "prevalidation";
 
 function uidLocal() {
-  return `tmp-${crypto.randomUUID().slice(0, 8)}`;
+  return createId("tmp");
 }
 
 export function recalculerSousTotaux(lignes: DraftLigne[]): DraftLigne[] {

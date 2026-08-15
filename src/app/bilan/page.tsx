@@ -78,7 +78,7 @@ export default function BilanPage() {
     bilanInitial,
     immobilisations,
     factures,
-    resetDemo,
+    resetBusinessData,
   } = useStore();
 
   const anneeEnCours = periodToRange("annee");
@@ -163,11 +163,19 @@ export default function BilanPage() {
             </Link>
             <button
               className="btn btn-secondary no-print"
-              onClick={() => resetDemo()}
-              title="Réinitialiser les données de démo"
+              onClick={() => {
+                if (
+                  confirm(
+                    "Vider toutes les données métier (stocks, factures, etc.) ? Cette action est irréversible.",
+                  )
+                ) {
+                  resetBusinessData();
+                }
+              }}
+              title="Réinitialiser les données métier"
             >
               <RefreshCw className="h-4 w-4" />
-              Reset démo
+              Reset données
             </button>
             <button
               className="btn btn-primary no-print"

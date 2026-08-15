@@ -4,14 +4,13 @@ import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fish } from "lucide-react";
-import { DEMO_PASSWORD, useAuthStore } from "@/lib/auth-store";
+import { useAuthStore } from "@/lib/auth-store";
 
 export default function LoginClient() {
   const router = useRouter();
   const params = useSearchParams();
   const login = useAuthStore((s) => s.login);
-  const passwordsReady = useAuthStore((s) => s.passwordsReady);
-  const [email, setEmail] = useState("admin@stwr.mg");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,9 +69,6 @@ export default function LoginClient() {
               Session expirée pour inactivité. Reconnectez-vous.
             </p>
           )}
-          {!passwordsReady && (
-            <p className="mb-4 text-sm text-muted">Préparation des comptes…</p>
-          )}
 
           <label className="mb-3 block text-sm font-medium text-ink">
             E-mail
@@ -106,7 +102,7 @@ export default function LoginClient() {
           <button
             type="submit"
             className="btn btn-primary w-full"
-            disabled={loading || !passwordsReady}
+            disabled={loading}
           >
             {loading ? "Connexion…" : "Se connecter"}
           </button>
@@ -120,20 +116,6 @@ export default function LoginClient() {
             </Link>
           </p>
         </form>
-
-        <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-4 text-xs leading-relaxed text-sea-100">
-          <p className="font-semibold text-white">Comptes démo</p>
-          <p className="mt-1">
-            Mot de passe commun :{" "}
-            <code className="rounded bg-black/20 px-1">{DEMO_PASSWORD}</code>
-          </p>
-          <ul className="mt-2 space-y-0.5 text-sea-200">
-            <li>admin@stwr.mg — Administrateur</li>
-            <li>comptable@stwr.mg — Comptable</li>
-            <li>caisse@stwr.mg — Caissier</li>
-            <li>lecture@stwr.mg — Lecture seule</li>
-          </ul>
-        </div>
       </div>
     </div>
   );
