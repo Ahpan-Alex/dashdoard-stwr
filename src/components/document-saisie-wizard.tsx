@@ -979,7 +979,7 @@ export function DocumentSaisieWizard({
                   </p>
                 </div>
               )}
-              {afficherAcomptes && (}
+              {afficherAcomptes && (
                 <div className="rounded-lg bg-card px-3 py-2">
                   <p className="text-[11px] text-muted">Acompte(s) payé(s)</p>
                   <p className="font-display text-lg font-semibold">
