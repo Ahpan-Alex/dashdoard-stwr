@@ -446,6 +446,8 @@ export type JournalAuditAction =
   | "facture_paiement"
   | "facture_avoir"
   | "facture_annulee"
+  | "facture_modifiee"
+  | "facture_supprimee"
   | "autre";
 
 export type JournalAudit = {

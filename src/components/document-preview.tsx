@@ -321,7 +321,8 @@ export function DocumentPreview({
         </div>
       )}
 
-      {show("acomptes") && acomptesDetail.length > 0 && (
+      {(show("acomptes") || totaux.acomptesTTC > 0) &&
+        (acomptesDetail.length > 0 || totaux.acomptesTTC > 0) && (
         <div className="mb-4 rounded-lg border border-line p-3 text-sm">
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
             Acomptes

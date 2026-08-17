@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, FileMinus2 } from "lucide-react";
+import { Eye, FileMinus2, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import {
+  DocumentSaisieWizard,
+  lignesToDraft,
+  type DraftLigne,
+} from "@/components/document-saisie-wizard";
 import { DocumentPreview } from "@/components/document-preview";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
@@ -27,6 +32,7 @@ import {
 } from "@/lib/commercial";
 import {
   checklistValidationFacture,
+  factureEstFiscale,
   nextNumeroDocumentCommercial,
   statutEffectifFacture,
 } from "@/lib/facturation-mg";
@@ -127,14 +133,20 @@ export default function ListeFacturesPage() {
   const {
     factures,
     clients,
+    produits,
+    categoriesProduits,
     pointsDeVente,
     parametres,
     acomptes,
     modelesDocuments,
     commandes,
     devis,
+    tarifsClients,
+    entrees,
+    ventes,
     updateFacture,
     addFacture,
+    deleteFacture,
   } = useStore();
 
   const [filtre, setFiltre] = useState<FiltreListe>(() =>
@@ -150,14 +162,27 @@ export default function ListeFacturesPage() {
   }, [searchParams]);
 
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [wizardKey, setWizardKey] = useState(0);
+  const [seed, setSeed] = useState<{
+    lignes: DraftLigne[];
+    remiseGlobale: number;
+    note: string;
+  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  const [meta, setMeta] = useState({
+    clientId: "",
+    pointDeVenteId: "",
+    date: new Date().toISOString().slice(0, 10),
+    echeance: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+  });
   const [avoirFactureId, setAvoirFactureId] = useState<string | null>(null);
   const [modeAvoir, setModeAvoir] = useState<"total" | "partiel">("total");
   const [montantAvoirTTC, setMontantAvoirTTC] = useState("");
   const [motifAvoir, setMotifAvoir] = useState("");
 
   const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
-  const assujetti =
-    appliqueTVA(parametres);
+  const assujetti = appliqueTVA(parametres);
+  const editDoc = factures.find((f) => f.id === editId);
 
   const factureAvoir = factures.find((f) => f.id === avoirFactureId);
   const maxAvoirTTC = factureAvoir
@@ -227,6 +252,40 @@ export default function ListeFacturesPage() {
     }
     return { payees, partielles, impayees, annulees, creances, enRetard };
   }, [factures, parametres, acomptes]);
+
+  function ouvrirEdition(f: Facture) {
+    if (factureEstFiscale(f)) return;
+    setEditId(f.id);
+    setPreviewId(null);
+    setMeta({
+      clientId: f.clientId,
+      pointDeVenteId: f.pointDeVenteId,
+      date: f.date.slice(0, 10),
+      echeance: f.echeance.slice(0, 10),
+    });
+    setSeed({
+      lignes: lignesToDraft(f.lignes),
+      remiseGlobale: f.remiseGlobale ?? 0,
+      note: f.note ?? "",
+    });
+    setWizardKey((k) => k + 1);
+  }
+
+  function supprimerProforma(f: Facture) {
+    if (factureEstFiscale(f)) return;
+    const libelle =
+      f.type === "proforma" || f.statut === "proforma"
+        ? "la proforma"
+        : "le brouillon";
+    if (!confirm(`Supprimer ${libelle} ${f.numero} ?`)) return;
+    const res = deleteFacture(f.id);
+    if (!res.ok && res.reason) {
+      alert(res.reason);
+      return;
+    }
+    if (editId === f.id) setEditId(null);
+    if (previewId === f.id) setPreviewId(null);
+  }
 
   function ouvrirAvoir(f: Facture) {
     if (f.type === "proforma" || f.statut === "brouillon") {
@@ -493,10 +552,127 @@ export default function ListeFacturesPage() {
     <div>
       <PageHeader
         title="Liste des factures"
-        description="Factures fiscales figées à la validation (logo, signature, mentions). Brouillons / proformas et devis / commandes / BL suivent les paramètres courants."
+        description="Proformas et brouillons restent modifiables ou suppressibles. Les factures fiscales sont figées à la validation (avoir uniquement)."
       />
 
       <FacturesSubnav />
+
+      {editId && editDoc && (
+        <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
+          <DocumentSaisieWizard
+            key={wizardKey}
+            titre={`Modifier ${editDoc.numero}`}
+            produits={produits}
+            categoriesProduits={categoriesProduits}
+            clientId={meta.clientId}
+            tarifsClients={tarifsClients}
+            pointDeVenteId={meta.pointDeVenteId}
+            entrees={entrees}
+            ventes={ventes}
+            tauxTVA={parametres.tauxTVA}
+            assujettiTVA={assujetti}
+            initialLignes={seed.lignes}
+            initialRemiseGlobale={seed.remiseGlobale}
+            initialNote={seed.note}
+            previewMeta={{
+              type: "facture",
+              numero: editDoc.numero,
+              date: new Date(`${meta.date}T12:00:00`).toISOString(),
+              echeance: new Date(`${meta.echeance}T12:00:00`).toISOString(),
+              client: clients.find((c) => c.id === meta.clientId),
+              pdv: pointsDeVente.find((p) => p.id === meta.pointDeVenteId),
+              parametres,
+              modele,
+              conditionsPaiement:
+                editDoc.conditionsPaiement ||
+                parametres.conditionsPaiementDefaut,
+              factureType: editDoc.type,
+              estProforma:
+                editDoc.type === "proforma" || editDoc.statut === "proforma",
+            }}
+            confirmLabel="Enregistrer les modifications"
+            onCancel={() => setEditId(null)}
+            onConfirm={({ lignes, remiseGlobale, note }) => {
+              if (!meta.clientId) return;
+              updateFacture(
+                editId,
+                {
+                  clientId: meta.clientId,
+                  pointDeVenteId: meta.pointDeVenteId,
+                  date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                  echeance: new Date(`${meta.echeance}T12:00:00`).toISOString(),
+                  lignes,
+                  remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                  note,
+                },
+                { action: "facture_modifiee", detail: editDoc.numero },
+              );
+              setEditId(null);
+            }}
+            headerFields={
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="block text-xs font-semibold text-muted">
+                  Client
+                  <select
+                    className="select mt-1"
+                    value={meta.clientId}
+                    onChange={(e) =>
+                      setMeta({ ...meta, clientId: e.target.value })
+                    }
+                    required
+                  >
+                    {clients
+                      .filter((c) => c.actif || c.id === meta.clientId)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nom}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Point de vente
+                  <select
+                    className="select mt-1"
+                    value={meta.pointDeVenteId}
+                    onChange={(e) =>
+                      setMeta({ ...meta, pointDeVenteId: e.target.value })
+                    }
+                  >
+                    {pointsDeVente.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nom}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Date
+                  <input
+                    type="date"
+                    className="input mt-1"
+                    value={meta.date}
+                    onChange={(e) =>
+                      setMeta({ ...meta, date: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Échéance
+                  <input
+                    type="date"
+                    className="input mt-1"
+                    value={meta.echeance}
+                    onChange={(e) =>
+                      setMeta({ ...meta, echeance: e.target.value })
+                    }
+                  />
+                </label>
+              </div>
+            }
+          />
+        </div>
+      )}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="rounded-[var(--radius)] border border-line bg-card px-4 py-3">
@@ -591,10 +767,7 @@ export default function ListeFacturesPage() {
             ) : (
               lignes.map(({ f, t, reste, paye, etat, avoirs, statutAffiche }) => {
                 const client = clients.find((c) => c.id === f.clientId);
-                const estNonFiscal =
-                  f.type === "proforma" ||
-                  f.statut === "brouillon" ||
-                  f.statut === "proforma";
+                const estNonFiscal = !factureEstFiscale(f);
                 const peutAvoir =
                   !estNonFiscal &&
                   f.type !== "avoir" &&
@@ -706,12 +879,28 @@ export default function ListeFacturesPage() {
                           })()}
                         </ExportDocumentPdfButton>
                         {estNonFiscal && (
-                          <button
-                            className="btn btn-primary"
-                            onClick={() => convertirEnFactureFiscale(f)}
-                          >
-                            Valider fiscale
-                          </button>
+                          <>
+                            <IconButton
+                              label="Modifier le document"
+                              onClick={() => ouvrirEdition(f)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </IconButton>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => supprimerProforma(f)}
+                            >
+                              <Trash2 className="h-4 w-4 text-danger" />
+                              Supprimer
+                            </button>
+                            <button
+                              className="btn btn-primary"
+                              onClick={() => convertirEnFactureFiscale(f)}
+                            >
+                              Valider fiscale
+                            </button>
+                          </>
                         )}
                         {!estNonFiscal && !f.dateEnvoi && etat !== "annulee" && (
                           <button
@@ -837,6 +1026,16 @@ export default function ListeFacturesPage() {
                 ultérieur ne modifie pas le PDF (seul le statut change).
               </p>
               <div className="flex gap-2">
+                {!factureEstFiscale(preview) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => supprimerProforma(preview)}
+                  >
+                    <Trash2 className="h-4 w-4 text-danger" />
+                    Supprimer
+                  </button>
+                )}
                 <button
                   className="btn btn-primary"
                   onClick={() => window.print()}

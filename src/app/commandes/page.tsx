@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  AcompteEncaissementFields,
+  SAISIE_ACOMPTE_VIDE,
+} from "@/components/acompte-encaissement-fields";
 import {
   DocumentSaisieWizard,
   lignesToDraft,
@@ -10,7 +14,12 @@ import {
 } from "@/components/document-saisie-wizard";
 import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, nextNumero } from "@/lib/commercial";
+import {
+  appliqueTVA,
+  acomptesPourDocument,
+  lignesAcomptesPourDocument,
+  nextNumero,
+} from "@/lib/commercial";
 import { useStore } from "@/lib/store";
 
 export default function CommandesPage() {
@@ -26,7 +35,10 @@ export default function CommandesPage() {
     categoriesProduits,
     entrees,
     ventes,
+    acomptes,
     addCommande,
+    updateAcompte,
+    encaisserAcompte,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -43,6 +55,7 @@ export default function CommandesPage() {
     date: new Date().toISOString().slice(0, 10),
     dateLivraisonPrevue: "",
   });
+  const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
   const modele = modelesDocuments.find(
     (m) => m.type === "commande" && m.actif,
@@ -58,6 +71,7 @@ export default function CommandesPage() {
       dateLivraisonPrevue: "",
     });
     setSeed({ lignes: [], remiseGlobale: 0, note: "" });
+    setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
     setOpen(true);
   }
@@ -83,6 +97,28 @@ export default function CommandesPage() {
     });
     setWizardKey((k) => k + 1);
   }
+
+  const acomptesLies = acomptesPourDocument(acomptes, {
+    devisId: meta.devisId || undefined,
+  });
+  const acomptesLiesTTC = acomptesLies.reduce((s, a) => s + a.montantTTC, 0);
+  const acompteMontant = Math.max(0, Number(acompte.montant) || 0);
+  const acomptesTTC = acomptesLiesTTC + acompteMontant;
+  const acomptesDetail = useMemo(() => {
+    const existants = lignesAcomptesPourDocument(acomptes, {
+      devisId: meta.devisId || undefined,
+    });
+    if (acompteMontant <= 0) return existants;
+    return [
+      ...existants,
+      {
+        numero: "Acompte à l'émission",
+        date: new Date(`${meta.date}T12:00:00`).toISOString(),
+        montant: acompteMontant,
+        mode: acompte.modePaiement,
+      },
+    ];
+  }, [acomptes, meta.devisId, meta.date, acompteMontant, acompte.modePaiement]);
 
   return (
     <div>
@@ -116,6 +152,9 @@ export default function CommandesPage() {
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
             initialNote={seed.note}
+            showAcomptes={acomptesTTC > 0}
+            acomptesTTC={acomptesTTC}
+            acomptesDetail={acomptesDetail}
             previewMeta={{
               type: "commande",
               numero: nextNumero(
@@ -139,14 +178,16 @@ export default function CommandesPage() {
             onCancel={() => setOpen(false)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
               if (!meta.clientId) return;
-              addCommande({
-                numero: nextNumero(
-                  "CMD",
-                  commandes.map((c) => c.numero),
-                ),
+              const numero = nextNumero(
+                "CMD",
+                commandes.map((c) => c.numero),
+              );
+              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
+              const commandeId = addCommande({
+                numero,
                 clientId: meta.clientId,
                 pointDeVenteId: meta.pointDeVenteId,
-                date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                date: dateIso,
                 dateLivraisonPrevue: meta.dateLivraisonPrevue
                   ? new Date(
                       `${meta.dateLivraisonPrevue}T12:00:00`,
@@ -160,6 +201,25 @@ export default function CommandesPage() {
                 remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
                 note,
               });
+              for (const a of acomptesLies) {
+                if (!a.commandeId) {
+                  updateAcompte(a.id, { commandeId });
+                }
+              }
+              if (acompteMontant > 0) {
+                const res = encaisserAcompte({
+                  clientId: meta.clientId,
+                  pointDeVenteId: meta.pointDeVenteId,
+                  date: dateIso,
+                  montantTTC: acompteMontant,
+                  modePaiement: acompte.modePaiement,
+                  devisId: meta.devisId || undefined,
+                  commandeId,
+                  refDocument: numero,
+                  genererFactureAcompte: acompte.genererFacture,
+                });
+                if (!res.ok) alert(res.reason);
+              }
               setOpen(false);
             }}
             headerFields={
@@ -242,6 +302,18 @@ export default function CommandesPage() {
                   />
                 </label>
               </div>
+            }
+            footerFields={
+              <AcompteEncaissementFields
+                value={acompte}
+                onChange={setAcompte}
+                acomptesExistants={acomptesLies}
+                montantLabel={
+                  acomptesLies.length > 0
+                    ? "Acompte complémentaire (Ar TTC)"
+                    : "Acompte encaissé (Ar TTC)"
+                }
+              />
             }
           />
         </div>

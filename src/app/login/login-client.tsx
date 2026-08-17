@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fish } from "lucide-react";
+import { PasswordInput } from "@/components/password-input";
 import { useAuthStore } from "@/lib/auth-store";
 
 export default function LoginClient() {
@@ -83,9 +84,8 @@ export default function LoginClient() {
           </label>
           <label className="mb-4 block text-sm font-medium text-ink">
             Mot de passe
-            <input
-              className="input mt-1"
-              type="password"
+            <PasswordInput
+              className="mt-1"
               autoComplete="current-password"
               required
               value={password}

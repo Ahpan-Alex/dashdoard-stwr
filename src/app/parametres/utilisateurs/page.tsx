@@ -37,6 +37,7 @@ const ACTION_LABELS: Record<string, string> = {
   user_update: "MAJ utilisateur",
   user_deactivate: "Désactivation",
   session_revoke: "Révocation session",
+  business_reset: "Reset données métier",
   facture_brouillon: "Facture brouillon",
   facture_proforma: "Facture proforma",
   facture_validee: "Facture validée",
@@ -44,6 +45,8 @@ const ACTION_LABELS: Record<string, string> = {
   facture_paiement: "Paiement facture",
   facture_avoir: "Avoir",
   facture_annulee: "Facture annulée",
+  facture_modifiee: "Facture modifiée",
+  facture_supprimee: "Facture supprimée",
   autre: "Autre",
 };
 

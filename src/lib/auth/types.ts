@@ -53,7 +53,8 @@ export type AuthAuditAction =
   | "user_create"
   | "user_update"
   | "user_deactivate"
-  | "session_revoke";
+  | "session_revoke"
+  | "business_reset";
 
 export type AuthAuditEntry = {
   id: string;

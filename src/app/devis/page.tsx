@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  AcompteEncaissementFields,
+  SAISIE_ACOMPTE_VIDE,
+} from "@/components/acompte-encaissement-fields";
 import {
   DocumentSaisieWizard,
 } from "@/components/document-saisie-wizard";
@@ -24,6 +28,7 @@ export default function DevisPage() {
     entrees,
     ventes,
     addDevis,
+    encaisserAcompte,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -33,6 +38,7 @@ export default function DevisPage() {
     date: new Date().toISOString().slice(0, 10),
     validiteJours: "15",
   });
+  const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
   const [wizardKey, setWizardKey] = useState(0);
 
   const modele = modelesDocuments.find((m) => m.type === "devis" && m.actif);
@@ -45,6 +51,21 @@ export default function DevisPage() {
     d.setDate(d.getDate() + (Number(meta.validiteJours) || 15));
     return d.toISOString();
   })();
+  const acompteMontant = Math.max(0, Number(acompte.montant) || 0);
+  const acomptesDetail = useMemo(
+    () =>
+      acompteMontant > 0
+        ? [
+            {
+              numero: "Acompte à l'émission",
+              date: new Date(`${meta.date}T12:00:00`).toISOString(),
+              montant: acompteMontant,
+              mode: acompte.modePaiement,
+            },
+          ]
+        : [],
+    [acompteMontant, acompte.modePaiement, meta.date],
+  );
 
   function ouvrirFormulaire() {
     setMeta({
@@ -53,6 +74,7 @@ export default function DevisPage() {
       date: new Date().toISOString().slice(0, 10),
       validiteJours: "15",
     });
+    setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
     setOpen(true);
   }
@@ -88,6 +110,9 @@ export default function DevisPage() {
             ventes={ventes}
             tauxTVA={parametres.tauxTVA}
             assujettiTVA={assujettiTVA}
+            showAcomptes={acompteMontant > 0}
+            acomptesTTC={acompteMontant}
+            acomptesDetail={acomptesDetail}
             previewMeta={{
               type: "devis",
               numero: numeroProvisoire,
@@ -103,14 +128,16 @@ export default function DevisPage() {
             onCancel={() => setOpen(false)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
               if (!meta.clientId) return;
-              addDevis({
-                numero: nextNumero(
-                  "DEV",
-                  devis.map((d) => d.numero),
-                ),
+              const numero = nextNumero(
+                "DEV",
+                devis.map((d) => d.numero),
+              );
+              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
+              const devisId = addDevis({
+                numero,
                 clientId: meta.clientId,
                 pointDeVenteId: meta.pointDeVenteId,
-                date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                date: dateIso,
                 validiteJours: Number(meta.validiteJours) || 15,
                 statut: "brouillon",
                 tauxTVA: parametres.tauxTVA,
@@ -119,6 +146,19 @@ export default function DevisPage() {
                 remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
                 note,
               });
+              if (acompteMontant > 0) {
+                const res = encaisserAcompte({
+                  clientId: meta.clientId,
+                  pointDeVenteId: meta.pointDeVenteId,
+                  date: dateIso,
+                  montantTTC: acompteMontant,
+                  modePaiement: acompte.modePaiement,
+                  devisId,
+                  refDocument: numero,
+                  genererFactureAcompte: acompte.genererFacture,
+                });
+                if (!res.ok) alert(res.reason);
+              }
               setOpen(false);
             }}
             headerFields={
@@ -182,6 +222,12 @@ export default function DevisPage() {
                   />
                 </label>
               </div>
+            }
+            footerFields={
+              <AcompteEncaissementFields
+                value={acompte}
+                onChange={setAcompte}
+              />
             }
           />
         </div>

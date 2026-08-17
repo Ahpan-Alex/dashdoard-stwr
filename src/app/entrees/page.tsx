@@ -1,11 +1,26 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { IconButton } from "@/components/icon-button";
+import { Plus } from "lucide-react";
+import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
+import { RowCrudActions } from "@/components/row-crud-actions";
+import { stockDisponible } from "@/lib/calculations";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import type { EntreeStock } from "@/lib/types";
+
+const FORM_VIDE = {
+  pointDeVenteId: "",
+  produitId: "",
+  quantite: "",
+  prixAchatUnitaire: "",
+  prixVenteUnitaire: "",
+  fournisseurId: "",
+  fournisseur: "",
+  date: new Date().toISOString().slice(0, 10),
+  note: "",
+};
 
 export default function EntreesPage() {
   const {
@@ -13,24 +28,26 @@ export default function EntreesPage() {
     produits,
     pointsDeVente,
     fournisseurs,
+    ventes,
     pointDeVenteActifId,
     addEntree,
+    updateEntree,
     deleteEntree,
   } = useStore();
 
   const first = produits[0];
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [apercuId, setApercuId] = useState<string | null>(null);
   const [form, setForm] = useState({
+    ...FORM_VIDE,
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
     produitId: first?.id ?? "",
-    quantite: "",
     prixAchatUnitaire: first ? String(first.prixAchat) : "",
     prixVenteUnitaire: first ? String(first.prixVenteHT) : "",
-    fournisseurId: "",
-    fournisseur: "",
-    date: new Date().toISOString().slice(0, 10),
-    note: "",
   });
+
+  const apercu = entrees.find((e) => e.id === apercuId);
 
   const filtered = [...entrees]
     .filter(
@@ -45,8 +62,48 @@ export default function EntreesPage() {
     0,
   );
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  function fermerForm() {
+    setOpen(false);
+    setEditingId(null);
+  }
+
+  function formDepuisEntree(e: EntreeStock) {
+    return {
+      pointDeVenteId: e.pointDeVenteId,
+      produitId: e.produitId,
+      quantite: String(e.quantite),
+      prixAchatUnitaire: String(e.prixAchatUnitaire),
+      prixVenteUnitaire: String(e.prixVenteUnitaire),
+      fournisseurId: e.fournisseurId ?? "",
+      fournisseur: e.fournisseurId ? "" : e.fournisseur,
+      date: e.date.slice(0, 10),
+      note: e.note ?? "",
+    };
+  }
+
+  function ouvrirCreation() {
+    const prod = produits[0];
+    setEditingId(null);
+    setApercuId(null);
+    setForm({
+      ...FORM_VIDE,
+      pointDeVenteId: pointsDeVente[0]?.id ?? "",
+      produitId: prod?.id ?? "",
+      prixAchatUnitaire: prod ? String(prod.prixAchat) : "",
+      prixVenteUnitaire: prod ? String(prod.prixVenteHT) : "",
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setOpen(true);
+  }
+
+  function demarrerEdition(e: EntreeStock) {
+    setEditingId(e.id);
+    setForm(formDepuisEntree(e));
+    setApercuId(null);
+    setOpen(true);
+  }
+
+  function payloadDepuisForm() {
     const quantite = Number(form.quantite);
     const prixAchat = Number(form.prixAchatUnitaire);
     const prixVente = Number(form.prixVenteUnitaire);
@@ -57,30 +114,70 @@ export default function EntreesPage() {
       prixAchat < 0 ||
       prixVente < 0
     ) {
-      return;
+      return null;
     }
     const frn = fournisseurs.find((f) => f.id === form.fournisseurId);
-    addEntree({
+    return {
       pointDeVenteId: form.pointDeVenteId,
       produitId: form.produitId,
       quantite,
       prixAchatUnitaire: prixAchat,
       prixVenteUnitaire: prixVente,
       fournisseurId: form.fournisseurId || undefined,
-      fournisseur:
-        frn?.nom || form.fournisseur || "Non renseigné",
+      fournisseur: frn?.nom || form.fournisseur || "Non renseigné",
       date: new Date(form.date).toISOString(),
       note: form.note || undefined,
-    });
-    setOpen(false);
-    setForm((f) => ({
-      ...f,
-      quantite: "",
-      fournisseur: "",
-      fournisseurId: "",
-      note: "",
-    }));
+    };
   }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const payload = payloadDepuisForm();
+    if (!payload) return;
+    if (editingId) {
+      const res = updateEntree(editingId, payload);
+      if (!res.ok) {
+        alert(res.reason ?? "Modification impossible.");
+        return;
+      }
+    } else {
+      addEntree({ ...payload, origine: "achat" });
+    }
+    fermerForm();
+  }
+
+  function motifSuppression(e: EntreeStock) {
+    const dispo = stockDisponible(
+      e.produitId,
+      e.pointDeVenteId,
+      entrees,
+      ventes,
+    );
+    if (dispo + 1e-9 < e.quantite) {
+      return "Cette entrée a déjà été consommée par des ventes. Suppression impossible.";
+    }
+    return null;
+  }
+
+  function supprimer(e: EntreeStock) {
+    const motif = motifSuppression(e);
+    if (motif) {
+      alert(motif);
+      return;
+    }
+    if (!confirm("Supprimer cette ligne d'entrée ?")) return;
+    const res = deleteEntree(e.id);
+    if (!res.ok && res.reason) alert(res.reason);
+    if (editingId === e.id) fermerForm();
+    if (apercuId === e.id) setApercuId(null);
+  }
+
+  const produitApercu = apercu
+    ? produits.find((p) => p.id === apercu.produitId)
+    : undefined;
+  const pdvApercu = apercu
+    ? pointsDeVente.find((p) => p.id === apercu.pointDeVenteId)
+    : undefined;
 
   return (
     <div>
@@ -88,7 +185,7 @@ export default function EntreesPage() {
         title="Entrées de marchandises"
         description="Chaque arrivage a son propre prix d'achat et prix de vente (en ariary)."
         actions={
-          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+          <button className="btn btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
             Nouvelle entrée
           </button>
@@ -108,7 +205,7 @@ export default function EntreesPage() {
       {open && (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5 shadow-sm">
           <h2 className="mb-1 font-display text-lg font-semibold">
-            Nouvelle entrée
+            {editingId ? "Modifier l'entrée" : "Nouvelle entrée"}
           </h2>
           <p className="mb-4 text-xs text-muted">
             Les prix catalogue sont préremplis — modifiez-les librement pour
@@ -228,7 +325,7 @@ export default function EntreesPage() {
               >
                 <option value="">— Saisie libre —</option>
                 {fournisseurs
-                  .filter((f) => f.actif)
+                  .filter((f) => f.actif || f.id === form.fournisseurId)
                   .map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.nom}
@@ -260,12 +357,14 @@ export default function EntreesPage() {
             </label>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
               <button type="submit" className="btn btn-primary">
-                Enregistrer
+                {editingId
+                  ? "Enregistrer les modifications"
+                  : "Enregistrer"}
               </button>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setOpen(false)}
+                onClick={fermerForm}
               >
                 Annuler
               </button>
@@ -286,18 +385,23 @@ export default function EntreesPage() {
               <th>P.U. achat</th>
               <th>P.U. vente</th>
               <th>Montant achat</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((e) => {
               const produit = produits.find((p) => p.id === e.produitId);
               const pdv = pointsDeVente.find((p) => p.id === e.pointDeVenteId);
+              const motif = motifSuppression(e);
               return (
                 <tr key={e.id}>
                   <td>{formatDate(e.date)}</td>
-                  <td className="font-medium">{produit ? `${produit.code} — ${produit.libelleCourt}` : undefined}</td>
-                  <td>{pdv?.nom}</td>
+                  <td className="font-medium">
+                    {produit
+                      ? `${produit.code} — ${produit.libelleCourt}`
+                      : "—"}
+                  </td>
+                  <td>{pdv?.nom ?? "—"}</td>
                   <td>
                     {e.origine === "stock_initial" ? (
                       <span className="badge badge-sand">Stock initial</span>
@@ -318,12 +422,16 @@ export default function EntreesPage() {
                     {formatCurrency(e.quantite * e.prixAchatUnitaire)}
                   </td>
                   <td>
-                    <IconButton
-                      label="Supprimer cette entrée"
-                      onClick={() => deleteEntree(e.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-danger" />
-                    </IconButton>
+                    <RowCrudActions
+                      onView={() => {
+                        setApercuId(e.id);
+                        setOpen(false);
+                      }}
+                      onEdit={() => demarrerEdition(e)}
+                      onDelete={() => supprimer(e)}
+                      deleteDisabled={Boolean(motif)}
+                      deleteReason={motif ?? undefined}
+                    />
                   </td>
                 </tr>
               );
@@ -331,6 +439,70 @@ export default function EntreesPage() {
           </tbody>
         </table>
       </div>
+
+      <FicheApercuModal
+        open={Boolean(apercu)}
+        title={
+          produitApercu
+            ? `${produitApercu.code} — ${produitApercu.libelleCourt}`
+            : "Entrée de stock"
+        }
+        subtitle="Ligne d'entrée de marchandises"
+        onClose={() => setApercuId(null)}
+        onEdit={apercu ? () => demarrerEdition(apercu) : undefined}
+        onDelete={apercu ? () => supprimer(apercu) : undefined}
+        deleteDisabled={apercu ? Boolean(motifSuppression(apercu)) : false}
+        deleteReason={apercu ? motifSuppression(apercu) ?? undefined : undefined}
+      >
+        <LigneInfo
+          label="Date"
+          value={apercu ? formatDate(apercu.date) : undefined}
+        />
+        <LigneInfo label="Point de vente" value={pdvApercu?.nom} />
+        <LigneInfo
+          label="Fournisseur"
+          value={
+            apercu?.origine === "stock_initial"
+              ? "Stock initial"
+              : apercu?.fournisseur
+          }
+        />
+        <LigneInfo
+          label="Quantité"
+          value={
+            apercu
+              ? `${formatNumber(apercu.quantite)} ${produitApercu?.unite ?? ""}`.trim()
+              : undefined
+          }
+        />
+        <LigneInfo
+          label="P.U. achat"
+          value={
+            apercu ? formatCurrency(apercu.prixAchatUnitaire) : undefined
+          }
+        />
+        <LigneInfo
+          label="P.U. vente"
+          value={
+            apercu
+              ? formatCurrency(
+                  apercu.prixVenteUnitaire ??
+                    produitApercu?.prixVenteHT ??
+                    0,
+                )
+              : undefined
+          }
+        />
+        <LigneInfo
+          label="Montant achat"
+          value={
+            apercu
+              ? formatCurrency(apercu.quantite * apercu.prixAchatUnitaire)
+              : undefined
+          }
+        />
+        <LigneInfo label="Note" value={apercu?.note} />
+      </FicheApercuModal>
     </div>
   );
 }

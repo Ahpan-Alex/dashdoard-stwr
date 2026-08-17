@@ -14,6 +14,7 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { PageHeader } from "@/components/page-header";
+import { ConfirmPasswordModal } from "@/components/confirm-password-modal";
 import {
   bilanInstantane,
   compteDeResultat,
@@ -85,6 +86,24 @@ export default function BilanPage() {
   const [preset, setPreset] = useState<Preset>("annee");
   const [debut, setDebut] = useState(toInputDate(anneeEnCours.debut));
   const [fin, setFin] = useState(toInputDate(anneeEnCours.fin));
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  async function confirmerReset(password: string) {
+    setResetError(null);
+    setResetLoading(true);
+    try {
+      const res = await resetBusinessData(password);
+      if (!res.ok) {
+        setResetError(res.error);
+        return;
+      }
+      setResetOpen(false);
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   function applyPreset(p: Preset) {
     setPreset(p);
@@ -164,13 +183,8 @@ export default function BilanPage() {
             <button
               className="btn btn-secondary no-print"
               onClick={() => {
-                if (
-                  confirm(
-                    "Vider toutes les données métier (stocks, factures, etc.) ? Cette action est irréversible.",
-                  )
-                ) {
-                  resetBusinessData();
-                }
+                setResetError(null);
+                setResetOpen(true);
               }}
               title="Réinitialiser les données métier"
             >
@@ -453,6 +467,21 @@ export default function BilanPage() {
         est arrêté à la date de fin (stocks, immobilisations et créances à
         cette date).
       </p>
+
+      <ConfirmPasswordModal
+        open={resetOpen}
+        title="Reset des données métier"
+        description="Cette action vide stocks, factures, clients, etc. Elle est irréversible. Saisissez le mot de passe de votre compte pour confirmer."
+        confirmLabel="Réinitialiser"
+        loading={resetLoading}
+        error={resetError}
+        onCancel={() => {
+          if (resetLoading) return;
+          setResetOpen(false);
+          setResetError(null);
+        }}
+        onConfirm={confirmerReset}
+      />
     </div>
   );
 }

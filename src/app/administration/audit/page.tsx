@@ -19,6 +19,7 @@ const ACTION_LABELS: Record<string, string> = {
   user_update: "MAJ utilisateur",
   user_deactivate: "Désactivation",
   session_revoke: "Révocation session",
+  business_reset: "Reset données métier",
 };
 
 export default function AuditPage() {

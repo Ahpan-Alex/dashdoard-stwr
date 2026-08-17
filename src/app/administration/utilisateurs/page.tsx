@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, type FormEvent } from "react";
+import { PasswordInput } from "@/components/password-input";
 import { PageHeader } from "@/components/page-header";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { RequirePermission } from "@/components/require-permission";
@@ -123,9 +124,9 @@ function UtilisateursContent() {
         </label>
         <label className="text-sm font-medium sm:col-span-2">
           Mot de passe temporaire (min. 12)
-          <input
-            className="input mt-1"
-            type="password"
+          <PasswordInput
+            className="mt-1"
+            autoComplete="new-password"
             required
             minLength={12}
             value={password}
@@ -227,10 +228,9 @@ function UtilisateursContent() {
                       </button>
                     )}
                     <div className="flex gap-2">
-                      <input
-                        className="input"
+                      <PasswordInput
                         placeholder="Nouveau MDP"
-                        type="password"
+                        autoComplete="new-password"
                         value={resetPwd[u.id] ?? ""}
                         onChange={(e) =>
                           setResetPwd((prev) => ({

@@ -4,14 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import {
-  ACOMPTE_STATUTS,
-  MODES_PAIEMENT,
-  appliqueTVA,
-  nextNumero,
-  splitTTC,
-} from "@/lib/commercial";
-import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
+import { ACOMPTE_STATUTS, MODES_PAIEMENT } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { ModePaiement } from "@/lib/types";
@@ -40,12 +33,10 @@ export default function AcomptesPage() {
     devis,
     commandes,
     factures,
-    parametres,
     pointsDeVente,
-    addAcompte,
     updateAcompte,
     deleteAcompte,
-    addFacture,
+    encaisserAcompte,
   } = useStore();
 
   const [filtre, setFiltre] = useState<FiltreAcompte>(() =>
@@ -79,72 +70,29 @@ export default function AcomptesPage() {
     const montantTTC = Number(form.montantTTC);
     if (!form.clientId || montantTTC <= 0) return;
 
-    const assujetti =
-      appliqueTVA(parametres);
-    const { ht } = splitTTC(montantTTC, parametres.tauxTVA, assujetti);
-
-    const numeroAco = nextNumero(
-      "ACO",
-      acomptes.map((a) => a.numero),
-    );
     const cmd = commandes.find((c) => c.id === form.commandeId);
     const refDoc =
       cmd?.numero ||
       devis.find((d) => d.id === form.devisId)?.numero ||
       "commande";
+    const pdvId = cmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "";
 
-    let factureAcompteId: string | undefined;
-
-    if (form.genererFacture) {
-      const pdvId = cmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "";
-      const numeroFac = nextNumeroDocumentCommercial({
-        prefix: "FACACO",
-        pointDeVenteId: pdvId,
-        pointsDeVente,
-        existing: factures.map((f) => f.numero),
-        date: new Date(`${form.date}T12:00:00`),
-      });
-      factureAcompteId = addFacture({
-        numero: numeroFac,
-        type: "acompte",
-        clientId: form.clientId,
-        pointDeVenteId: pdvId,
-        date: new Date(`${form.date}T12:00:00`).toISOString(),
-        echeance: new Date(`${form.date}T12:00:00`).toISOString(),
-        statut: "payee",
-        montantPaye: montantTTC,
-        devisId: form.devisId || cmd?.devisId || undefined,
-        commandeId: form.commandeId || undefined,
-        tauxTVA: parametres.tauxTVA,
-        dateValidation: new Date().toISOString(),
-        note: `Facture d'acompte — ${numeroAco}`,
-        acomptesDocument: [],
-        lignes: [
-          {
-            id: "aco-ligne-1",
-            designation: `Acompte sur ${refDoc}`,
-            quantite: 1,
-            prixUnitaire: ht,
-            unite: "forfait",
-          },
-        ],
-      });
-    }
-
-    addAcompte({
-      numero: numeroAco,
-      date: new Date(`${form.date}T12:00:00`).toISOString(),
+    const res = encaisserAcompte({
       clientId: form.clientId,
+      pointDeVenteId: pdvId,
+      date: new Date(`${form.date}T12:00:00`).toISOString(),
       montantTTC,
-      tauxTVA: parametres.tauxTVA,
       modePaiement: form.modePaiement,
       devisId: form.devisId || undefined,
       commandeId: form.commandeId || undefined,
-      factureAcompteId,
-      factureId: factureAcompteId,
-      statut: form.genererFacture ? "impute" : "enregistre",
+      refDocument: refDoc,
+      genererFactureAcompte: form.genererFacture,
       note: form.note || undefined,
     });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
+    }
 
     setOpen(false);
     setForm((f) => ({ ...f, montantTTC: "", note: "" }));

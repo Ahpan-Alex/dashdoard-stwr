@@ -62,10 +62,12 @@ export async function putBusinessState(
   }
 }
 
-export async function resetBusinessState(): Promise<BusinessResponse> {
+export async function resetBusinessState(
+  password: string,
+): Promise<BusinessResponse> {
   const res = await apiFetch<BusinessResponse>("/business/reset", {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ password }),
   });
   revision = res.revision;
   return res;

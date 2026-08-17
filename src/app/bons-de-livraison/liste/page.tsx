@@ -19,7 +19,9 @@ import { PageHeader } from "@/components/page-header";
 import {
   BL_STATUTS,
   appliqueTVA,
+  acomptesPourDocument,
   creerSnapshotAcomptesDocument,
+  lignesAcomptesPourDocument,
   totauxBonDeLivraison,
 } from "@/lib/commercial";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
@@ -66,6 +68,7 @@ export default function ListeBonsDeLivraisonPage() {
     deleteBonDeLivraison,
     updateCommande,
     addFacture,
+    updateAcompte,
   } = useStore();
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
@@ -146,22 +149,17 @@ export default function ListeBonsDeLivraisonPage() {
     const echeance = new Date();
     echeance.setDate(echeance.getDate() + 30);
     const t = totauxBonDeLivraison(bl, parametres, acomptes);
+    const acomptesLies = acomptesPourDocument(acomptes, {
+      commandeId: bl.commandeId,
+      devisId: bl.devisId,
+    });
     const acomptesDoc = creerSnapshotAcomptesDocument(
-      acomptes
-        .filter(
-          (a) =>
-            a.statut !== "annule" &&
-            ((bl.commandeId && a.commandeId === bl.commandeId) ||
-              (bl.devisId && a.devisId === bl.devisId)),
-        )
-        .map((a) => ({
-          numero: a.numero,
-          date: a.date,
-          montant: a.montantTTC,
-          mode: a.modePaiement,
-        })),
+      lignesAcomptesPourDocument(acomptes, {
+        commandeId: bl.commandeId,
+        devisId: bl.devisId,
+      }),
     );
-    addFacture({
+    const factureId = addFacture({
       numero: nextNumeroDocumentCommercial({
         prefix: "FAC",
         pointDeVenteId: bl.pointDeVenteId,
@@ -191,6 +189,14 @@ export default function ListeBonsDeLivraisonPage() {
       remiseGlobale: bl.remiseGlobale,
       note: bl.note,
     });
+    for (const a of acomptesLies) {
+      updateAcompte(a.id, {
+        factureId,
+        commandeId: a.commandeId || bl.commandeId,
+        devisId: a.devisId || bl.devisId,
+        statut: "impute",
+      });
+    }
     updateBonDeLivraison(bl.id, { statut: "livre" });
     if (bl.commandeId) {
       updateCommande(bl.commandeId, { statut: "livree" });

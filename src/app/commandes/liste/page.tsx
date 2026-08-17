@@ -5,6 +5,10 @@ import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
+  AcompteEncaissementFields,
+  SAISIE_ACOMPTE_VIDE,
+} from "@/components/acompte-encaissement-fields";
+import {
   DocumentSaisieWizard,
   lignesToDraft,
   type DraftLigne,
@@ -19,7 +23,9 @@ import { PageHeader } from "@/components/page-header";
 import {
   COMMANDE_STATUTS,
   appliqueTVA,
+  acomptesPourDocument,
   creerSnapshotAcomptesDocument,
+  lignesAcomptesPourDocument,
   nextNumero,
   totauxCommande,
 } from "@/lib/commercial";
@@ -67,6 +73,8 @@ export default function ListeCommandesPage() {
     categoriesProduits,
     entrees,
     ventes,
+    updateAcompte,
+    encaisserAcompte,
   } = useStore();
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
@@ -91,6 +99,7 @@ export default function ListeCommandesPage() {
     date: new Date().toISOString().slice(0, 10),
     dateLivraisonPrevue: "",
   });
+  const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
   const modele = modelesDocuments.find(
     (m) => m.type === "commande" && m.actif,
@@ -137,6 +146,7 @@ export default function ListeCommandesPage() {
       remiseGlobale: c.remiseGlobale ?? 0,
       note: c.note ?? "",
     });
+    setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
   }
 
@@ -171,19 +181,17 @@ export default function ListeCommandesPage() {
     const echeance = new Date();
     echeance.setDate(echeance.getDate() + 30);
     const t = totauxCommande(c, parametres, acomptes);
+    const acomptesLies = acomptesPourDocument(acomptes, {
+      commandeId: c.id,
+      devisId: c.devisId,
+    });
     const acomptesDoc = creerSnapshotAcomptesDocument(
-      acomptes
-        .filter(
-          (a) => a.statut !== "annule" && a.commandeId === c.id,
-        )
-        .map((a) => ({
-          numero: a.numero,
-          date: a.date,
-          montant: a.montantTTC,
-          mode: a.modePaiement,
-        })),
+      lignesAcomptesPourDocument(acomptes, {
+        commandeId: c.id,
+        devisId: c.devisId,
+      }),
     );
-    addFacture({
+    const factureId = addFacture({
       numero: nextNumeroDocumentCommercial({
         prefix: "FAC",
         pointDeVenteId: c.pointDeVenteId,
@@ -212,6 +220,13 @@ export default function ListeCommandesPage() {
       remiseGlobale: c.remiseGlobale,
       note: c.note,
     });
+    for (const a of acomptesLies) {
+      updateAcompte(a.id, {
+        commandeId: a.commandeId || c.id,
+        factureId,
+        statut: "impute",
+      });
+    }
     updateCommande(c.id, { statut: "livree" });
     alert(
       "Facture créée (acomptes figés sur le document ; le solde ultérieur ne modifiera pas le PDF).",
@@ -285,6 +300,37 @@ export default function ListeCommandesPage() {
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
             initialNote={seed.note}
+            showAcomptes={
+              acomptesPourDocument(acomptes, {
+                commandeId: editId ?? undefined,
+                devisId: meta.devisId || undefined,
+              }).reduce((s, a) => s + a.montantTTC, 0) +
+                Math.max(0, Number(acompte.montant) || 0) >
+              0
+            }
+            acomptesTTC={
+              acomptesPourDocument(acomptes, {
+                commandeId: editId ?? undefined,
+                devisId: meta.devisId || undefined,
+              }).reduce((s, a) => s + a.montantTTC, 0) +
+              Math.max(0, Number(acompte.montant) || 0)
+            }
+            acomptesDetail={[
+              ...lignesAcomptesPourDocument(acomptes, {
+                commandeId: editId ?? undefined,
+                devisId: meta.devisId || undefined,
+              }),
+              ...(Math.max(0, Number(acompte.montant) || 0) > 0
+                ? [
+                    {
+                      numero: "Acompte à l'émission",
+                      date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                      montant: Math.max(0, Number(acompte.montant) || 0),
+                      mode: acompte.modePaiement,
+                    },
+                  ]
+                : []),
+            ]}
             previewMeta={{
               type: "commande",
               numero: editDoc.numero,
@@ -306,7 +352,7 @@ export default function ListeCommandesPage() {
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
-              if (!meta.clientId) return;
+              if (!meta.clientId || !editId) return;
               updateCommande(editId, {
                 clientId: meta.clientId,
                 pointDeVenteId: meta.pointDeVenteId,
@@ -321,6 +367,21 @@ export default function ListeCommandesPage() {
                 remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
                 note,
               });
+              const montant = Math.max(0, Number(acompte.montant) || 0);
+              if (montant > 0) {
+                const res = encaisserAcompte({
+                  clientId: meta.clientId,
+                  pointDeVenteId: meta.pointDeVenteId,
+                  date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                  montantTTC: montant,
+                  modePaiement: acompte.modePaiement,
+                  devisId: meta.devisId || undefined,
+                  commandeId: editId,
+                  refDocument: editDoc.numero,
+                  genererFactureAcompte: acompte.genererFacture,
+                });
+                if (!res.ok) alert(res.reason);
+              }
               setEditId(null);
             }}
             headerFields={
@@ -386,6 +447,24 @@ export default function ListeCommandesPage() {
                   />
                 </label>
               </div>
+            }
+            footerFields={
+              <AcompteEncaissementFields
+                value={acompte}
+                onChange={setAcompte}
+                acomptesExistants={acomptesPourDocument(acomptes, {
+                  commandeId: editId ?? undefined,
+                  devisId: meta.devisId || undefined,
+                })}
+                montantLabel={
+                  acomptesPourDocument(acomptes, {
+                    commandeId: editId ?? undefined,
+                    devisId: meta.devisId || undefined,
+                  }).length > 0
+                    ? "Acompte complémentaire (Ar TTC)"
+                    : "Acompte encaissé (Ar TTC)"
+                }
+              />
             }
           />
         </div>
@@ -466,17 +545,10 @@ export default function ListeCommandesPage() {
                           referenceDevis={
                             devis.find((d) => d.id === c.devisId)?.numero
                           }
-                          acomptesDetail={acomptes
-                            .filter(
-                              (a) =>
-                                a.commandeId === c.id && a.statut !== "annule",
-                            )
-                            .map((a) => ({
-                              numero: a.numero,
-                              date: a.date,
-                              montant: a.montantTTC,
-                              mode: a.modePaiement,
-                            }))}
+                          acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                            commandeId: c.id,
+                            devisId: c.devisId,
+                          })}
                         />
                       </ExportDocumentPdfButton>
                       <IconButton
@@ -549,17 +621,10 @@ export default function ListeCommandesPage() {
               referenceDevis={
                 devis.find((d) => d.id === preview.devisId)?.numero
               }
-              acomptesDetail={acomptes
-                .filter(
-                  (a) =>
-                    a.commandeId === preview.id && a.statut !== "annule",
-                )
-                .map((a) => ({
-                  numero: a.numero,
-                  date: a.date,
-                  montant: a.montantTTC,
-                  mode: a.modePaiement,
-                }))}
+              acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                commandeId: preview.id,
+                devisId: preview.devisId,
+              })}
             />
           </div>
         </div>

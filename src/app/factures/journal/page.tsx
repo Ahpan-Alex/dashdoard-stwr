@@ -15,6 +15,8 @@ const ACTIONS: Record<JournalAuditAction, string> = {
   facture_paiement: "Paiement",
   facture_avoir: "Avoir émis",
   facture_annulee: "Annulation",
+  facture_modifiee: "Modification",
+  facture_supprimee: "Suppression",
   autre: "Autre",
 };
 

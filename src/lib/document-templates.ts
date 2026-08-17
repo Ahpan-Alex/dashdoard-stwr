@@ -179,6 +179,7 @@ export const DEFAULT_RUBRIQUES: Record<
     "numero_date",
     "lignes",
     "totaux_ht_tva_ttc",
+    "acomptes",
     "net_a_payer",
     "conditions_paiement",
     "mentions_legales",

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { ConfirmPasswordModal } from "@/components/confirm-password-modal";
 import { PageHeader } from "@/components/page-header";
 import {
   PARAMETRES_MENUS,
@@ -10,6 +12,24 @@ import { useStore } from "@/lib/store";
 
 export default function ParametresHubPage() {
   const { resetBusinessData } = useStore();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  async function confirmerReset(password: string) {
+    setResetError(null);
+    setResetLoading(true);
+    try {
+      const res = await resetBusinessData(password);
+      if (!res.ok) {
+        setResetError(res.error);
+        return;
+      }
+      setResetOpen(false);
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -21,13 +41,8 @@ export default function ParametresHubPage() {
           <button
             className="btn btn-secondary"
             onClick={() => {
-              if (
-                confirm(
-                  "Vider toutes les données métier (stocks, factures, etc.) ? Cette action est irréversible.",
-                )
-              ) {
-                resetBusinessData();
-              }
+              setResetError(null);
+              setResetOpen(true);
             }}
           >
             Reset données
@@ -51,6 +66,21 @@ export default function ParametresHubPage() {
           </Link>
         ))}
       </div>
+
+      <ConfirmPasswordModal
+        open={resetOpen}
+        title="Reset des données métier"
+        description="Cette action vide stocks, factures, clients, etc. Elle est irréversible. Saisissez le mot de passe de votre compte pour confirmer."
+        confirmLabel="Réinitialiser"
+        loading={resetLoading}
+        error={resetError}
+        onCancel={() => {
+          if (resetLoading) return;
+          setResetOpen(false);
+          setResetError(null);
+        }}
+        onConfirm={confirmerReset}
+      />
     </div>
   );
 }

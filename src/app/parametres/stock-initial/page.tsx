@@ -136,7 +136,11 @@ export default function StockInitialPage() {
 
   function onDelete(id: string) {
     const ligne = stocksInitiaux.find((e) => e.id === id);
-    deleteEntree(id);
+    const res = deleteEntree(id);
+    if (!res.ok) {
+      if (res.reason) alert(res.reason);
+      return;
+    }
     if (ligne) {
       updateBilanInitial({
         stocks: Math.max(0, valeurTotale - montantAchat(ligne)),

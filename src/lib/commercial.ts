@@ -2,13 +2,18 @@ import type {
   Acompte,
   AcompteDocumentLigne,
   BonDeLivraison,
+  Charge,
   Commande,
   Devis,
+  EntreeStock,
   Facture,
   FactureStatut,
+  Immobilisation,
   LigneDocument,
   Parametres,
+  RapportFinJournee,
   RegimeFiscal,
+  TarifClient,
   TypeLigneDocument,
   Vente,
 } from "./types";
@@ -112,11 +117,18 @@ export function calculerTotaux(
   };
 }
 
-export function totauxDevis(devis: Devis, parametres: Parametres) {
+export function totauxDevis(
+  devis: Devis,
+  parametres: Parametres,
+  acomptes: Acompte[] = [],
+) {
+  const acomptesTTC = acomptesPourDocument(acomptes, {
+    devisId: devis.id,
+  }).reduce((s, a) => s + a.montantTTC, 0);
   return calculerTotaux(
     devis.lignes,
     devis.tauxTVA ?? parametres.tauxTVA,
-    0,
+    acomptesTTC,
     appliqueTVA(parametres),
     devis.remiseGlobale ?? 0,
   );
@@ -127,13 +139,10 @@ export function totauxCommande(
   parametres: Parametres,
   acomptes: Acompte[] = [],
 ) {
-  const acomptesTTC = acomptes
-    .filter(
-      (a) =>
-        a.commandeId === commande.id &&
-        a.statut !== "annule",
-    )
-    .reduce((s, a) => s + a.montantTTC, 0);
+  const acomptesTTC = acomptesPourDocument(acomptes, {
+    commandeId: commande.id,
+    devisId: commande.devisId,
+  }).reduce((s, a) => s + a.montantTTC, 0);
   return calculerTotaux(
     commande.lignes,
     commande.tauxTVA ?? parametres.tauxTVA,
@@ -148,14 +157,10 @@ export function totauxBonDeLivraison(
   parametres: Parametres,
   acomptes: Acompte[] = [],
 ) {
-  const acomptesTTC = acomptes
-    .filter(
-      (a) =>
-        a.statut !== "annule" &&
-        ((bl.commandeId && a.commandeId === bl.commandeId) ||
-          (bl.devisId && a.devisId === bl.devisId)),
-    )
-    .reduce((s, a) => s + a.montantTTC, 0);
+  const acomptesTTC = acomptesPourDocument(acomptes, {
+    commandeId: bl.commandeId,
+    devisId: bl.devisId,
+  }).reduce((s, a) => s + a.montantTTC, 0);
   return calculerTotaux(
     bl.lignes,
     bl.tauxTVA ?? parametres.tauxTVA,
@@ -440,6 +445,38 @@ export function acomptesPourDocument(
   );
 }
 
+export function lignesAcomptesPourDocument(
+  acomptes: Acompte[],
+  opts: { devisId?: string; commandeId?: string; factureId?: string },
+): AcompteDocumentLigne[] {
+  return acomptesPourDocument(acomptes, opts).map((a) => ({
+    numero: a.numero,
+    date: a.date,
+    montant: a.montantTTC,
+    mode: a.modePaiement,
+  }));
+}
+
+export function creancesDunClient(
+  clientId: string,
+  factures: Facture[],
+  parametres?: Parametres,
+  acomptes: Acompte[] = [],
+) {
+  return facturesActives(factures)
+    .filter((f) => f.clientId === clientId)
+    .reduce(
+      (s, f) => s + resteAPayer(f, parametres, acomptes, factures),
+      0,
+    );
+}
+
+export function totalAcomptesClient(clientId: string, acomptes: Acompte[]) {
+  return acomptes
+    .filter((a) => a.clientId === clientId && a.statut !== "annule")
+    .reduce((s, a) => s + a.montantTTC, 0);
+}
+
 export function nextNumero(prefix: string, existing: string[]) {
   const year = new Date().getFullYear();
   const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
@@ -468,6 +505,113 @@ export const CLIENT_TYPES: Record<string, string> = {
   grossiste: "Grossiste",
   autre: "Autre",
 };
+
+export function motifLienClient(
+  clientId: string,
+  ctx: {
+    factures: Facture[];
+    devis: Devis[];
+    commandes: Commande[];
+    bonsDeLivraison: BonDeLivraison[];
+    acomptes: Acompte[];
+    tarifsClients: Pick<TarifClient, "clientId">[];
+  },
+): string | null {
+  if (ctx.factures.some((f) => f.clientId === clientId)) {
+    return "Ce client est lié à une facture ou une proforma. Suppression impossible.";
+  }
+  if (ctx.devis.some((d) => d.clientId === clientId)) {
+    return "Ce client est lié à un devis. Suppression impossible.";
+  }
+  if (ctx.commandes.some((c) => c.clientId === clientId)) {
+    return "Ce client est lié à une commande. Suppression impossible.";
+  }
+  if (ctx.bonsDeLivraison.some((b) => b.clientId === clientId)) {
+    return "Ce client est lié à un bon de livraison. Suppression impossible.";
+  }
+  if (ctx.acomptes.some((a) => a.clientId === clientId)) {
+    return "Ce client est lié à un acompte. Suppression impossible.";
+  }
+  if (ctx.tarifsClients.some((t) => t.clientId === clientId)) {
+    return "Ce client a un tarif spécifique. Désactivez-le pour conserver l'historique.";
+  }
+  return null;
+}
+
+export function clientEstReference(
+  clientId: string,
+  ctx: Parameters<typeof motifLienClient>[1],
+) {
+  return motifLienClient(clientId, ctx) !== null;
+}
+
+export function fournisseurEstReference(
+  fournisseurId: string,
+  nom: string,
+  entrees: EntreeStock[],
+) {
+  const n = nom.trim().toLowerCase();
+  return entrees.some(
+    (e) =>
+      e.fournisseurId === fournisseurId ||
+      (n.length > 0 && e.fournisseur.toLowerCase() === n),
+  );
+}
+
+export function motifLienFournisseur(
+  fournisseurId: string,
+  nom: string,
+  entrees: EntreeStock[],
+) {
+  if (fournisseurEstReference(fournisseurId, nom, entrees)) {
+    return "Fournisseur déjà utilisé sur des entrées de stock. Désactivez-le pour préserver l'historique.";
+  }
+  return null;
+}
+
+export function motifLienPointDeVente(
+  pdvId: string,
+  ctx: {
+    factures: Facture[];
+    devis: Devis[];
+    commandes: Commande[];
+    bonsDeLivraison: BonDeLivraison[];
+    entrees: EntreeStock[];
+    ventes: Vente[];
+    charges: Pick<Charge, "pointDeVenteId">[];
+    immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
+    rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
+  },
+): string | null {
+  if (ctx.factures.some((f) => f.pointDeVenteId === pdvId)) {
+    return "Ce point de vente est lié à une facture. Suppression impossible.";
+  }
+  if (ctx.devis.some((d) => d.pointDeVenteId === pdvId)) {
+    return "Ce point de vente est lié à un devis. Suppression impossible.";
+  }
+  if (ctx.commandes.some((c) => c.pointDeVenteId === pdvId)) {
+    return "Ce point de vente est lié à une commande. Suppression impossible.";
+  }
+  if (ctx.bonsDeLivraison.some((b) => b.pointDeVenteId === pdvId)) {
+    return "Ce point de vente est lié à un bon de livraison. Suppression impossible.";
+  }
+  if (ctx.entrees.some((e) => e.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des entrées de stock. Suppression impossible.";
+  }
+  if (ctx.ventes.some((v) => v.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des ventes. Suppression impossible.";
+  }
+  if (ctx.charges.some((c) => c.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des charges. Suppression impossible.";
+  }
+  if (ctx.immobilisations.some((i) => i.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des immobilisations. Suppression impossible.";
+  }
+  if (ctx.rapportsFinJournee.some((r) => r.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des rapports de clôture. Suppression impossible.";
+  }
+  return null;
+}
 
 export const DEVIS_STATUTS: Record<string, string> = {
   brouillon: "Brouillon",

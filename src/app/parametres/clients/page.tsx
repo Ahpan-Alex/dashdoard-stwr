@@ -1,58 +1,110 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
+import {
+  ClientFicheForm,
+  CLIENT_FORM_VIDE,
+  clientVersForm,
+  payloadClient,
+} from "@/components/client-fiche-form";
+import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
-import { CLIENT_TYPES, totalFacture } from "@/lib/commercial";
+import { RowCrudActions } from "@/components/row-crud-actions";
+import { CLIENT_TYPES, motifLienClient, totalFacture } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Client } from "@/lib/types";
 
 export default function ParametresClientsPage() {
-  const { clients, factures, addClient, updateClient, deleteClient } =
-    useStore();
+  const {
+    clients,
+    factures,
+    devis,
+    commandes,
+    bonsDeLivraison,
+    acomptes,
+    tarifsClients,
+    addClient,
+    updateClient,
+    deleteClient,
+  } = useStore();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    nom: "",
-    telephone: "",
-    email: "",
-    ville: "",
-    nif: "",
-    type: "restaurant" as Client["type"],
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [apercuId, setApercuId] = useState<string | null>(null);
+  const [form, setForm] = useState(CLIENT_FORM_VIDE);
+  const apercu = clients.find((c) => c.id === apercuId);
+
+  function fermerForm() {
+    setOpen(false);
+    setEditingId(null);
+    setForm(CLIENT_FORM_VIDE);
+  }
+
+  function ouvrirCreation() {
+    setEditingId(null);
+    setForm(CLIENT_FORM_VIDE);
+    setOpen(true);
+  }
+
+  function demarrerEdition(c: Client) {
+    setEditingId(c.id);
+    setForm(clientVersForm(c));
+    setOpen(true);
+    setApercuId(null);
+    requestAnimationFrame(() => {
+      document.getElementById("fiche-client")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.nom.trim()) return;
-    addClient({
-      nom: form.nom.trim(),
-      telephone: form.telephone.trim() || undefined,
-      email: form.email.trim() || undefined,
-      ville: form.ville.trim() || undefined,
-      nif: form.nif.trim() || undefined,
-      type: form.type,
-      actif: true,
-    });
-    setForm({
-      nom: "",
-      telephone: "",
-      email: "",
-      ville: "",
-      nif: "",
-      type: "restaurant",
-    });
-    setOpen(false);
+    const payload = payloadClient(form);
+    if (editingId) {
+      updateClient(editingId, payload);
+    } else {
+      addClient({ ...payload, actif: true });
+    }
+    fermerForm();
+  }
+
+  function refsClient() {
+    return {
+      factures,
+      devis,
+      commandes,
+      bonsDeLivraison,
+      acomptes,
+      tarifsClients,
+    };
+  }
+
+  function supprimer(c: Client) {
+    const motif = motifLienClient(c.id, refsClient());
+    if (motif) {
+      alert(motif);
+      return;
+    }
+    if (!confirm(`Supprimer « ${c.nom} » ?`)) return;
+    const res = deleteClient(c.id);
+    if (!res.ok && res.reason) alert(res.reason);
+    if (editingId === c.id) fermerForm();
+    if (apercuId === c.id) setApercuId(null);
   }
 
   return (
     <div>
       <PageHeader
         title="Clients"
-        description="Paramétrage du carnet clients (identité, type, contacts)."
+        description="Les clients liés à un document commercial (facture, devis, commande, BL, acompte) ne peuvent plus être supprimés : désactivez-les si besoin."
         showPosSelector={false}
         actions={
-          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+          <button className="btn btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
             Nouveau client
           </button>
@@ -62,82 +114,20 @@ export default function ParametresClientsPage() {
       <ParametresSubnav />
 
       {open && (
-        <form
-          onSubmit={onSubmit}
-          className="mb-6 grid gap-4 rounded-[var(--radius)] border border-sea-200 bg-card p-5 sm:grid-cols-2 lg:grid-cols-3"
-        >
-          <label className="block text-xs font-semibold text-muted sm:col-span-2">
-            Nom
-            <input
-              className="input mt-1"
-              value={form.nom}
-              onChange={(e) => setForm({ ...form, nom: e.target.value })}
-              required
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            Type
-            <select
-              className="select mt-1"
-              value={form.type}
-              onChange={(e) =>
-                setForm({ ...form, type: e.target.value as Client["type"] })
-              }
-            >
-              {Object.entries(CLIENT_TYPES).map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            Téléphone
-            <input
-              className="input mt-1"
-              value={form.telephone}
-              onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            Email
-            <input
-              type="email"
-              className="input mt-1"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            Ville
-            <input
-              className="input mt-1"
-              value={form.ville}
-              onChange={(e) => setForm({ ...form, ville: e.target.value })}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            NIF client
-            <input
-              className="input mt-1"
-              value={form.nif}
-              onChange={(e) => setForm({ ...form, nif: e.target.value })}
-              placeholder="Si professionnel"
-            />
-          </label>
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-            <button type="submit" className="btn btn-primary">
-              Enregistrer
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setOpen(false)}
-            >
-              Annuler
-            </button>
-          </div>
-        </form>
+        <div id="fiche-client">
+          <p className="mb-2 text-sm font-medium text-ink">
+            {editingId ? "Modifier le client" : "Nouveau client"}
+          </p>
+          <ClientFicheForm
+            form={form}
+            setForm={setForm}
+            onSubmit={onSubmit}
+            onCancel={fermerForm}
+            submitLabel={
+              editingId ? "Enregistrer les modifications" : "Enregistrer"
+            }
+          />
+        </div>
       )}
 
       <div className="table-shell">
@@ -149,7 +139,7 @@ export default function ParametresClientsPage() {
               <th>Contact</th>
               <th>CA facturé</th>
               <th>Statut</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -162,6 +152,7 @@ export default function ParametresClientsPage() {
                     f.statut !== "brouillon",
                 )
                 .reduce((s, f) => s + totalFacture(f), 0);
+              const motif = motifLienClient(c.id, refsClient());
               return (
                 <tr key={c.id}>
                   <td className="font-medium">
@@ -189,24 +180,22 @@ export default function ParametresClientsPage() {
                   <td>
                     <button
                       className={`badge ${c.actif ? "badge-success" : "badge-sand"}`}
-                      onClick={() =>
-                        updateClient(c.id, { actif: !c.actif })
-                      }
+                      onClick={() => updateClient(c.id, { actif: !c.actif })}
                     >
                       {c.actif ? "Actif" : "Inactif"}
                     </button>
                   </td>
                   <td>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        if (confirm(`Supprimer « ${c.nom} » ?`)) {
-                          deleteClient(c.id);
-                        }
+                    <RowCrudActions
+                      onView={() => {
+                        setApercuId(c.id);
+                        setOpen(false);
                       }}
-                    >
-                      <Trash2 className="h-4 w-4 text-danger" />
-                    </button>
+                      onEdit={() => demarrerEdition(c)}
+                      onDelete={() => supprimer(c)}
+                      deleteDisabled={Boolean(motif)}
+                      deleteReason={motif ?? undefined}
+                    />
                   </td>
                 </tr>
               );
@@ -214,6 +203,28 @@ export default function ParametresClientsPage() {
           </tbody>
         </table>
       </div>
+
+      <FicheApercuModal
+        open={Boolean(apercu)}
+        title={apercu?.nom ?? ""}
+        subtitle="Fiche client"
+        onClose={() => setApercuId(null)}
+        onEdit={apercu ? () => demarrerEdition(apercu) : undefined}
+      >
+        <LigneInfo
+          label="Type"
+          value={apercu ? CLIENT_TYPES[apercu.type] : undefined}
+        />
+        <LigneInfo label="Téléphone" value={apercu?.telephone} />
+        <LigneInfo label="Email" value={apercu?.email} />
+        <LigneInfo label="Adresse" value={apercu?.adresse} />
+        <LigneInfo label="Ville" value={apercu?.ville} />
+        <LigneInfo label="NIF" value={apercu?.nif} />
+        <LigneInfo
+          label="Statut"
+          value={apercu?.actif ? "Actif" : "Inactif"}
+        />
+      </FicheApercuModal>
     </div>
   );
 }

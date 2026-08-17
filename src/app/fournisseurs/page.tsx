@@ -1,27 +1,102 @@
 "use client";
 
-import Link from "next/link";
-import { Settings } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Plus } from "lucide-react";
+import {
+  FournisseurFicheForm,
+  FOURNISSEUR_FORM_VIDE,
+  fournisseurVersForm,
+  payloadFournisseur,
+} from "@/components/fournisseur-fiche-form";
+import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
+import { RowCrudActions } from "@/components/row-crud-actions";
+import { motifLienFournisseur } from "@/lib/commercial";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import type { Fournisseur } from "@/lib/types";
 
 export default function FournisseursPage() {
-  const { fournisseurs, entrees } = useStore();
+  const {
+    fournisseurs,
+    entrees,
+    addFournisseur,
+    updateFournisseur,
+    deleteFournisseur,
+  } = useStore();
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [apercuId, setApercuId] = useState<string | null>(null);
+  const [form, setForm] = useState(FOURNISSEUR_FORM_VIDE);
+  const apercu = fournisseurs.find((x) => x.id === apercuId);
+
+  function fermerForm() {
+    setOpen(false);
+    setEditingId(null);
+    setForm(FOURNISSEUR_FORM_VIDE);
+  }
+
+  function ouvrirCreation() {
+    setEditingId(null);
+    setForm(FOURNISSEUR_FORM_VIDE);
+    setOpen(true);
+  }
+
+  function demarrerEdition(f: Fournisseur) {
+    setEditingId(f.id);
+    setForm(fournisseurVersForm(f));
+    setOpen(true);
+    setApercuId(null);
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!form.nom.trim()) return;
+    const payload = payloadFournisseur(form);
+    if (editingId) {
+      updateFournisseur(editingId, payload);
+    } else {
+      addFournisseur({ ...payload, actif: true });
+    }
+    fermerForm();
+  }
+
+  function supprimer(f: Fournisseur) {
+    const motif = motifLienFournisseur(f.id, f.nom, entrees);
+    if (motif) {
+      alert(motif);
+      return;
+    }
+    if (!confirm(`Supprimer « ${f.nom} » ?`)) return;
+    const res = deleteFournisseur(f.id);
+    if (!res.ok && res.reason) alert(res.reason);
+    if (editingId === f.id) fermerForm();
+    if (apercuId === f.id) setApercuId(null);
+  }
 
   return (
     <div>
       <PageHeader
         title="Fournisseurs"
-        description="Consultation des partenaires d'achat. La création et la modification se font dans Paramétrage."
+        description="Partenaires d'achat : créez, modifiez ou désactivez une fiche. La suppression n'est possible que s'il n'y a pas encore d'entrées de stock."
         showPosSelector={false}
         actions={
-          <Link href="/parametres/fournisseurs" className="btn btn-primary">
-            <Settings className="h-4 w-4" />
-            Paramétrer les fournisseurs
-          </Link>
+          <button className="btn btn-primary" onClick={ouvrirCreation}>
+            <Plus className="h-4 w-4" />
+            Nouveau fournisseur
+          </button>
         }
       />
+
+      {open && (
+        <FournisseurFicheForm
+          form={form}
+          setForm={setForm}
+          onSubmit={onSubmit}
+          onCancel={fermerForm}
+          submitLabel={editingId ? "Enregistrer les modifications" : "Enregistrer"}
+        />
+      )}
 
       <div className="table-shell">
         <table className="data">
@@ -33,6 +108,7 @@ export default function FournisseursPage() {
               <th>Entrées</th>
               <th>Achats cumulés</th>
               <th>Statut</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -46,6 +122,7 @@ export default function FournisseursPage() {
                 (s, e) => s + e.quantite * e.prixAchatUnitaire,
                 0,
               );
+              const motif = motifLienFournisseur(f.id, f.nom, entrees);
               return (
                 <tr key={f.id}>
                   <td className="font-medium">
@@ -57,15 +134,37 @@ export default function FournisseursPage() {
                     )}
                   </td>
                   <td>{f.specialite || "—"}</td>
-                  <td>{f.telephone || "—"}</td>
+                  <td className="text-sm">
+                    {f.telephone || "—"}
+                    {f.email && (
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {f.email}
+                      </span>
+                    )}
+                  </td>
                   <td>{formatNumber(lignes.length, 0)}</td>
                   <td className="font-semibold">{formatCurrency(achats)}</td>
                   <td>
-                    <span
+                    <button
                       className={`badge ${f.actif ? "badge-success" : "badge-sand"}`}
+                      onClick={() =>
+                        updateFournisseur(f.id, { actif: !f.actif })
+                      }
                     >
                       {f.actif ? "Actif" : "Inactif"}
-                    </span>
+                    </button>
+                  </td>
+                  <td>
+                    <RowCrudActions
+                      onView={() => {
+                        setApercuId(f.id);
+                        setOpen(false);
+                      }}
+                      onEdit={() => demarrerEdition(f)}
+                      onDelete={() => supprimer(f)}
+                      deleteDisabled={Boolean(motif)}
+                      deleteReason={motif ?? undefined}
+                    />
                   </td>
                 </tr>
               );
@@ -73,6 +172,25 @@ export default function FournisseursPage() {
           </tbody>
         </table>
       </div>
+
+      <FicheApercuModal
+        open={Boolean(apercu)}
+        title={apercu?.nom ?? ""}
+        subtitle="Fiche fournisseur"
+        onClose={() => setApercuId(null)}
+        onEdit={apercu ? () => demarrerEdition(apercu) : undefined}
+      >
+        <LigneInfo label="Spécialité" value={apercu?.specialite} />
+        <LigneInfo label="Téléphone" value={apercu?.telephone} />
+        <LigneInfo label="Email" value={apercu?.email} />
+        <LigneInfo label="Adresse" value={apercu?.adresse} />
+        <LigneInfo label="Ville" value={apercu?.ville} />
+        <LigneInfo label="NIF" value={apercu?.nif} />
+        <LigneInfo
+          label="Statut"
+          value={apercu?.actif ? "Actif" : "Inactif"}
+        />
+      </FicheApercuModal>
     </div>
   );
 }

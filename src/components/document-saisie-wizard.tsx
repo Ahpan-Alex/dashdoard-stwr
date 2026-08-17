@@ -81,7 +81,7 @@ export function lignesToDraft(lignes: LigneDocument[]): DraftLigne[] {
 }
 
 type PreviewMeta = {
-  type: "devis" | "commande" | "bon_de_livraison";
+  type: "devis" | "commande" | "bon_de_livraison" | "facture";
   numero: string;
   date: string;
   echeance?: string;
@@ -92,6 +92,8 @@ type PreviewMeta = {
   conditionsPaiement?: string;
   referenceDevis?: string;
   referenceCommande?: string;
+  factureType?: "standard" | "acompte" | "solde" | "avoir" | "proforma";
+  estProforma?: boolean;
 };
 
 type Props = {
@@ -114,6 +116,8 @@ type Props = {
   acomptesLabel?: string;
   confirmLabel: string;
   headerFields: ReactNode;
+  /** Bloc optionnel sous les lignes (ex. saisie d'acompte). */
+  footerFields?: ReactNode;
   onConfirm: (payload: {
     lignes: LigneDocument[];
     remiseGlobale: number;
@@ -124,6 +128,12 @@ type Props = {
   initialLignes?: DraftLigne[];
   initialRemiseGlobale?: number;
   initialNote?: string;
+  acomptesDetail?: {
+    numero: string;
+    date: string;
+    montant: number;
+    mode?: string;
+  }[];
 };
 
 export function DocumentSaisieWizard({
@@ -143,11 +153,13 @@ export function DocumentSaisieWizard({
   acomptesLabel,
   confirmLabel,
   headerFields,
+  footerFields,
   onConfirm,
   onCancel,
   initialLignes = [],
   initialRemiseGlobale = 0,
   initialNote = "",
+  acomptesDetail = [],
 }: Props) {
   const produitsDispo = produitsActifs(produits);
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
@@ -220,6 +232,7 @@ export function DocumentSaisieWizard({
       Number(form.remiseGlobale) || 0,
     );
   }, [lignes, tauxTVA, acomptesTTC, assujettiTVA, form.remiseGlobale]);
+  const afficherAcomptes = showAcomptes || acomptesTTC > 0;
 
   function ajouterProduit(produitId: string) {
     const prod = produitsDispo.find((p) => p.id === produitId);
@@ -921,6 +934,8 @@ export function DocumentSaisieWizard({
             </label>
           </div>
 
+          {footerFields}
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -964,7 +979,7 @@ export function DocumentSaisieWizard({
                   </p>
                 </div>
               )}
-              {showAcomptes && (
+              {afficherAcomptes && (}
                 <div className="rounded-lg bg-card px-3 py-2">
                   <p className="text-[11px] text-muted">Acompte(s) payé(s)</p>
                   <p className="font-display text-lg font-semibold">
@@ -985,7 +1000,7 @@ export function DocumentSaisieWizard({
               )}
               <div className="rounded-lg bg-sea-800 px-3 py-2 text-white">
                 <p className="text-[11px] text-sea-200">
-                  {showAcomptes
+                  {afficherAcomptes
                     ? "Montant à payer"
                     : assujettiTVA
                       ? "Montant TTC"
@@ -993,7 +1008,7 @@ export function DocumentSaisieWizard({
                 </p>
                 <p className="font-display text-lg font-semibold">
                   {formatCurrency(
-                    showAcomptes ? totauxDraft.netAPayer : totauxDraft.totalTTC,
+                    afficherAcomptes ? totauxDraft.netAPayer : totauxDraft.totalTTC,
                   )}
                 </p>
               </div>
@@ -1112,6 +1127,9 @@ export function DocumentSaisieWizard({
               note={form.note.trim() || undefined}
               referenceDevis={previewMeta.referenceDevis}
               referenceCommande={previewMeta.referenceCommande}
+              factureType={previewMeta.factureType}
+              estProforma={previewMeta.estProforma}
+              acomptesDetail={acomptesDetail}
             />
           </div>
 

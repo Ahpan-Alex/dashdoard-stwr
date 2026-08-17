@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PasswordInput } from "@/components/password-input";
 import { useAuthStore } from "@/lib/auth-store";
 
 export default function ReinitialiserMotDePassePage() {
@@ -51,9 +52,9 @@ export default function ReinitialiserMotDePassePage() {
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <label className="block text-sm font-medium">
               Nouveau mot de passe
-              <input
-                className="input mt-1"
-                type="password"
+              <PasswordInput
+                className="mt-1"
+                autoComplete="new-password"
                 required
                 minLength={12}
                 value={password}
@@ -62,9 +63,9 @@ export default function ReinitialiserMotDePassePage() {
             </label>
             <label className="block text-sm font-medium">
               Confirmation
-              <input
-                className="input mt-1"
-                type="password"
+              <PasswordInput
+                className="mt-1"
+                autoComplete="new-password"
                 required
                 minLength={12}
                 value={confirm}

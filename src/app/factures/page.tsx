@@ -17,9 +17,11 @@ import { DocumentPreview } from "@/components/document-preview";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
   appliqueTVA,
+  acomptesPourDocument,
   calculerTotaux,
   creerSnapshotAcomptesDocument,
   isLigneProduit,
+  MODES_PAIEMENT,
   montantLigneHT,
   recalculerSousTotaux as recalculerSousTotauxBase,
 } from "@/lib/commercial";
@@ -39,7 +41,7 @@ import {
 } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { createId } from "@/lib/id";
-import type { FactureStatut, LigneDocument, TypeLigneDocument } from "@/lib/types";
+import type { FactureStatut, LigneDocument, ModePaiement, TypeLigneDocument } from "@/lib/types";
 
 type Etape = "saisie" | "prevalidation";
 
@@ -71,6 +73,8 @@ export default function FacturesPage() {
     entrees,
     ventes,
     addFacture,
+    updateAcompte,
+    encaisserAcompte,
   } = useStore();
 
   const avecTVA = appliqueTVA(parametres);
@@ -99,6 +103,8 @@ export default function FacturesPage() {
     note: "",
     commentaireLibre: "",
     acomptePaye: "0",
+    modePaiement: "virement" as ModePaiement,
+    genererFactureAcompte: true,
   });
   const [lignes, setLignes] = useState<DraftLigne[]>([]);
   const [dragKey, setDragKey] = useState<string | null>(null);
@@ -108,14 +114,12 @@ export default function FacturesPage() {
   const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
 
   const acomptesLies = useMemo(() => {
-    return acomptes.filter(
-      (a) =>
-        a.statut !== "annule" &&
-        a.clientId === form.clientId &&
-        ((form.commandeId && a.commandeId === form.commandeId) ||
-          (form.devisId && a.devisId === form.devisId)),
-    );
-  }, [acomptes, form.clientId, form.commandeId, form.devisId]);
+    const cmd = commandes.find((c) => c.id === form.commandeId);
+    return acomptesPourDocument(acomptes, {
+      commandeId: form.commandeId || undefined,
+      devisId: form.devisId || cmd?.devisId || undefined,
+    }).filter((a) => a.clientId === form.clientId);
+  }, [acomptes, form.clientId, form.commandeId, form.devisId, commandes]);
 
   const acomptesTTC = acomptesLies.reduce((s, a) => s + a.montantTTC, 0);
 
@@ -152,6 +156,8 @@ export default function FacturesPage() {
       note: "",
       commentaireLibre: "",
       acomptePaye: "0",
+      modePaiement: "virement",
+      genererFactureAcompte: true,
     }));
   }
 
@@ -473,6 +479,7 @@ export default function FacturesPage() {
               numero: "Acompte à l'émission",
               date: new Date(`${form.date}T12:00:00`).toISOString(),
               montant: acomptePayeNum - acomptesTTC,
+              mode: form.modePaiement,
             },
           ]
         : []),
@@ -487,12 +494,13 @@ export default function FacturesPage() {
                     numero: "Acompte à l'émission",
                     date: new Date(`${form.date}T12:00:00`).toISOString(),
                     montant: acomptePayeNum,
+                    mode: form.modePaiement,
                   },
                 ]
               : detailAcomptesEmission,
           );
 
-    addFacture(
+    const factureId = addFacture(
       {
         numero,
         type:
@@ -540,6 +548,34 @@ export default function FacturesPage() {
         detail: `Mode ${mode}`,
       },
     );
+
+    if (mode !== "brouillon") {
+      for (const a of acomptesLies) {
+        updateAcompte(a.id, {
+          factureId,
+          commandeId: a.commandeId || form.commandeId || undefined,
+          devisId: a.devisId || form.devisId || undefined,
+          statut: "impute",
+        });
+      }
+      const extra = Math.max(0, acomptePayeNum - acomptesTTC);
+      if (extra > 0) {
+        const res = encaisserAcompte({
+          clientId: form.clientId,
+          pointDeVenteId: form.pointDeVenteId,
+          date: new Date(`${form.date}T12:00:00`).toISOString(),
+          montantTTC: extra,
+          modePaiement: form.modePaiement,
+          devisId: form.devisId || undefined,
+          commandeId: form.commandeId || undefined,
+          factureId,
+          refDocument: numero,
+          genererFactureAcompte: form.genererFactureAcompte,
+        });
+        if (!res.ok) alert(res.reason);
+      }
+    }
+
     resetForm();
     setOpen(true);
     if (mode === "validee") {
@@ -658,9 +694,14 @@ export default function FacturesPage() {
                   <select
                     className="select mt-1"
                     value={form.commandeId}
-                    onChange={(e) =>
-                      setForm({ ...form, commandeId: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const cmd = commandes.find((c) => c.id === e.target.value);
+                      setForm({
+                        ...form,
+                        commandeId: e.target.value,
+                        devisId: cmd?.devisId || form.devisId,
+                      });
+                    }}
                   >
                     <option value="">— Aucune —</option>
                     {commandesClient.map((c) => (
@@ -1209,6 +1250,25 @@ export default function FacturesPage() {
                       </span>
                     )}
                   </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Mode de paiement
+                    <select
+                      className="select mt-1"
+                      value={form.modePaiement}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          modePaiement: e.target.value as ModePaiement,
+                        })
+                      }
+                    >
+                      {Object.entries(MODES_PAIEMENT).map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="rounded-lg bg-card px-3 py-2">
                     <p className="text-[11px] text-muted">Reste à payer</p>
                     <p
@@ -1223,6 +1283,20 @@ export default function FacturesPage() {
                     </p>
                   </div>
                 </div>
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.genererFactureAcompte}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        genererFactureAcompte: e.target.checked,
+                      })
+                    }
+                  />
+                  Générer la facture d&apos;acompte si un nouvel encaissement
+                  est saisi (recommandé — législation MG)
+                </label>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -1453,6 +1527,7 @@ export default function FacturesPage() {
                                     `${form.date}T12:00:00`,
                                   ).toISOString(),
                                   montant: acomptePayeNum - acomptesTTC,
+                                  mode: form.modePaiement,
                                 },
                               ]
                             : []),
@@ -1575,6 +1650,7 @@ export default function FacturesPage() {
                                 `${form.date}T12:00:00`,
                               ).toISOString(),
                               montant: acomptePayeNum - acomptesTTC,
+                              mode: form.modePaiement,
                             },
                           ]
                         : []),

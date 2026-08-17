@@ -5,6 +5,10 @@ import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
+  AcompteEncaissementFields,
+  SAISIE_ACOMPTE_VIDE,
+} from "@/components/acompte-encaissement-fields";
+import {
   DocumentSaisieWizard,
   lignesToDraft,
   type DraftLigne,
@@ -19,6 +23,8 @@ import { PageHeader } from "@/components/page-header";
 import {
   DEVIS_STATUTS,
   appliqueTVA,
+  acomptesPourDocument,
+  lignesAcomptesPourDocument,
   nextNumero,
   totauxDevis,
 } from "@/lib/commercial";
@@ -58,9 +64,12 @@ export default function ListeDevisPage() {
     tarifsClients,
     entrees,
     ventes,
+    acomptes,
     updateDevis,
     deleteDevis,
     addCommande,
+    updateAcompte,
+    encaisserAcompte,
   } = useStore();
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
@@ -84,6 +93,7 @@ export default function ListeDevisPage() {
     date: new Date().toISOString().slice(0, 10),
     validiteJours: "15",
   });
+  const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
   const modele = modelesDocuments.find((m) => m.type === "devis" && m.actif);
   const assujettiTVA = appliqueTVA(parametres);
@@ -96,11 +106,11 @@ export default function ListeDevisPage() {
       .filter((d) => (filtre === "tous" ? true : d.statut === filtre))
       .map((d) => ({
         d,
-        t: totauxDevis(d, parametres),
+        t: totauxDevis(d, parametres, acomptes),
         client: clients.find((c) => c.id === d.clientId),
         pdv: pointsDeVente.find((p) => p.id === d.pointDeVenteId),
       }));
-  }, [devis, filtre, parametres, clients, pointsDeVente]);
+  }, [devis, filtre, parametres, acomptes, clients, pointsDeVente]);
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -126,13 +136,14 @@ export default function ListeDevisPage() {
       remiseGlobale: d.remiseGlobale ?? 0,
       note: d.note ?? "",
     });
+    setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
   }
 
   function convertirEnCommande(devisId: string) {
     const d = devis.find((x) => x.id === devisId);
     if (!d) return;
-    addCommande({
+    const commandeId = addCommande({
       numero: nextNumero(
         "CMD",
         commandes.map((c) => c.numero),
@@ -149,6 +160,9 @@ export default function ListeDevisPage() {
       remiseGlobale: d.remiseGlobale,
       note: d.note,
     });
+    for (const a of acomptesPourDocument(acomptes, { devisId: d.id })) {
+      if (!a.commandeId) updateAcompte(a.id, { commandeId });
+    }
     updateDevis(d.id, { statut: "accepte" });
     alert("Commande créée à partir du devis.");
   }
@@ -158,6 +172,27 @@ export default function ListeDevisPage() {
     d.setDate(d.getDate() + (Number(meta.validiteJours) || 15));
     return d.toISOString();
   })();
+
+  const acomptesLiesEdition = acomptesPourDocument(acomptes, {
+    devisId: editId ?? undefined,
+  });
+  const acompteMontantEdition = Math.max(0, Number(acompte.montant) || 0);
+  const acomptesTTCEdition =
+    acomptesLiesEdition.reduce((s, a) => s + a.montantTTC, 0) +
+    acompteMontantEdition;
+  const acomptesDetailEdition = [
+    ...lignesAcomptesPourDocument(acomptes, { devisId: editId ?? undefined }),
+    ...(acompteMontantEdition > 0
+      ? [
+          {
+            numero: "Acompte à l'émission",
+            date: new Date(`${meta.date}T12:00:00`).toISOString(),
+            montant: acompteMontantEdition,
+            mode: acompte.modePaiement,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div>
@@ -226,6 +261,9 @@ export default function ListeDevisPage() {
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
             initialNote={seed.note}
+            showAcomptes={acomptesTTCEdition > 0}
+            acomptesTTC={acomptesTTCEdition}
+            acomptesDetail={acomptesDetailEdition}
             previewMeta={{
               type: "devis",
               numero: editDoc.numero,
@@ -242,7 +280,7 @@ export default function ListeDevisPage() {
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
             onConfirm={({ lignes, remiseGlobale, note }) => {
-              if (!meta.clientId) return;
+              if (!meta.clientId || !editId) return;
               updateDevis(editId, {
                 clientId: meta.clientId,
                 pointDeVenteId: meta.pointDeVenteId,
@@ -252,6 +290,19 @@ export default function ListeDevisPage() {
                 remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
                 note,
               });
+              if (acompteMontantEdition > 0) {
+                const res = encaisserAcompte({
+                  clientId: meta.clientId,
+                  pointDeVenteId: meta.pointDeVenteId,
+                  date: new Date(`${meta.date}T12:00:00`).toISOString(),
+                  montantTTC: acompteMontantEdition,
+                  modePaiement: acompte.modePaiement,
+                  devisId: editId,
+                  refDocument: editDoc.numero,
+                  genererFactureAcompte: acompte.genererFacture,
+                });
+                if (!res.ok) alert(res.reason);
+              }
               setEditId(null);
             }}
             headerFields={
@@ -316,6 +367,18 @@ export default function ListeDevisPage() {
                 </label>
               </div>
             }
+            footerFields={
+              <AcompteEncaissementFields
+                value={acompte}
+                onChange={setAcompte}
+                acomptesExistants={acomptesLiesEdition}
+                montantLabel={
+                  acomptesLiesEdition.length > 0
+                    ? "Acompte complémentaire (Ar TTC)"
+                    : "Acompte encaissé (Ar TTC)"
+                }
+              />
+            }
           />
         </div>
       )}
@@ -329,6 +392,7 @@ export default function ListeDevisPage() {
               <th>Client</th>
               <th>PDV</th>
               <th>Montant</th>
+              <th>Acomptes</th>
               <th>Statut</th>
               <th />
             </tr>
@@ -336,7 +400,7 @@ export default function ListeDevisPage() {
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={8} className="text-muted">
                   Aucun devis pour ce filtre.
                 </td>
               </tr>
@@ -350,6 +414,7 @@ export default function ListeDevisPage() {
                   <td className="font-semibold">
                     {formatCurrency(t.totalTTC)}
                   </td>
+                  <td>{formatCurrency(t.acomptesTTC)}</td>
                   <td>
                     <select
                       className="select max-w-[160px]"
@@ -387,9 +452,12 @@ export default function ListeDevisPage() {
                           parametres={parametres}
                           modele={modele}
                           lignes={d.lignes}
-                          totaux={totauxDevis(d, parametres)}
+                          totaux={totauxDevis(d, parametres, acomptes)}
                           conditionsPaiement={d.conditionsPaiement}
                           note={d.note}
+                          acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                            devisId: d.id,
+                          })}
                         />
                       </ExportDocumentPdfButton>
                       <IconButton
@@ -448,9 +516,12 @@ export default function ListeDevisPage() {
               parametres={parametres}
               modele={modele}
               lignes={preview.lignes}
-              totaux={totauxDevis(preview, parametres)}
+              totaux={totauxDevis(preview, parametres, acomptes)}
               conditionsPaiement={preview.conditionsPaiement}
               note={preview.note}
+              acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                devisId: preview.id,
+              })}
             />
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Trash2, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { PasswordInput } from "@/components/password-input";
 import { PageHeader } from "@/components/page-header";
 import { ROLE_LABELS, type RoleId } from "@/lib/auth/rbac";
 import { useAuthStore } from "@/lib/auth-store";
@@ -204,9 +205,9 @@ export default function MonComptePage() {
         <h2 className="font-display text-lg font-semibold">Mot de passe</h2>
         <label className="block text-sm font-medium">
           Actuel
-          <input
-            className="input mt-1"
-            type="password"
+          <PasswordInput
+            className="mt-1"
+            autoComplete="current-password"
             required
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
@@ -214,9 +215,9 @@ export default function MonComptePage() {
         </label>
         <label className="block text-sm font-medium">
           Nouveau (min. 12)
-          <input
-            className="input mt-1"
-            type="password"
+          <PasswordInput
+            className="mt-1"
+            autoComplete="new-password"
             required
             minLength={12}
             value={next}
@@ -225,9 +226,9 @@ export default function MonComptePage() {
         </label>
         <label className="block text-sm font-medium">
           Confirmation
-          <input
-            className="input mt-1"
-            type="password"
+          <PasswordInput
+            className="mt-1"
+            autoComplete="new-password"
             required
             minLength={12}
             value={confirm}

@@ -6,14 +6,23 @@ import {
   creerEntreeHistorique,
   produitEstReference,
 } from "./produits";
-import { creerEntreeJournal } from "./facturation-mg";
+import { creerEntreeJournal, factureEstFiscale, nextNumeroDocumentCommercial } from "./facturation-mg";
+import { stockDisponible } from "./calculations";
+import {
+  appliqueTVA,
+  fournisseurEstReference,
+  motifLienClient,
+  motifLienPointDeVente,
+  nextNumero,
+  rebuildVentesDepuisFactures,
+  splitTTC,
+} from "./commercial";
 import {
   resetBusinessState,
   scheduleBusinessSave,
   setBusinessSyncEnabled,
   installBusinessSaveLifecycle,
 } from "./business-api";
-import { rebuildVentesDepuisFactures } from "./commercial";
 import {
   avecPresentationSiBesoin,
   creerSnapshotPresentation,
@@ -36,6 +45,7 @@ import type {
   HistoriquePrix,
   Immobilisation,
   JournalAudit,
+  ModePaiement,
   Parametres,
   PointDeVente,
   Produit,
@@ -78,9 +88,14 @@ type Store = {
 
   addPointDeVente: (pdv: Omit<PointDeVente, "id">) => void;
   updatePointDeVente: (id: string, data: Partial<PointDeVente>) => void;
+  deletePointDeVente: (id: string) => { ok: boolean; reason?: string };
 
   addEntree: (entree: Omit<EntreeStock, "id">) => void;
-  deleteEntree: (id: string) => void;
+  updateEntree: (id: string, data: Partial<EntreeStock>) => {
+    ok: boolean;
+    reason?: string;
+  };
+  deleteEntree: (id: string) => { ok: boolean; reason?: string };
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
 
@@ -118,17 +133,17 @@ type Store = {
 
   addClient: (client: Omit<Client, "id">) => void;
   updateClient: (id: string, data: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  deleteClient: (id: string) => { ok: boolean; reason?: string };
 
   addFournisseur: (frn: Omit<Fournisseur, "id">) => void;
   updateFournisseur: (id: string, data: Partial<Fournisseur>) => void;
-  deleteFournisseur: (id: string) => void;
+  deleteFournisseur: (id: string) => { ok: boolean; reason?: string };
 
-  addDevis: (devis: Omit<Devis, "id">) => void;
+  addDevis: (devis: Omit<Devis, "id">) => string;
   updateDevis: (id: string, data: Partial<Devis>) => void;
   deleteDevis: (id: string) => void;
 
-  addCommande: (cmd: Omit<Commande, "id">) => void;
+  addCommande: (cmd: Omit<Commande, "id">) => string;
   updateCommande: (id: string, data: Partial<Commande>) => void;
   deleteCommande: (id: string) => void;
 
@@ -145,20 +160,39 @@ type Store = {
     data: Partial<Facture>,
     audit?: { action: JournalAudit["action"]; detail?: string },
   ) => void;
-  deleteFacture: (id: string) => void;
+  deleteFacture: (id: string) => { ok: boolean; reason?: string };
   addJournalAudit: (entry: Omit<JournalAudit, "id">) => void;
   /** Purge les entrées journal métier plus anciennes que N jours. Retourne le nombre supprimé. */
   purgeJournalAuditOlderThan: (days: number) => number;
 
-  addAcompte: (acompte: Omit<Acompte, "id">) => void;
+  addAcompte: (acompte: Omit<Acompte, "id">) => string;
   updateAcompte: (id: string, data: Partial<Acompte>) => void;
   deleteAcompte: (id: string) => void;
+  /**
+   * Enregistre un acompte encaissé (devis / commande / facture) et,
+   * par défaut, émet la facture d'acompte (MG).
+   */
+  encaisserAcompte: (data: {
+    clientId: string;
+    pointDeVenteId: string;
+    date: string;
+    montantTTC: number;
+    modePaiement: ModePaiement;
+    devisId?: string;
+    commandeId?: string;
+    factureId?: string;
+    refDocument: string;
+    genererFactureAcompte?: boolean;
+    note?: string;
+  }) => { ok: true; acompteId: string; numero: string; factureAcompteId?: string } | { ok: false; reason: string };
 
   /** Remplace l'état métier (hydratation API). */
   applyBusinessData: (data: AppState) => void;
   clearBusinessData: () => void;
-  /** Remet l'état métier à vide via API (admin). */
-  resetBusinessData: () => Promise<void>;
+  /** Remet l'état métier à vide via API (admin). Mot de passe du compte requis. */
+  resetBusinessData: (
+    password: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 function uid(prefix: string) {
@@ -228,15 +262,84 @@ export const useStore = create<Store>()((set, get) => ({
             p.id === id ? { ...p, ...data } : p,
           ),
         })),
+      deletePointDeVente: (id) => {
+        const state = get();
+        const pdv = state.pointsDeVente.find((p) => p.id === id);
+        if (!pdv) return { ok: false, reason: "Point de vente introuvable." };
+        const motif = motifLienPointDeVente(id, {
+          factures: state.factures,
+          devis: state.devis,
+          commandes: state.commandes,
+          bonsDeLivraison: state.bonsDeLivraison,
+          entrees: state.entrees,
+          ventes: state.ventes,
+          charges: state.charges,
+          immobilisations: state.immobilisations,
+          rapportsFinJournee: state.rapportsFinJournee,
+        });
+        if (motif) return { ok: false, reason: motif };
+        set((s) => ({
+          pointsDeVente: s.pointsDeVente.filter((p) => p.id !== id),
+          pointDeVenteActifId:
+            s.pointDeVenteActifId === id ? "tous" : s.pointDeVenteActifId,
+        }));
+        return { ok: true };
+      },
 
       addEntree: (entree) =>
         set((state) => ({
           entrees: [{ ...entree, id: uid("ent") }, ...state.entrees],
         })),
-      deleteEntree: (id) =>
-        set((state) => ({
-          entrees: state.entrees.filter((e) => e.id !== id),
-        })),
+      updateEntree: (id, data) => {
+        const state = get();
+        const prev = state.entrees.find((e) => e.id === id);
+        if (!prev) return { ok: false, reason: "Entrée introuvable." };
+        const next = { ...prev, ...data };
+        const retireQty =
+          prev.produitId !== next.produitId ||
+          prev.pointDeVenteId !== next.pointDeVenteId
+            ? prev.quantite
+            : Math.max(0, prev.quantite - next.quantite);
+        const dispo = stockDisponible(
+          prev.produitId,
+          prev.pointDeVenteId,
+          state.entrees,
+          state.ventes,
+        );
+        if (retireQty > 0 && dispo + 1e-9 < retireQty) {
+          return {
+            ok: false,
+            reason:
+              "Stock insuffisant : cette entrée a déjà été consommée par des ventes.",
+          };
+        }
+        set((s) => ({
+          entrees: s.entrees.map((e) => (e.id === id ? next : e)),
+        }));
+        return { ok: true };
+      },
+      deleteEntree: (id) => {
+        const state = get();
+        const prev = state.entrees.find((e) => e.id === id);
+        if (!prev) return { ok: false, reason: "Entrée introuvable." };
+        const dispo = stockDisponible(
+          prev.produitId,
+          prev.pointDeVenteId,
+          state.entrees,
+          state.ventes,
+        );
+        if (dispo + 1e-9 < prev.quantite) {
+          return {
+            ok: false,
+            reason:
+              "Stock insuffisant : cette entrée a déjà été consommée par des ventes.",
+          };
+        }
+        set((s) => ({
+          entrees: s.entrees.filter((e) => e.id !== id),
+        }));
+        return { ok: true };
+      },
       addVente: (vente) =>
         set((state) => ({
           ventes: [{ ...vente, id: uid("v") }, ...state.ventes],
@@ -483,10 +586,26 @@ export const useStore = create<Store>()((set, get) => ({
             c.id === id ? { ...c, ...data } : c,
           ),
         })),
-      deleteClient: (id) =>
-        set((state) => ({
-          clients: state.clients.filter((c) => c.id !== id),
-        })),
+      deleteClient: (id) => {
+        const state = get();
+        const client = state.clients.find((c) => c.id === id);
+        if (!client) return { ok: false, reason: "Client introuvable." };
+        const motif = motifLienClient(id, {
+          factures: state.factures,
+          devis: state.devis,
+          commandes: state.commandes,
+          bonsDeLivraison: state.bonsDeLivraison,
+          acomptes: state.acomptes,
+          tarifsClients: state.tarifsClients,
+        });
+        if (motif) {
+          return { ok: false, reason: motif };
+        }
+        set((s) => ({
+          clients: s.clients.filter((c) => c.id !== id),
+        }));
+        return { ok: true };
+      },
 
       addFournisseur: (frn) =>
         set((state) => ({
@@ -501,15 +620,30 @@ export const useStore = create<Store>()((set, get) => ({
             f.id === id ? { ...f, ...data } : f,
           ),
         })),
-      deleteFournisseur: (id) =>
-        set((state) => ({
-          fournisseurs: state.fournisseurs.filter((f) => f.id !== id),
-        })),
+      deleteFournisseur: (id) => {
+        const state = get();
+        const frn = state.fournisseurs.find((f) => f.id === id);
+        if (!frn) return { ok: false, reason: "Fournisseur introuvable." };
+        if (fournisseurEstReference(id, frn.nom, state.entrees)) {
+          return {
+            ok: false,
+            reason:
+              "Fournisseur déjà utilisé sur des entrées de stock. Désactivez-le pour préserver l'historique.",
+          };
+        }
+        set((s) => ({
+          fournisseurs: s.fournisseurs.filter((f) => f.id !== id),
+        }));
+        return { ok: true };
+      },
 
-      addDevis: (devis) =>
+      addDevis: (devis) => {
+        const id = uid("dev");
         set((state) => ({
-          devis: [{ ...devis, id: uid("dev") }, ...state.devis],
-        })),
+          devis: [{ ...devis, id }, ...state.devis],
+        }));
+        return id;
+      },
       updateDevis: (id, data) =>
         set((state) => ({
           devis: state.devis.map((d) => (d.id === id ? { ...d, ...data } : d)),
@@ -519,10 +653,13 @@ export const useStore = create<Store>()((set, get) => ({
           devis: state.devis.filter((d) => d.id !== id),
         })),
 
-      addCommande: (cmd) =>
+      addCommande: (cmd) => {
+        const id = uid("cmd");
         set((state) => ({
-          commandes: [{ ...cmd, id: uid("cmd") }, ...state.commandes],
-        })),
+          commandes: [{ ...cmd, id }, ...state.commandes],
+        }));
+        return id;
+      },
       updateCommande: (id, data) =>
         set((state) => ({
           commandes: state.commandes.map((c) =>
@@ -591,20 +728,19 @@ export const useStore = create<Store>()((set, get) => ({
           const prev = state.factures.find((f) => f.id === id);
           if (!prev) return state;
 
-          /** Contenu figé dès création : seuls suivi paiement / statut / validation sont autorisés. */
           const {
-            lignes: _lignes,
-            clientId: _clientId,
-            pointDeVenteId: _pointDeVenteId,
-            date: _date,
-            echeance: _echeance,
-            tauxTVA: _tauxTVA,
-            conditionsPaiement: _conditionsPaiement,
-            note: _note,
-            remiseGlobale: _remiseGlobale,
-            devisId: _devisId,
-            commandeId: _commandeId,
-            bonDeLivraisonId: _bonDeLivraisonId,
+            lignes,
+            clientId,
+            pointDeVenteId,
+            date,
+            echeance,
+            tauxTVA,
+            conditionsPaiement,
+            note,
+            remiseGlobale,
+            devisId,
+            commandeId,
+            bonDeLivraisonId,
             factureParenteId: _factureParenteId,
             acomptesDocument: acomptesDocumentPatch,
             presentation: presentationPatch,
@@ -613,7 +749,6 @@ export const useStore = create<Store>()((set, get) => ({
 
           const patch: Partial<typeof prev> = { ...suiviAutorise };
 
-          // Validation brouillon/proforma → fiscale : numéro / type / acomptes / présentation figés
           const estConversionFiscale =
             (prev.statut === "brouillon" ||
               prev.statut === "proforma" ||
@@ -622,6 +757,31 @@ export const useStore = create<Store>()((set, get) => ({
               data.statut === "envoyee" ||
               data.statut === "payee" ||
               data.statut === "partiellement_payee");
+
+          /** Brouillons / proformas : contenu encore modifiable. Factures fiscales : figées. */
+          if (!factureEstFiscale(prev) && !estConversionFiscale) {
+            if (lignes !== undefined) patch.lignes = lignes;
+            if (clientId !== undefined) patch.clientId = clientId;
+            if (pointDeVenteId !== undefined) patch.pointDeVenteId = pointDeVenteId;
+            if (date !== undefined) patch.date = date;
+            if (echeance !== undefined) patch.echeance = echeance;
+            if (tauxTVA !== undefined) patch.tauxTVA = tauxTVA;
+            if (conditionsPaiement !== undefined)
+              patch.conditionsPaiement = conditionsPaiement;
+            if (note !== undefined) patch.note = note;
+            if (remiseGlobale !== undefined) patch.remiseGlobale = remiseGlobale;
+            if (devisId !== undefined) patch.devisId = devisId;
+            if (commandeId !== undefined) patch.commandeId = commandeId;
+            if (bonDeLivraisonId !== undefined)
+              patch.bonDeLivraisonId = bonDeLivraisonId;
+            if (acomptesDocumentPatch !== undefined)
+              patch.acomptesDocument = acomptesDocumentPatch;
+            delete patch.numero;
+            delete patch.type;
+            delete patch.dateValidation;
+            delete patch.presentation;
+          }
+
           if (estConversionFiscale) {
             if (data.numero !== undefined) patch.numero = data.numero;
             if (data.type !== undefined) patch.type = data.type;
@@ -659,9 +819,46 @@ export const useStore = create<Store>()((set, get) => ({
             journalAudit: journal,
           };
         }),
-      deleteFacture: (_id) => {
-        // Les factures ne peuvent pas être supprimées : utiliser une facture d'avoir.
-        return;
+      deleteFacture: (id) => {
+        const state = get();
+        const prev = state.factures.find((f) => f.id === id);
+        if (!prev) return { ok: false, reason: "Document introuvable." };
+        if (factureEstFiscale(prev)) {
+          return {
+            ok: false,
+            reason:
+              "Les factures fiscales ne peuvent pas être supprimées : utilisez une facture d'avoir.",
+          };
+        }
+        set((s) => {
+          const factures = s.factures
+            .filter((f) => f.id !== id)
+            .map((f) =>
+              f.factureParenteId === id
+                ? { ...f, factureParenteId: undefined }
+                : f,
+            );
+          return {
+            factures,
+            ventes: rebuildVentesDepuisFactures(factures),
+            journalAudit: [
+              {
+                id: uid("aud"),
+                ...creerEntreeJournal({
+                  action: "facture_supprimee",
+                  entiteId: id,
+                  numero: prev.numero,
+                  detail:
+                    prev.type === "proforma" || prev.statut === "proforma"
+                      ? "Suppression proforma"
+                      : "Suppression brouillon",
+                }),
+              },
+              ...s.journalAudit,
+            ],
+          };
+        });
+        return { ok: true };
       },
       addJournalAudit: (entry) =>
         set((state) => ({
@@ -677,10 +874,13 @@ export const useStore = create<Store>()((set, get) => ({
         return before.length - kept.length;
       },
 
-      addAcompte: (acompte) =>
+      addAcompte: (acompte) => {
+        const id = uid("aco");
         set((state) => ({
-          acomptes: [{ ...acompte, id: uid("aco") }, ...state.acomptes],
-        })),
+          acomptes: [{ ...acompte, id }, ...state.acomptes],
+        }));
+        return id;
+      },
       updateAcompte: (id, data) =>
         set((state) => ({
           acomptes: state.acomptes.map((a) =>
@@ -691,6 +891,82 @@ export const useStore = create<Store>()((set, get) => ({
         set((state) => ({
           acomptes: state.acomptes.filter((a) => a.id !== id),
         })),
+      encaisserAcompte: (data) => {
+        const montantTTC = Math.round(Number(data.montantTTC) || 0);
+        if (!data.clientId || montantTTC <= 0) {
+          return { ok: false, reason: "Montant d'acompte invalide." };
+        }
+        const state = get();
+        const assujetti = appliqueTVA(state.parametres);
+        const { ht } = splitTTC(
+          montantTTC,
+          state.parametres.tauxTVA,
+          assujetti,
+        );
+        const numeroAco = nextNumero(
+          "ACO",
+          state.acomptes.map((a) => a.numero),
+        );
+        const generer = data.genererFactureAcompte !== false;
+        let factureAcompteId: string | undefined;
+        if (generer) {
+          const pdvId =
+            data.pointDeVenteId || state.pointsDeVente[0]?.id || "";
+          const numeroFac = nextNumeroDocumentCommercial({
+            prefix: "FACACO",
+            pointDeVenteId: pdvId,
+            pointsDeVente: state.pointsDeVente,
+            existing: state.factures.map((f) => f.numero),
+            date: new Date(data.date),
+          });
+          factureAcompteId = get().addFacture({
+            numero: numeroFac,
+            type: "acompte",
+            clientId: data.clientId,
+            pointDeVenteId: pdvId,
+            date: data.date,
+            echeance: data.date,
+            statut: "payee",
+            montantPaye: montantTTC,
+            devisId: data.devisId,
+            commandeId: data.commandeId,
+            factureParenteId: data.factureId,
+            tauxTVA: state.parametres.tauxTVA,
+            dateValidation: new Date().toISOString(),
+            note: `Facture d'acompte — ${numeroAco}`,
+            acomptesDocument: [],
+            lignes: [
+              {
+                id: "aco-ligne-1",
+                designation: `Acompte sur ${data.refDocument}`,
+                quantite: 1,
+                prixUnitaire: ht,
+                unite: "forfait",
+              },
+            ],
+          });
+        }
+        const acompteId = get().addAcompte({
+          numero: numeroAco,
+          date: data.date,
+          clientId: data.clientId,
+          montantTTC,
+          tauxTVA: state.parametres.tauxTVA,
+          modePaiement: data.modePaiement,
+          devisId: data.devisId,
+          commandeId: data.commandeId,
+          factureId: data.factureId || factureAcompteId,
+          factureAcompteId,
+          statut: data.factureId || factureAcompteId ? "impute" : "enregistre",
+          note: data.note,
+        });
+        return {
+          ok: true,
+          acompteId,
+          numero: numeroAco,
+          factureAcompteId,
+        };
+      },
 
       applyBusinessData: (data) =>
         set((state) => {
@@ -710,14 +986,23 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
       clearBusinessData: () => set({ ...emptyAppState() }),
-      resetBusinessData: async () => {
+      resetBusinessData: async (password) => {
         setBusinessSyncEnabled(false);
         try {
-          const res = await resetBusinessState();
+          const res = await resetBusinessState(password);
           set({
             ...pickAppState(res.data),
             ventes: rebuildVentesDepuisFactures(res.data.factures),
           });
+          return { ok: true as const };
+        } catch (err) {
+          return {
+            ok: false as const,
+            error:
+              err instanceof Error
+                ? err.message
+                : "Reset impossible.",
+          };
         } finally {
           setBusinessSyncEnabled(true);
         }
