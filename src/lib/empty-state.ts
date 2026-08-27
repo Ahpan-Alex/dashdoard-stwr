@@ -29,6 +29,7 @@ export function emptyAppState(): AppState {
         "Paiement à 30 jours. Acompte de 30 % à la commande. Espèces, virement ou Mobile Money.",
     },
     modelesDocuments: createDefaultModeles(),
+    preferencesModeles: {},
     bilanInitial: {
       date: new Date().toISOString(),
       immobilisations: 0,
@@ -40,8 +41,10 @@ export function emptyAppState(): AppState {
       dettesSociales: 0,
       emprunts: 0,
       resultatReporte: 0,
+      compteCourantAssocie: 0,
     },
     immobilisations: [],
+    mouvementsCompteCourant: [],
     clients: [],
     fournisseurs: [],
     devis: [],
@@ -59,6 +62,8 @@ export function emptyAppState(): AppState {
     ventes: [],
     charges: [],
     rapportsFinJournee: [],
+    inventaires: [],
+    journalActivites: [],
   };
 }
 
@@ -66,8 +71,10 @@ export function pickAppState(state: AppState): AppState {
   return {
     parametres: state.parametres,
     modelesDocuments: state.modelesDocuments,
+    preferencesModeles: state.preferencesModeles ?? {},
     bilanInitial: state.bilanInitial,
     immobilisations: state.immobilisations,
+    mouvementsCompteCourant: state.mouvementsCompteCourant ?? [],
     clients: state.clients,
     fournisseurs: state.fournisseurs,
     devis: state.devis,
@@ -85,6 +92,8 @@ export function pickAppState(state: AppState): AppState {
     ventes: state.ventes,
     charges: state.charges,
     rapportsFinJournee: state.rapportsFinJournee ?? [],
+    inventaires: state.inventaires ?? [],
+    journalActivites: state.journalActivites ?? [],
     pointDeVenteActifId: state.pointDeVenteActifId,
   };
 }

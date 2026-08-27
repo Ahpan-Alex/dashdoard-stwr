@@ -51,6 +51,7 @@ export function creerSnapshotPresentation(
           rubriques: [...modele.rubriques],
           mentionsLegales: modele.mentionsLegales,
           piedDePage: modele.piedDePage,
+          zones: modele.zones,
         }
       : undefined,
   };
@@ -110,6 +111,7 @@ export function presentationPourFacture(
         rubriques: snap.modele.rubriques,
         mentionsLegales: snap.modele.mentionsLegales,
         piedDePage: snap.modele.piedDePage,
+        zones: snap.modele.zones ?? modeleLive?.zones,
       }
     : modeleLive;
 

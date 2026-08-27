@@ -21,7 +21,7 @@ import {
   trouverDoublonsPotentiels,
 } from "@/lib/produits";
 import { useStore } from "@/lib/store";
-import { appliqueTVA } from "@/lib/commercial";
+import { appliqueTVA, libelleClient } from "@/lib/commercial";
 import type { CategorieProduit, Produit } from "@/lib/types";
 
 type ProduitFormState = {
@@ -988,7 +988,7 @@ export default function ParametresProduitsPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ACOMPTE_STATUTS, MODES_PAIEMENT } from "@/lib/commercial";
+import { ACOMPTE_STATUTS, MODES_PAIEMENT, libelleClient } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { ModePaiement } from "@/lib/types";
@@ -139,7 +139,7 @@ export default function AcomptesPage() {
                 .filter((c) => c.actif)
                 .map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nom}
+                    {libelleClient(c)}
                   </option>
                 ))}
             </select>

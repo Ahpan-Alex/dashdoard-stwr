@@ -21,12 +21,14 @@ import {
   appliqueTVA,
   acomptesPourDocument,
   creerSnapshotAcomptesDocument,
+  libelleClient,
   lignesAcomptesPourDocument,
   totauxBonDeLivraison,
 } from "@/lib/commercial";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 import type { BonDeLivraisonStatut } from "@/lib/types";
 
 type Filtre = "tous" | BonDeLivraisonStatut;
@@ -57,7 +59,6 @@ export default function ListeBonsDeLivraisonPage() {
     produits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     acomptes,
     factures,
     tarifsClients,
@@ -94,9 +95,7 @@ export default function ListeBonsDeLivraisonPage() {
     dateLivraison: new Date().toISOString().slice(0, 10),
   });
 
-  const modele = modelesDocuments.find(
-    (m) => m.type === "bon_de_livraison" && m.actif,
-  );
+  const modele = useModelePourType("bon_de_livraison");
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = bonsDeLivraison.find((b) => b.id === editId);
   const preview = bonsDeLivraison.find((b) => b.id === previewId);
@@ -333,7 +332,7 @@ export default function ListeBonsDeLivraisonPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

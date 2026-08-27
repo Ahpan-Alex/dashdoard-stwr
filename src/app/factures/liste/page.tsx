@@ -22,6 +22,7 @@ import {
   FACTURE_TYPES,
   appliqueTVA,
   htDepuisTTC,
+  libelleClient,
   montantAvoirRestantTTC,
   resteAPayer,
   statutApresAvoir,
@@ -39,6 +40,7 @@ import {
 import { presentationPourFacture } from "@/lib/document-presentation";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 import type { Facture, FactureStatut, FactureType, LigneDocument } from "@/lib/types";
 
 type FiltreListe =
@@ -138,7 +140,6 @@ export default function ListeFacturesPage() {
     pointsDeVente,
     parametres,
     acomptes,
-    modelesDocuments,
     commandes,
     devis,
     tarifsClients,
@@ -180,7 +181,7 @@ export default function ListeFacturesPage() {
   const [montantAvoirTTC, setMontantAvoirTTC] = useState("");
   const [motifAvoir, setMotifAvoir] = useState("");
 
-  const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
+  const modele = useModelePourType("facture");
   const assujetti = appliqueTVA(parametres);
   const editDoc = factures.find((f) => f.id === editId);
 
@@ -625,7 +626,7 @@ export default function ListeFacturesPage() {
                       .filter((c) => c.actif || c.id === meta.clientId)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

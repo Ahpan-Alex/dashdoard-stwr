@@ -24,6 +24,10 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { creancesClientsFactures, totalFacture } from "./commercial";
+import {
+  fluxTresorerieCompteCourant,
+  soldeCompteCourant,
+} from "./compte-courant";
 import { libelleProduit, prixAchatCatalogue, prixVenteCatalogue } from "./produits";
 import type {
   BilanInitial,
@@ -31,6 +35,7 @@ import type {
   EntreeStock,
   Facture,
   Immobilisation,
+  MouvementCompteCourant,
   PointDeVente,
   Produit,
   Vente,
@@ -752,6 +757,8 @@ export type Bilan = {
     stocks: number;
     creancesClients: number;
     disponibilites: number;
+    /** Solde débiteur du CCA (l'associé doit à l'entreprise). */
+    compteCourantDebiteur: number;
     total: number;
   };
   passif: {
@@ -761,8 +768,12 @@ export type Bilan = {
     emprunts: number;
     dettesFournisseurs: number;
     dettesSociales: number;
+    /** Solde créditeur du CCA (l'entreprise doit à l'associé). */
+    compteCourantCrediteur: number;
     total: number;
   };
+  /** Solde net du compte courant (positif = crédit, négatif = débit). */
+  compteCourantSolde: number;
 };
 
 /** Valeur nette d'une immobilisation (amortissement linéaire). */
@@ -813,6 +824,7 @@ export function bilanInstantane(
   immobilisations: Immobilisation[],
   factures: Facture[] = [],
   periodeOrRange: Periode | DateRange = "annee",
+  mouvementsCompteCourant: MouvementCompteCourant[] = [],
 ): Bilan {
   const range =
     typeof periodeOrRange === "string"
@@ -872,6 +884,18 @@ export function bilanInstantane(
     )
     .reduce((s, f) => s + f.montantPaye, 0);
 
+  const fluxCca = fluxTresorerieCompteCourant(
+    mouvementsCompteCourant,
+    range.fin,
+  );
+  const soldeCca = soldeCompteCourant(
+    bilanInitial.compteCourantAssocie ?? 0,
+    mouvementsCompteCourant,
+    range.fin,
+  );
+  const compteCourantCrediteur = Math.max(0, soldeCca);
+  const compteCourantDebiteur = Math.max(0, -soldeCca);
+
   const disponibilites = Math.max(
     0,
     bilanInitial.disponibilites +
@@ -879,7 +903,8 @@ export function bilanInstantane(
       encaissementsFactures -
       achatsPeriode -
       chargesPeriode -
-      acquisitionsPeriode,
+      acquisitionsPeriode +
+      fluxCca,
   );
 
   const creancesClients =
@@ -909,14 +934,19 @@ export function bilanInstantane(
   const emprunts = bilanInitial.emprunts;
 
   const actifTotal =
-    immobilisationsNettes + valeurStocks + creancesClients + disponibilites;
+    immobilisationsNettes +
+    valeurStocks +
+    creancesClients +
+    disponibilites +
+    compteCourantDebiteur;
   const passifHorsEquilibre =
     capital +
     resultatReporte +
     resultatExercice +
     emprunts +
     dettesFournisseurs +
-    dettesSociales;
+    dettesSociales +
+    compteCourantCrediteur;
   const ajustement = actifTotal - passifHorsEquilibre;
 
   return {
@@ -927,6 +957,7 @@ export function bilanInstantane(
       stocks: valeurStocks,
       creancesClients,
       disponibilites,
+      compteCourantDebiteur,
       total: actifTotal,
     },
     passif: {
@@ -936,8 +967,10 @@ export function bilanInstantane(
       emprunts,
       dettesFournisseurs,
       dettesSociales,
+      compteCourantCrediteur,
       total: actifTotal,
     },
+    compteCourantSolde: soldeCca,
   };
 }
 

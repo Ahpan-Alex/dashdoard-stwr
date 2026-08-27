@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertTriangle, Boxes } from "lucide-react";
+import { AlertTriangle, Boxes, Scale } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { InfoButton } from "@/components/info-button";
 import { calculerStocks } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { categorieLabel, libelleProduit } from "@/lib/produits";
@@ -37,13 +38,81 @@ export default function StocksPage() {
         description="État des stocks par produit et point de vente, valorisés au coût d'achat."
       />
 
+      <div className="mb-6 flex flex-col gap-3 rounded-[var(--radius)] border border-sea-200 bg-sea-100/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea-600 text-white">
+            <Scale className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-sea-700">
+              Méthode de valorisation des stocks
+            </p>
+            <p className="font-display text-lg font-semibold text-ink">
+              CUMP{" "}
+              <span className="text-sm font-normal text-muted">
+                — Coût Unitaire Moyen Pondéré
+              </span>
+            </p>
+          </div>
+        </div>
+        <InfoButton
+          title="La méthode CUMP (Coût Unitaire Moyen Pondéré)"
+          label="Comment ça marche ?"
+          className="shrink-0"
+        >
+          <p>
+            Le <strong>CUMP</strong> (Coût Unitaire Moyen Pondéré) valorise le
+            stock à un <strong>coût moyen recalculé à chaque entrée</strong> de
+            marchandise. Il évite d&apos;avoir à suivre chaque lot
+            individuellement et lisse les variations des prix d&apos;achat.
+          </p>
+          <div className="rounded-[var(--radius)] border border-line bg-sea-100/50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-sea-700">
+              Formule
+            </p>
+            <p className="mt-1 font-medium text-ink">
+              CUMP = (Valeur du stock existant + Valeur des nouvelles entrées) ÷
+              (Quantité existante + Quantité entrée)
+            </p>
+          </div>
+          <p>
+            Chaque unité vendue et le stock restant sont ensuite valorisés à ce
+            coût moyen, jusqu&apos;à la prochaine entrée qui recalcule le CUMP.
+          </p>
+          <div className="rounded-[var(--radius)] border border-line bg-card p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Exemple
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              <li>Entrée 1 : 10 kg à 8 000 Ar = 80 000 Ar</li>
+              <li>Entrée 2 : 5 kg à 11 000 Ar = 55 000 Ar</li>
+              <li>
+                CUMP = (80 000 + 55 000) ÷ (10 + 5) ={" "}
+                <strong>9 000 Ar / kg</strong>
+              </li>
+              <li>
+                Le stock restant est valorisé à 9 000 Ar le kg (et non au dernier
+                prix payé).
+              </li>
+            </ul>
+          </div>
+          <p className="text-muted">
+            Cette méthode est conforme au Plan Comptable Général et adaptée aux
+            produits interchangeables (produits de la mer, denrées, etc.).
+          </p>
+        </InfoButton>
+      </div>
+
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-[var(--radius)] border border-line bg-card p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Valeur au coût
+            Valeur au coût (CUMP)
           </p>
           <p className="mt-1 font-display text-2xl font-semibold">
             {formatCurrency(valeurAchat)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            Coût unitaire moyen pondéré
           </p>
         </div>
         <div className="rounded-[var(--radius)] border border-line bg-card p-4">

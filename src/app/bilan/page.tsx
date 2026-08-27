@@ -14,6 +14,7 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { PageHeader } from "@/components/page-header";
+import { AlerteCompteCourant } from "@/components/alerte-compte-courant";
 import { ConfirmPasswordModal } from "@/components/confirm-password-modal";
 import {
   bilanInstantane,
@@ -79,6 +80,7 @@ export default function BilanPage() {
     bilanInitial,
     immobilisations,
     factures,
+    mouvementsCompteCourant,
     resetBusinessData,
   } = useStore();
 
@@ -154,6 +156,7 @@ export default function BilanPage() {
     immobilisations,
     factures,
     range,
+    mouvementsCompteCourant,
   );
 
   const periodeLabel = useMemo(() => {
@@ -179,6 +182,9 @@ export default function BilanPage() {
             <Link href="/elements-bilan" className="btn btn-secondary no-print">
               <Landmark className="h-4 w-4" />
               Gérer le bilan
+            </Link>
+            <Link href="/compte-courant" className="btn btn-secondary no-print">
+              Compte courant
             </Link>
             <button
               className="btn btn-secondary no-print"
@@ -279,6 +285,10 @@ export default function BilanPage() {
           Compte de résultat sur la période · Bilan arrêté au{" "}
           {format(range.fin, "d MMMM yyyy", { locale: fr })}
         </p>
+      </div>
+
+      <div className="no-print mb-6">
+        <AlerteCompteCourant solde={bilan.compteCourantSolde} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -418,6 +428,14 @@ export default function BilanPage() {
               value={bilan.actif.disponibilites}
               indent
             />
+            {bilan.actif.compteCourantDebiteur > 0 && (
+              <Ligne
+                label="Compte courant d'associé (débit)"
+                value={bilan.actif.compteCourantDebiteur}
+                indent
+                highlight="negative"
+              />
+            )}
             <Ligne
               label="Total actif"
               value={bilan.actif.total}
@@ -450,6 +468,11 @@ export default function BilanPage() {
             <Ligne
               label="Dettes sociales"
               value={bilan.passif.dettesSociales}
+              indent
+            />
+            <Ligne
+              label="Compte courant d'associé"
+              value={bilan.passif.compteCourantCrediteur}
               indent
             />
             <Ligne

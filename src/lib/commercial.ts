@@ -3,6 +3,7 @@ import type {
   AcompteDocumentLigne,
   BonDeLivraison,
   Charge,
+  Client,
   Commande,
   Devis,
   EntreeStock,
@@ -505,6 +506,86 @@ export const CLIENT_TYPES: Record<string, string> = {
   grossiste: "Grossiste",
   autre: "Autre",
 };
+
+/** Préfixe des codes clients générés automatiquement. */
+export const CODE_CLIENT_PREFIX = "CLI";
+
+/** Normalise un code client (majuscules, tirets, sans caractères parasites). */
+export function normalizeCodeClient(raw: string) {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Z0-9-]/g, "");
+}
+
+/** Un code client est valide s'il fait 2 à 32 caractères alphanumériques / tirets. */
+export function isCodeClientValide(code: string) {
+  const c = normalizeCodeClient(code);
+  return c.length >= 2 && c.length <= 32;
+}
+
+/** Indique si un code est déjà attribué à un autre client. */
+export function codeClientDejaUtilise(
+  code: string,
+  clients: Pick<Client, "id" | "code">[],
+  exceptId?: string,
+) {
+  const n = normalizeCodeClient(code);
+  if (!n) return false;
+  return clients.some(
+    (c) => c.id !== exceptId && c.code && normalizeCodeClient(c.code) === n,
+  );
+}
+
+/** Prochain code séquentiel disponible (ex. CLI-0001, CLI-0002…). */
+export function nextCodeClient(
+  clients: Pick<Client, "code">[],
+  prefix = CODE_CLIENT_PREFIX,
+) {
+  const re = new RegExp(`^${prefix}-(\\d+)$`);
+  let max = 0;
+  for (const c of clients) {
+    if (!c.code) continue;
+    const m = normalizeCodeClient(c.code).match(re);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
+}
+
+/**
+ * Attribue un code unique aux clients qui n'en ont pas encore.
+ * Retourne le tableau d'origine si aucun changement n'est nécessaire.
+ */
+export function ensureCodesClients(clients: Client[]): Client[] {
+  const used = new Set(
+    clients
+      .filter((c) => c.code && c.code.trim())
+      .map((c) => normalizeCodeClient(c.code as string)),
+  );
+  let compteur = 0;
+  const genererCode = () => {
+    let code: string;
+    do {
+      compteur += 1;
+      code = `${CODE_CLIENT_PREFIX}-${String(compteur).padStart(4, "0")}`;
+    } while (used.has(code));
+    used.add(code);
+    return code;
+  };
+  let changed = false;
+  const out = clients.map((c) => {
+    if (c.code && c.code.trim()) return c;
+    changed = true;
+    return { ...c, code: genererCode() };
+  });
+  return changed ? out : clients;
+}
+
+/** Libellé d'un client avec son code (ex. « CLI-0001 — Restaurant Le Récif »). */
+export function libelleClient(c: Pick<Client, "code" | "nom">) {
+  return c.code ? `${c.code} — ${c.nom}` : c.nom;
+}
 
 export function motifLienClient(
   clientId: string,

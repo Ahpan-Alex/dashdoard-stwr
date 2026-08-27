@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { apiFetch, ApiError } from "./api";
+import { setActiviteActor } from "./activity-actor";
 import { roleHasPermission, type Permission, type RoleId } from "./auth/rbac";
 import type {
   AppUser,
@@ -128,6 +129,7 @@ type AuthStore = {
 };
 
 function applyMe(set: (p: Partial<AuthStore>) => void, me: MeResponse) {
+  setActiviteActor({ id: me.user.id, nom: me.user.nom });
   set({
     user: toAppUser(me.user),
     tenant: me.tenant,
@@ -149,6 +151,7 @@ function applyMe(set: (p: Partial<AuthStore>) => void, me: MeResponse) {
 }
 
 function clearAuth(set: (p: Partial<AuthStore>) => void) {
+  setActiviteActor(null);
   set({
     user: null,
     tenant: null,

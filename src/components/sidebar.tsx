@@ -18,11 +18,13 @@ import {
   Package,
   ScrollText,
   Wallet,
+  ArrowLeftRight,
   Briefcase,
   Settings,
   Waves,
   ChevronDown,
   Shield,
+  ClipboardCheck,
   LogOut,
   UserRound,
 } from "lucide-react";
@@ -107,6 +109,12 @@ const sections: { title: string; links: NavLink[] }[] = [
     links: [
       { href: "/entrees", label: "Entrées", icon: PackagePlus },
       { href: "/stocks", label: "Stocks", icon: Boxes },
+      {
+        href: "/inventaires",
+        label: "Inventaires",
+        icon: ClipboardCheck,
+        permission: "produits.lire",
+      },
       {
         href: "/charges",
         label: "Charges",
@@ -193,6 +201,11 @@ const sections: { title: string; links: NavLink[] }[] = [
     title: "Patrimoine",
     links: [
       { href: "/elements-bilan", label: "Éléments du bilan", icon: Landmark },
+      {
+        href: "/compte-courant",
+        label: "Compte courant d'associé",
+        icon: ArrowLeftRight,
+      },
       { href: "/points-de-vente", label: "Points de vente", icon: MapPin },
       {
         href: "/parametres",
@@ -284,7 +297,12 @@ const sections: { title: string; links: NavLink[] }[] = [
           },
           {
             href: "/administration/audit",
-            label: "Journal d'audit",
+            label: "Journal d'audit accès",
+            permission: "audit.lire",
+          },
+          {
+            href: "/administration/historique",
+            label: "Historique des actions",
             permission: "audit.lire",
           },
         ],

@@ -12,7 +12,13 @@ import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RowCrudActions } from "@/components/row-crud-actions";
-import { CLIENT_TYPES, motifLienClient, totalFacture } from "@/lib/commercial";
+import {
+  CLIENT_TYPES,
+  codeClientDejaUtilise,
+  motifLienClient,
+  nextCodeClient,
+  totalFacture,
+} from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Client } from "@/lib/types";
@@ -44,7 +50,7 @@ export default function ParametresClientsPage() {
 
   function ouvrirCreation() {
     setEditingId(null);
-    setForm(CLIENT_FORM_VIDE);
+    setForm({ ...CLIENT_FORM_VIDE, code: nextCodeClient(clients) });
     setOpen(true);
   }
 
@@ -64,6 +70,15 @@ export default function ParametresClientsPage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.nom.trim()) return;
+    if (
+      form.code.trim() &&
+      codeClientDejaUtilise(form.code, clients, editingId ?? undefined)
+    ) {
+      alert(
+        `Le code « ${form.code.trim()} » est déjà attribué à un autre client.`,
+      );
+      return;
+    }
     const payload = payloadClient(form);
     if (editingId) {
       updateClient(editingId, payload);
@@ -134,6 +149,7 @@ export default function ParametresClientsPage() {
         <table className="data">
           <thead>
             <tr>
+              <th>Code</th>
               <th>Client</th>
               <th>Type</th>
               <th>Contact</th>
@@ -155,6 +171,15 @@ export default function ParametresClientsPage() {
               const motif = motifLienClient(c.id, refsClient());
               return (
                 <tr key={c.id}>
+                  <td>
+                    {c.code ? (
+                      <span className="badge badge-sand font-mono">
+                        {c.code}
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                   <td className="font-medium">
                     {c.nom}
                     {c.ville && (
@@ -211,6 +236,7 @@ export default function ParametresClientsPage() {
         onClose={() => setApercuId(null)}
         onEdit={apercu ? () => demarrerEdition(apercu) : undefined}
       >
+        <LigneInfo label="Code client" value={apercu?.code} />
         <LigneInfo
           label="Type"
           value={apercu ? CLIENT_TYPES[apercu.type] : undefined}

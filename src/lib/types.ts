@@ -1,4 +1,4 @@
-import type { ModeleDocument } from "./document-templates";
+import type { ModeleDocument, PreferencesModeles } from "./document-templates";
 
 export type PointDeVente = {
   id: string;
@@ -196,6 +196,11 @@ export type BilanInitial = {
   dettesSociales: number;
   emprunts: number;
   resultatReporte: number;
+  /**
+   * Solde d'ouverture du compte courant d'associé / exploitant (Ar).
+   * Positif = crédit (l'entreprise doit à l'associé) ; négatif = débit.
+   */
+  compteCourantAssocie?: number;
 };
 
 export type ImmobilisationCategorie =
@@ -217,8 +222,46 @@ export type Immobilisation = {
   note?: string;
 };
 
+/** Apport ou retrait sur le compte courant d'associé / de l'exploitant. */
+export type TypeMouvementCompteCourant = "apport" | "retrait";
+
+export type MouvementCompteCourant = {
+  id: string;
+  date: string;
+  type: TypeMouvementCompteCourant;
+  /** Montant toujours positif (le sens est porté par `type`). */
+  montant: number;
+  libelle: string;
+  /** Auteur au moment de la saisie (traçabilité). */
+  userId?: string;
+  userNom?: string;
+};
+
+/** Réseaux sociaux d'un contact ou d'un client. */
+export type ReseauxSociaux = {
+  facebook?: string;
+  instagram?: string;
+  linkedin?: string;
+  whatsapp?: string;
+  siteWeb?: string;
+  autre?: string;
+};
+
+/** Contact rattaché à un client (interlocuteur). */
+export type ClientContact = {
+  id: string;
+  nom: string;
+  fonction?: string;
+  telephone?: string;
+  email?: string;
+  adresse?: string;
+  reseaux?: ReseauxSociaux;
+};
+
 export type Client = {
   id: string;
+  /** Code métier unique (ex. CLI-0001) évitant les confusions d'homonymes. */
+  code?: string;
   nom: string;
   telephone?: string;
   email?: string;
@@ -227,6 +270,8 @@ export type Client = {
   nif?: string;
   type: "particulier" | "restaurant" | "hotel" | "grossiste" | "autre";
   actif: boolean;
+  /** Interlocuteurs rattachés au client (fiche contacts). */
+  contacts?: ClientContact[];
 };
 
 export type Fournisseur = {
@@ -388,6 +433,7 @@ export type SnapshotPresentationDocument = {
     rubriques: import("./document-templates").DocumentRubriqueId[];
     mentionsLegales: string;
     piedDePage: string;
+    zones?: import("./document-templates").ModeleZones;
   };
 };
 
@@ -508,11 +554,99 @@ export type RapportFinJournee = {
   updatedAt: string;
 };
 
+/** Catégorie de justification d'un écart d'inventaire. */
+export type CategorieEcartInventaire =
+  | "casse"
+  | "vol"
+  | "perte_fraicheur"
+  | "erreur_saisie"
+  | "surplus_reception"
+  | "difference_comptage"
+  | "autre";
+
+export type InventaireLigne = {
+  produitId: string;
+  /** Stock théorique (calculé CUMP : entrées − sorties) au moment de l'inventaire */
+  stockTheorique: number;
+  /** Stock physique compté */
+  stockPhysique: number;
+  /** Coût unitaire moyen pondéré (CUMP) figé à l'inventaire */
+  coutUnitaire: number;
+  /** Justification de l'écart (boni ou mali) */
+  motif?: string;
+  categorieEcart?: CategorieEcartInventaire;
+};
+
+export type InventaireStatut = "brouillon" | "valide";
+
+/** Inventaire physique par point de vente avec justification des écarts. */
+export type Inventaire = {
+  id: string;
+  numero: string;
+  pointDeVenteId: string;
+  date: string;
+  statut: InventaireStatut;
+  lignes: InventaireLigne[];
+  note?: string;
+  /** Date de validation (clôture de l'inventaire) */
+  dateValidation?: string;
+};
+
+/** Entité concernée par une action tracée dans l'historique. */
+export type ActiviteEntite =
+  | "client"
+  | "produit"
+  | "categorie"
+  | "fournisseur"
+  | "point_de_vente"
+  | "charge"
+  | "tarif_client"
+  | "immobilisation"
+  | "devis"
+  | "commande"
+  | "bon_de_livraison"
+  | "facture"
+  | "acompte"
+  | "inventaire"
+  | "parametres"
+  | "bilan"
+  | "compte_courant"
+  | "autre";
+
+/** Nature de l'action tracée. */
+export type ActiviteAction =
+  | "creation"
+  | "modification"
+  | "suppression"
+  | "annulation"
+  | "validation"
+  | "activation"
+  | "desactivation"
+  | "autre";
+
+/** Journal d'historique des actions utilisateur (traçabilité). */
+export type JournalActivite = {
+  id: string;
+  date: string;
+  /** Auteur de l'action (au moment où elle est réalisée) */
+  userId?: string;
+  userNom?: string;
+  action: ActiviteAction;
+  entite: ActiviteEntite;
+  entiteId?: string;
+  /** Libellé lisible de l'entité (nom client, n° document…) */
+  libelle?: string;
+  detail?: string;
+};
+
 export type AppState = {
   parametres: Parametres;
   modelesDocuments: ModeleDocument[];
+  /** Préférences de modèle par utilisateur (personnalisation individuelle). */
+  preferencesModeles: PreferencesModeles;
   bilanInitial: BilanInitial;
   immobilisations: Immobilisation[];
+  mouvementsCompteCourant: MouvementCompteCourant[];
   clients: Client[];
   fournisseurs: Fournisseur[];
   devis: Devis[];
@@ -530,5 +664,7 @@ export type AppState = {
   ventes: Vente[];
   charges: Charge[];
   rapportsFinJournee: RapportFinJournee[];
+  inventaires: Inventaire[];
+  journalActivites: JournalActivite[];
   pointDeVenteActifId: string | "tous";
 };

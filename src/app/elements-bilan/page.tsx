@@ -84,6 +84,9 @@ export default function ElementsBilanPage() {
               <FileSpreadsheet className="h-4 w-4" />
               Voir le bilan
             </Link>
+            <Link href="/compte-courant" className="btn btn-secondary">
+              Compte courant
+            </Link>
           </div>
         }
       />

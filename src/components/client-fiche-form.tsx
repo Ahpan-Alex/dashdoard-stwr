@@ -5,6 +5,7 @@ import { CLIENT_TYPES } from "@/lib/commercial";
 import type { Client } from "@/lib/types";
 
 export type ClientFormState = {
+  code: string;
   nom: string;
   telephone: string;
   email: string;
@@ -15,6 +16,7 @@ export type ClientFormState = {
 };
 
 export const CLIENT_FORM_VIDE: ClientFormState = {
+  code: "",
   nom: "",
   telephone: "",
   email: "",
@@ -26,6 +28,7 @@ export const CLIENT_FORM_VIDE: ClientFormState = {
 
 export function clientVersForm(c: Client): ClientFormState {
   return {
+    code: c.code ?? "",
     nom: c.nom,
     telephone: c.telephone ?? "",
     email: c.email ?? "",
@@ -40,6 +43,7 @@ export function payloadClient(
   form: ClientFormState,
 ): Omit<Client, "id" | "actif"> {
   return {
+    code: form.code.trim() || undefined,
     nom: form.nom.trim(),
     telephone: form.telephone.trim() || undefined,
     email: form.email.trim() || undefined,
@@ -70,7 +74,16 @@ export function ClientFicheForm({
       onSubmit={onSubmit}
       className="mb-6 grid gap-4 rounded-[var(--radius)] border border-sea-200 bg-card p-5 sm:grid-cols-2 lg:grid-cols-3"
     >
-      <label className="block text-xs font-semibold text-muted sm:col-span-2">
+      <label className="block text-xs font-semibold text-muted">
+        Code client
+        <input
+          className="input mt-1"
+          value={form.code}
+          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          placeholder="Ex. CLI-0001"
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted sm:col-span-2 lg:col-span-2">
         Nom
         <input
           className="input mt-1"

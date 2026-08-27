@@ -27,7 +27,12 @@ const MENUS: {
   },
   {
     href: "/administration/audit",
-    label: "Journal d'audit",
+    label: "Journal d'audit accès",
+    permission: "audit.lire",
+  },
+  {
+    href: "/administration/historique",
+    label: "Historique des actions",
     permission: "audit.lire",
   },
 ];

@@ -21,6 +21,7 @@ export default function ParametresBilanInitialPage() {
     dettesSociales: String(bilanInitial.dettesSociales),
     emprunts: String(bilanInitial.emprunts),
     resultatReporte: String(bilanInitial.resultatReporte),
+    compteCourantAssocie: String(bilanInitial.compteCourantAssocie ?? 0),
   });
 
   function saveOuverture(e: FormEvent) {
@@ -36,6 +37,7 @@ export default function ParametresBilanInitialPage() {
       dettesSociales: Number(ouverture.dettesSociales) || 0,
       emprunts: Number(ouverture.emprunts) || 0,
       resultatReporte: Number(ouverture.resultatReporte) || 0,
+      compteCourantAssocie: Number(ouverture.compteCourantAssocie) || 0,
     });
     alert("Bilan initial enregistré.");
   }
@@ -62,10 +64,15 @@ export default function ParametresBilanInitialPage() {
         description={`Soldes d'ouverture — ${parametres.nomEntreprise}`}
         showPosSelector={false}
         actions={
-          <Link href="/bilan" className="btn btn-secondary">
-            <FileSpreadsheet className="h-4 w-4" />
-            Voir le bilan
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/compte-courant" className="btn btn-secondary">
+              Compte courant
+            </Link>
+            <Link href="/bilan" className="btn btn-secondary">
+              <FileSpreadsheet className="h-4 w-4" />
+              Voir le bilan
+            </Link>
+          </div>
         }
       />
       <ParametresSubnav />
@@ -102,6 +109,7 @@ export default function ParametresBilanInitialPage() {
           {field("Emprunts (Ar)", "emprunts")}
           {field("Dettes fournisseurs (Ar)", "dettesFournisseurs")}
           {field("Dettes sociales (Ar)", "dettesSociales")}
+          {field("Compte courant d'associé (Ar, + crédit / − débit)", "compteCourantAssocie")}
           <div className="sm:col-span-2 lg:col-span-3">
             <button type="submit" className="btn btn-primary">
               Enregistrer le bilan initial

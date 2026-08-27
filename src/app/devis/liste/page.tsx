@@ -24,12 +24,14 @@ import {
   DEVIS_STATUTS,
   appliqueTVA,
   acomptesPourDocument,
+  libelleClient,
   lignesAcomptesPourDocument,
   nextNumero,
   totauxDevis,
 } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 import type { DevisStatut } from "@/lib/types";
 
 type Filtre = "tous" | DevisStatut;
@@ -59,7 +61,6 @@ export default function ListeDevisPage() {
     categoriesProduits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     commandes,
     tarifsClients,
     entrees,
@@ -95,7 +96,7 @@ export default function ListeDevisPage() {
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
-  const modele = modelesDocuments.find((m) => m.type === "devis" && m.actif);
+  const modele = useModelePourType("devis");
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = devis.find((d) => d.id === editId);
   const preview = devis.find((d) => d.id === previewId);
@@ -321,7 +322,7 @@ export default function ListeDevisPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

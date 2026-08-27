@@ -10,8 +10,9 @@ import {
 } from "@/components/document-saisie-wizard";
 import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, nextNumero } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, nextNumero } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 
 export default function BonsDeLivraisonPage() {
   const {
@@ -22,7 +23,6 @@ export default function BonsDeLivraisonPage() {
     produits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     tarifsClients,
     categoriesProduits,
     entrees,
@@ -46,9 +46,7 @@ export default function BonsDeLivraisonPage() {
     dateLivraison: new Date().toISOString().slice(0, 10),
   });
 
-  const modele = modelesDocuments.find(
-    (m) => m.type === "bon_de_livraison" && m.actif,
-  );
+  const modele = useModelePourType("bon_de_livraison");
   const assujettiTVA = appliqueTVA(parametres);
 
   function ouvrirFormulaire() {
@@ -208,7 +206,7 @@ export default function BonsDeLivraisonPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

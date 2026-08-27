@@ -1,7 +1,12 @@
 "use client";
 
 import { create } from "zustand";
-import type { ModeleDocument } from "./document-templates";
+import {
+  modelePourType,
+  type ModeleDocument,
+  type PreferencesModeles,
+  type TypeDocumentCommercial,
+} from "./document-templates";
 import {
   creerEntreeHistorique,
   produitEstReference,
@@ -10,9 +15,11 @@ import { creerEntreeJournal, factureEstFiscale, nextNumeroDocumentCommercial } f
 import { stockDisponible } from "./calculations";
 import {
   appliqueTVA,
+  ensureCodesClients,
   fournisseurEstReference,
   motifLienClient,
   motifLienPointDeVente,
+  nextCodeClient,
   nextNumero,
   rebuildVentesDepuisFactures,
   splitTTC,
@@ -29,8 +36,11 @@ import {
 } from "./document-presentation";
 import { emptyAppState, pickAppState } from "./empty-state";
 import { createId } from "./id";
+import { getActiviteActor } from "./activity-actor";
 import type {
   Acompte,
+  ActiviteAction,
+  ActiviteEntite,
   AppState,
   BilanInitial,
   BonDeLivraison,
@@ -44,8 +54,11 @@ import type {
   Fournisseur,
   HistoriquePrix,
   Immobilisation,
+  Inventaire,
+  JournalActivite,
   JournalAudit,
   ModePaiement,
+  MouvementCompteCourant,
   Parametres,
   PointDeVente,
   Produit,
@@ -57,8 +70,10 @@ import type {
 type Store = {
   parametres: Parametres;
   modelesDocuments: ModeleDocument[];
+  preferencesModeles: PreferencesModeles;
   bilanInitial: BilanInitial;
   immobilisations: Immobilisation[];
+  mouvementsCompteCourant: MouvementCompteCourant[];
   clients: Client[];
   fournisseurs: Fournisseur[];
   devis: Devis[];
@@ -76,15 +91,23 @@ type Store = {
   ventes: Vente[];
   charges: Charge[];
   rapportsFinJournee: RapportFinJournee[];
+  inventaires: Inventaire[];
+  journalActivites: JournalActivite[];
   pointDeVenteActifId: string | "tous";
 
   setPointDeVenteActif: (id: string | "tous") => void;
   updateParametres: (data: Partial<Parametres>) => void;
   updateBilanInitial: (data: Partial<BilanInitial>) => void;
 
-  addModeleDocument: (m: Omit<ModeleDocument, "id">) => void;
+  addModeleDocument: (m: Omit<ModeleDocument, "id">) => string;
   updateModeleDocument: (id: string, data: Partial<ModeleDocument>) => void;
   deleteModeleDocument: (id: string) => void;
+  /** Définit le modèle préféré d'un utilisateur pour un type de document. */
+  setModelePreference: (
+    userId: string,
+    type: TypeDocumentCommercial,
+    modeleId: string | null,
+  ) => void;
 
   addPointDeVente: (pdv: Omit<PointDeVente, "id">) => void;
   updatePointDeVente: (id: string, data: Partial<PointDeVente>) => void;
@@ -131,6 +154,15 @@ type Store = {
   updateImmobilisation: (id: string, data: Partial<Immobilisation>) => void;
   deleteImmobilisation: (id: string) => void;
 
+  addMouvementCompteCourant: (
+    m: Omit<MouvementCompteCourant, "id" | "userId" | "userNom">,
+  ) => string;
+  updateMouvementCompteCourant: (
+    id: string,
+    data: Partial<Omit<MouvementCompteCourant, "id" | "userId" | "userNom">>,
+  ) => void;
+  deleteMouvementCompteCourant: (id: string) => void;
+
   addClient: (client: Omit<Client, "id">) => void;
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => { ok: boolean; reason?: string };
@@ -164,6 +196,21 @@ type Store = {
   addJournalAudit: (entry: Omit<JournalAudit, "id">) => void;
   /** Purge les entrées journal métier plus anciennes que N jours. Retourne le nombre supprimé. */
   purgeJournalAuditOlderThan: (days: number) => number;
+
+  /** Journalise une action significative dans l'historique (traçabilité). */
+  logActivite: (
+    action: ActiviteAction,
+    entite: ActiviteEntite,
+    opts?: { entiteId?: string; libelle?: string; detail?: string },
+  ) => void;
+  /** Purge l'historique des actions plus ancien que N jours. Retourne le nombre supprimé. */
+  purgeJournalActivitesOlderThan: (days: number) => number;
+
+  addInventaire: (inventaire: Omit<Inventaire, "id">) => string;
+  updateInventaire: (id: string, data: Partial<Inventaire>) => void;
+  deleteInventaire: (id: string) => void;
+  /** Clôture un inventaire (statut validé) et le trace dans l'historique. */
+  validerInventaire: (id: string) => void;
 
   addAcompte: (acompte: Omit<Acompte, "id">) => string;
   updateAcompte: (id: string, data: Partial<Acompte>) => void;
@@ -199,14 +246,42 @@ function uid(prefix: string) {
   return createId(prefix);
 }
 
+function modeleCourant(
+  state: { modelesDocuments: ModeleDocument[]; preferencesModeles: PreferencesModeles },
+  type: TypeDocumentCommercial,
+) {
+  return modelePourType(state.modelesDocuments, type, {
+    preferences: state.preferencesModeles,
+    userId: getActiviteActor().id,
+  });
+}
+
+/** Construit une entrée de journal d'historique attribuée à l'utilisateur courant. */
+function entreeActivite(
+  action: ActiviteAction,
+  entite: ActiviteEntite,
+  opts?: { entiteId?: string; libelle?: string; detail?: string },
+): JournalActivite {
+  const actor = getActiviteActor();
+  return {
+    id: createId("act"),
+    date: new Date().toISOString(),
+    userId: actor.id,
+    userNom: actor.nom,
+    action,
+    entite,
+    entiteId: opts?.entiteId,
+    libelle: opts?.libelle,
+    detail: opts?.detail,
+  };
+}
+
 export const useStore = create<Store>()((set, get) => ({
       ...emptyAppState(),
       setPointDeVenteActif: (id) => set({ pointDeVenteActifId: id }),
       updateParametres: (data) =>
         set((state) => {
-          const modele = state.modelesDocuments.find(
-            (m) => m.type === "facture" && m.actif,
-          );
+          const modele = modeleCourant(state, "facture");
           // Avant d'appliquer les nouveaux params : figer les factures fiscales
           // encore sans snapshot (état précédent = non impactées par la modif).
           const factures = state.factures.map((f) =>
@@ -215,6 +290,12 @@ export const useStore = create<Store>()((set, get) => ({
           return {
             parametres: { ...state.parametres, ...data },
             factures,
+            journalActivites: [
+              entreeActivite("modification", "parametres", {
+                libelle: "Paramètres entreprise",
+              }),
+              ...state.journalActivites,
+            ],
           };
         }),
       updateBilanInitial: (data) =>
@@ -222,18 +303,16 @@ export const useStore = create<Store>()((set, get) => ({
           bilanInitial: { ...state.bilanInitial, ...data },
         })),
 
-      addModeleDocument: (m) =>
+      addModeleDocument: (m) => {
+        const id = uid("modele");
         set((state) => ({
-          modelesDocuments: [
-            ...state.modelesDocuments,
-            { ...m, id: uid("modele") },
-          ],
-        })),
+          modelesDocuments: [...state.modelesDocuments, { ...m, id }],
+        }));
+        return id;
+      },
       updateModeleDocument: (id, data) =>
         set((state) => {
-          const modeleFacture = state.modelesDocuments.find(
-            (m) => m.type === "facture" && m.actif,
-          );
+          const modeleFacture = modeleCourant(state, "facture");
           const factures = state.factures.map((f) =>
             avecPresentationSiBesoin(f, state.parametres, modeleFacture),
           );
@@ -245,23 +324,65 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
       deleteModeleDocument: (id) =>
-        set((state) => ({
-          modelesDocuments: state.modelesDocuments.filter((m) => m.id !== id),
-        })),
+        set((state) => {
+          // Nettoie les préférences pointant vers le modèle supprimé.
+          const prefs: PreferencesModeles = {};
+          for (const [uid, map] of Object.entries(state.preferencesModeles)) {
+            const clean = { ...map };
+            for (const t of Object.keys(clean) as TypeDocumentCommercial[]) {
+              if (clean[t] === id) delete clean[t];
+            }
+            prefs[uid] = clean;
+          }
+          return {
+            modelesDocuments: state.modelesDocuments.filter((m) => m.id !== id),
+            preferencesModeles: prefs,
+          };
+        }),
+      setModelePreference: (userId, type, modeleId) =>
+        set((state) => {
+          const current = state.preferencesModeles[userId] ?? {};
+          const next = { ...current };
+          if (modeleId) next[type] = modeleId;
+          else delete next[type];
+          return {
+            preferencesModeles: {
+              ...state.preferencesModeles,
+              [userId]: next,
+            },
+          };
+        }),
 
       addPointDeVente: (pdv) =>
-        set((state) => ({
-          pointsDeVente: [
-            ...state.pointsDeVente,
-            { ...pdv, id: uid("pdv") },
-          ],
-        })),
+        set((state) => {
+          const nouveau = { ...pdv, id: uid("pdv") };
+          return {
+            pointsDeVente: [...state.pointsDeVente, nouveau],
+            journalActivites: [
+              entreeActivite("creation", "point_de_vente", {
+                entiteId: nouveau.id,
+                libelle: nouveau.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updatePointDeVente: (id, data) =>
-        set((state) => ({
-          pointsDeVente: state.pointsDeVente.map((p) =>
-            p.id === id ? { ...p, ...data } : p,
-          ),
-        })),
+        set((state) => {
+          const prev = state.pointsDeVente.find((p) => p.id === id);
+          return {
+            pointsDeVente: state.pointsDeVente.map((p) =>
+              p.id === id ? { ...p, ...data } : p,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "point_de_vente", {
+                entiteId: id,
+                libelle: prev?.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deletePointDeVente: (id) => {
         const state = get();
         const pdv = state.pointsDeVente.find((p) => p.id === id);
@@ -282,6 +403,13 @@ export const useStore = create<Store>()((set, get) => ({
           pointsDeVente: s.pointsDeVente.filter((p) => p.id !== id),
           pointDeVenteActifId:
             s.pointDeVenteActifId === id ? "tous" : s.pointDeVenteActifId,
+          journalActivites: [
+            entreeActivite("suppression", "point_de_vente", {
+              entiteId: id,
+              libelle: pdv.nom,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
@@ -350,19 +478,49 @@ export const useStore = create<Store>()((set, get) => ({
         })),
 
       addCharge: (charge) =>
-        set((state) => ({
-          charges: [{ ...charge, id: uid("ch") }, ...state.charges],
-        })),
+        set((state) => {
+          const nouvelle = { ...charge, id: uid("ch") };
+          return {
+            charges: [nouvelle, ...state.charges],
+            journalActivites: [
+              entreeActivite("creation", "charge", {
+                entiteId: nouvelle.id,
+                libelle: nouvelle.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateCharge: (id, data) =>
-        set((state) => ({
-          charges: state.charges.map((c) =>
-            c.id === id ? { ...c, ...data } : c,
-          ),
-        })),
+        set((state) => {
+          const prev = state.charges.find((c) => c.id === id);
+          return {
+            charges: state.charges.map((c) =>
+              c.id === id ? { ...c, ...data } : c,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "charge", {
+                entiteId: id,
+                libelle: prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteCharge: (id) =>
-        set((state) => ({
-          charges: state.charges.filter((c) => c.id !== id),
-        })),
+        set((state) => {
+          const prev = state.charges.find((c) => c.id === id);
+          return {
+            charges: state.charges.filter((c) => c.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "charge", {
+                entiteId: id,
+                libelle: prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       upsertRapportFinJournee: (data) =>
         set((state) => {
@@ -409,9 +567,19 @@ export const useStore = create<Store>()((set, get) => ({
         })),
 
       addProduit: (produit) =>
-        set((state) => ({
-          produits: [{ ...produit, id: uid("prod") }, ...state.produits],
-        })),
+        set((state) => {
+          const nouveau = { ...produit, id: uid("prod") };
+          return {
+            produits: [nouveau, ...state.produits],
+            journalActivites: [
+              entreeActivite("creation", "produit", {
+                entiteId: nouveau.id,
+                libelle: nouveau.libelleCourt || nouveau.libelleLong,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateProduit: (id, data, opts) =>
         set((state) => {
           const prev = state.produits.find((p) => p.id === id);
@@ -451,14 +619,31 @@ export const useStore = create<Store>()((set, get) => ({
           return {
             produits: state.produits.map((p) => (p.id === id ? next : p)),
             historiquesPrix: [...hist, ...state.historiquesPrix],
+            journalActivites: [
+              entreeActivite("modification", "produit", {
+                entiteId: id,
+                libelle: next.libelleCourt || next.libelleLong,
+              }),
+              ...state.journalActivites,
+            ],
           };
         }),
       desactiverProduit: (id) =>
-        set((state) => ({
-          produits: state.produits.map((p) =>
-            p.id === id ? { ...p, actif: false } : p,
-          ),
-        })),
+        set((state) => {
+          const prev = state.produits.find((p) => p.id === id);
+          return {
+            produits: state.produits.map((p) =>
+              p.id === id ? { ...p, actif: false } : p,
+            ),
+            journalActivites: [
+              entreeActivite("desactivation", "produit", {
+                entiteId: id,
+                libelle: prev?.libelleCourt || prev?.libelleLong,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteProduit: (id) => {
         const state = get();
         if (
@@ -477,26 +662,54 @@ export const useStore = create<Store>()((set, get) => ({
               "Produit déjà utilisé (stocks, ventes ou documents). Désactivez-le pour préserver l'historique.",
           };
         }
+        const prod = state.produits.find((p) => p.id === id);
         set((s) => ({
           produits: s.produits.filter((p) => p.id !== id),
           tarifsClients: s.tarifsClients.filter((t) => t.produitId !== id),
+          journalActivites: [
+            entreeActivite("suppression", "produit", {
+              entiteId: id,
+              libelle: prod?.libelleCourt || prod?.libelleLong,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
 
       addCategorieProduit: (cat) =>
-        set((state) => ({
-          categoriesProduits: [
-            ...state.categoriesProduits,
-            { ...cat, id: uid("cat") },
-          ],
-        })),
+        set((state) => {
+          const id = uid("cat");
+          return {
+            categoriesProduits: [
+              ...state.categoriesProduits,
+              { ...cat, id },
+            ],
+            journalActivites: [
+              entreeActivite("creation", "categorie", {
+                entiteId: id,
+                libelle: cat.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateCategorieProduit: (id, data) =>
-        set((state) => ({
-          categoriesProduits: state.categoriesProduits.map((c) =>
-            c.id === id ? { ...c, ...data } : c,
-          ),
-        })),
+        set((state) => {
+          const prev = state.categoriesProduits.find((c) => c.id === id);
+          return {
+            categoriesProduits: state.categoriesProduits.map((c) =>
+              c.id === id ? { ...c, ...data } : c,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "categorie", {
+                entiteId: id,
+                libelle: prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteCategorieProduit: (id) => {
         const state = get();
         const enfants = state.categoriesProduits.filter(
@@ -517,19 +730,35 @@ export const useStore = create<Store>()((set, get) => ({
             reason: `${nbProduits} produit(s) y sont rattachés. Réassignez-les avant de supprimer.`,
           };
         }
+        const cat = state.categoriesProduits.find((c) => c.id === id);
         set((s) => ({
           categoriesProduits: s.categoriesProduits.filter((c) => c.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "categorie", {
+              entiteId: id,
+              libelle: cat?.libelle,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
 
       addTarifClient: (tarif) =>
-        set((state) => ({
-          tarifsClients: [
-            { ...tarif, id: uid("tarif") },
-            ...state.tarifsClients,
-          ],
-        })),
+        set((state) => {
+          const id = uid("tarif");
+          const cli = state.clients.find((c) => c.id === tarif.clientId);
+          return {
+            tarifsClients: [{ ...tarif, id }, ...state.tarifsClients],
+            journalActivites: [
+              entreeActivite("creation", "tarif_client", {
+                entiteId: id,
+                libelle: cli?.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateTarifClient: (id, data) =>
         set((state) => {
           const prev = state.tarifsClients.find((t) => t.id === id);
@@ -554,38 +783,170 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
       deleteTarifClient: (id) =>
-        set((state) => ({
-          tarifsClients: state.tarifsClients.filter((t) => t.id !== id),
-        })),
+        set((state) => {
+          const prev = state.tarifsClients.find((t) => t.id === id);
+          const cli = state.clients.find((c) => c.id === prev?.clientId);
+          return {
+            tarifsClients: state.tarifsClients.filter((t) => t.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "tarif_client", {
+                entiteId: id,
+                libelle: cli?.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       addImmobilisation: (immo) =>
-        set((state) => ({
-          immobilisations: [
-            { ...immo, id: uid("immo") },
-            ...state.immobilisations,
-          ],
-        })),
+        set((state) => {
+          const id = uid("immo");
+          return {
+            immobilisations: [{ ...immo, id }, ...state.immobilisations],
+            journalActivites: [
+              entreeActivite("creation", "immobilisation", {
+                entiteId: id,
+                libelle: immo.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateImmobilisation: (id, data) =>
-        set((state) => ({
-          immobilisations: state.immobilisations.map((i) =>
-            i.id === id ? { ...i, ...data } : i,
-          ),
-        })),
+        set((state) => {
+          const prev = state.immobilisations.find((i) => i.id === id);
+          return {
+            immobilisations: state.immobilisations.map((i) =>
+              i.id === id ? { ...i, ...data } : i,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "immobilisation", {
+                entiteId: id,
+                libelle: prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteImmobilisation: (id) =>
+        set((state) => {
+          const prev = state.immobilisations.find((i) => i.id === id);
+          return {
+            immobilisations: state.immobilisations.filter((i) => i.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "immobilisation", {
+                entiteId: id,
+                libelle: prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+
+      addMouvementCompteCourant: (m) => {
+        const actor = getActiviteActor();
+        const id = uid("cca");
         set((state) => ({
-          immobilisations: state.immobilisations.filter((i) => i.id !== id),
-        })),
+          mouvementsCompteCourant: [
+            {
+              ...m,
+              id,
+              userId: actor.id,
+              userNom: actor.nom,
+            },
+            ...state.mouvementsCompteCourant,
+          ],
+          journalActivites: [
+            entreeActivite("creation", "compte_courant", {
+              entiteId: id,
+              libelle: m.libelle,
+              detail: `${m.type === "apport" ? "Apport" : "Retrait"} de ${m.montant} Ar`,
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return id;
+      },
+      updateMouvementCompteCourant: (id, data) =>
+        set((state) => {
+          const prev = state.mouvementsCompteCourant.find((x) => x.id === id);
+          return {
+            mouvementsCompteCourant: state.mouvementsCompteCourant.map((x) =>
+              x.id === id ? { ...x, ...data } : x,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "compte_courant", {
+                entiteId: id,
+                libelle: data.libelle ?? prev?.libelle,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+      deleteMouvementCompteCourant: (id) =>
+        set((state) => {
+          const prev = state.mouvementsCompteCourant.find((x) => x.id === id);
+          return {
+            mouvementsCompteCourant: state.mouvementsCompteCourant.filter(
+              (x) => x.id !== id,
+            ),
+            journalActivites: [
+              entreeActivite("suppression", "compte_courant", {
+                entiteId: id,
+                libelle: prev?.libelle,
+                detail: prev
+                  ? `${prev.type === "apport" ? "Apport" : "Retrait"} de ${prev.montant} Ar`
+                  : undefined,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       addClient: (client) =>
-        set((state) => ({
-          clients: [...state.clients, { ...client, id: uid("cli") }],
-        })),
+        set((state) => {
+          const nouveau = {
+            ...client,
+            code:
+              client.code && client.code.trim()
+                ? client.code.trim()
+                : nextCodeClient(state.clients),
+            id: uid("cli"),
+          };
+          return {
+            clients: [...state.clients, nouveau],
+            journalActivites: [
+              entreeActivite("creation", "client", {
+                entiteId: nouveau.id,
+                libelle: nouveau.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateClient: (id, data) =>
-        set((state) => ({
-          clients: state.clients.map((c) =>
-            c.id === id ? { ...c, ...data } : c,
-          ),
-        })),
+        set((state) => {
+          const prev = state.clients.find((c) => c.id === id);
+          const detail =
+            "actif" in data && Object.keys(data).length === 1
+              ? data.actif
+                ? "Réactivation"
+                : "Désactivation"
+              : undefined;
+          return {
+            clients: state.clients.map((c) =>
+              c.id === id ? { ...c, ...data } : c,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "client", {
+                entiteId: id,
+                libelle: prev?.nom,
+                detail,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteClient: (id) => {
         const state = get();
         const client = state.clients.find((c) => c.id === id);
@@ -603,23 +964,47 @@ export const useStore = create<Store>()((set, get) => ({
         }
         set((s) => ({
           clients: s.clients.filter((c) => c.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "client", {
+              entiteId: id,
+              libelle: client.nom,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
 
       addFournisseur: (frn) =>
-        set((state) => ({
-          fournisseurs: [
-            ...state.fournisseurs,
-            { ...frn, id: uid("frn") },
-          ],
-        })),
+        set((state) => {
+          const nouveau = { ...frn, id: uid("frn") };
+          return {
+            fournisseurs: [...state.fournisseurs, nouveau],
+            journalActivites: [
+              entreeActivite("creation", "fournisseur", {
+                entiteId: nouveau.id,
+                libelle: nouveau.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateFournisseur: (id, data) =>
-        set((state) => ({
-          fournisseurs: state.fournisseurs.map((f) =>
-            f.id === id ? { ...f, ...data } : f,
-          ),
-        })),
+        set((state) => {
+          const prev = state.fournisseurs.find((f) => f.id === id);
+          return {
+            fournisseurs: state.fournisseurs.map((f) =>
+              f.id === id ? { ...f, ...data } : f,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "fournisseur", {
+                entiteId: id,
+                libelle: prev?.nom,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteFournisseur: (id) => {
         const state = get();
         const frn = state.fournisseurs.find((f) => f.id === id);
@@ -633,6 +1018,13 @@ export const useStore = create<Store>()((set, get) => ({
         }
         set((s) => ({
           fournisseurs: s.fournisseurs.filter((f) => f.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "fournisseur", {
+              entiteId: id,
+              libelle: frn.nom,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
@@ -641,57 +1033,145 @@ export const useStore = create<Store>()((set, get) => ({
         const id = uid("dev");
         set((state) => ({
           devis: [{ ...devis, id }, ...state.devis],
+          journalActivites: [
+            entreeActivite("creation", "devis", {
+              entiteId: id,
+              libelle: devis.numero,
+            }),
+            ...state.journalActivites,
+          ],
         }));
         return id;
       },
       updateDevis: (id, data) =>
-        set((state) => ({
-          devis: state.devis.map((d) => (d.id === id ? { ...d, ...data } : d)),
-        })),
+        set((state) => {
+          const prev = state.devis.find((d) => d.id === id);
+          const annulation = data.statut === "refuse" || data.statut === "expire";
+          return {
+            devis: state.devis.map((d) =>
+              d.id === id ? { ...d, ...data } : d,
+            ),
+            journalActivites: [
+              entreeActivite(
+                annulation ? "annulation" : "modification",
+                "devis",
+                { entiteId: id, libelle: prev?.numero },
+              ),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteDevis: (id) =>
-        set((state) => ({
-          devis: state.devis.filter((d) => d.id !== id),
-        })),
+        set((state) => {
+          const prev = state.devis.find((d) => d.id === id);
+          return {
+            devis: state.devis.filter((d) => d.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "devis", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       addCommande: (cmd) => {
         const id = uid("cmd");
         set((state) => ({
           commandes: [{ ...cmd, id }, ...state.commandes],
+          journalActivites: [
+            entreeActivite("creation", "commande", {
+              entiteId: id,
+              libelle: cmd.numero,
+            }),
+            ...state.journalActivites,
+          ],
         }));
         return id;
       },
       updateCommande: (id, data) =>
-        set((state) => ({
-          commandes: state.commandes.map((c) =>
-            c.id === id ? { ...c, ...data } : c,
-          ),
-        })),
+        set((state) => {
+          const prev = state.commandes.find((c) => c.id === id);
+          return {
+            commandes: state.commandes.map((c) =>
+              c.id === id ? { ...c, ...data } : c,
+            ),
+            journalActivites: [
+              entreeActivite(
+                data.statut === "annulee" ? "annulation" : "modification",
+                "commande",
+                { entiteId: id, libelle: prev?.numero },
+              ),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteCommande: (id) =>
-        set((state) => ({
-          commandes: state.commandes.filter((c) => c.id !== id),
-        })),
+        set((state) => {
+          const prev = state.commandes.find((c) => c.id === id);
+          return {
+            commandes: state.commandes.filter((c) => c.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "commande", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       addBonDeLivraison: (bl) =>
-        set((state) => ({
-          bonsDeLivraison: [{ ...bl, id: uid("bl") }, ...state.bonsDeLivraison],
-        })),
+        set((state) => {
+          const id = uid("bl");
+          return {
+            bonsDeLivraison: [{ ...bl, id }, ...state.bonsDeLivraison],
+            journalActivites: [
+              entreeActivite("creation", "bon_de_livraison", {
+                entiteId: id,
+                libelle: bl.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       updateBonDeLivraison: (id, data) =>
-        set((state) => ({
-          bonsDeLivraison: state.bonsDeLivraison.map((b) =>
-            b.id === id ? { ...b, ...data } : b,
-          ),
-        })),
+        set((state) => {
+          const prev = state.bonsDeLivraison.find((b) => b.id === id);
+          return {
+            bonsDeLivraison: state.bonsDeLivraison.map((b) =>
+              b.id === id ? { ...b, ...data } : b,
+            ),
+            journalActivites: [
+              entreeActivite(
+                data.statut === "annule" ? "annulation" : "modification",
+                "bon_de_livraison",
+                { entiteId: id, libelle: prev?.numero },
+              ),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteBonDeLivraison: (id) =>
-        set((state) => ({
-          bonsDeLivraison: state.bonsDeLivraison.filter((b) => b.id !== id),
-        })),
+        set((state) => {
+          const prev = state.bonsDeLivraison.find((b) => b.id === id);
+          return {
+            bonsDeLivraison: state.bonsDeLivraison.filter((b) => b.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "bon_de_livraison", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
 
       addFacture: (facture, audit) => {
         const id = uid("fac");
         set((state) => {
-          const modele = state.modelesDocuments.find(
-            (m) => m.type === "facture" && m.actif,
-          );
+          const modele = modeleCourant(state, "facture");
           const complete = avecPresentationSiBesoin(
             { ...facture, id },
             state.parametres,
@@ -701,6 +1181,14 @@ export const useStore = create<Store>()((set, get) => ({
           return {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
+            journalActivites: [
+              entreeActivite("creation", "facture", {
+                entiteId: id,
+                libelle: facture.numero,
+                detail: audit?.detail,
+              }),
+              ...state.journalActivites,
+            ],
             journalAudit: [
               {
                 id: uid("aud"),
@@ -789,9 +1277,7 @@ export const useStore = create<Store>()((set, get) => ({
               patch.dateValidation = data.dateValidation;
             if (acomptesDocumentPatch !== undefined)
               patch.acomptesDocument = acomptesDocumentPatch;
-            const modele = state.modelesDocuments.find(
-              (m) => m.type === "facture" && m.actif,
-            );
+            const modele = modeleCourant(state, "facture");
             patch.presentation =
               presentationPatch ??
               prev.presentation ??
@@ -813,10 +1299,23 @@ export const useStore = create<Store>()((set, get) => ({
           const factures = state.factures.map((f) =>
             f.id === id ? { ...f, ...patch } : f,
           );
+          const estAnnulation = data.statut === "annulee";
           return {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
             journalAudit: journal,
+            journalActivites: [
+              entreeActivite(
+                estAnnulation ? "annulation" : "modification",
+                "facture",
+                {
+                  entiteId: id,
+                  libelle: patch.numero ?? prev.numero,
+                  detail: audit?.detail,
+                },
+              ),
+              ...state.journalActivites,
+            ],
           };
         }),
       deleteFacture: (id) => {
@@ -841,6 +1340,13 @@ export const useStore = create<Store>()((set, get) => ({
           return {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
+            journalActivites: [
+              entreeActivite("suppression", "facture", {
+                entiteId: id,
+                libelle: prev.numero,
+              }),
+              ...s.journalActivites,
+            ],
             journalAudit: [
               {
                 id: uid("aud"),
@@ -874,23 +1380,136 @@ export const useStore = create<Store>()((set, get) => ({
         return before.length - kept.length;
       },
 
+      logActivite: (action, entite, opts) =>
+        set((state) => ({
+          journalActivites: [
+            entreeActivite(action, entite, opts),
+            ...state.journalActivites,
+          ],
+        })),
+      purgeJournalActivitesOlderThan: (days) => {
+        const cutoff = Date.now() - days * 86_400_000;
+        const before = get().journalActivites;
+        const kept = before.filter(
+          (e) => new Date(e.date).getTime() >= cutoff,
+        );
+        set({ journalActivites: kept });
+        return before.length - kept.length;
+      },
+
+      addInventaire: (inventaire) => {
+        const id = uid("inv");
+        set((state) => ({
+          inventaires: [{ ...inventaire, id }, ...state.inventaires],
+          journalActivites: [
+            entreeActivite("creation", "inventaire", {
+              entiteId: id,
+              libelle: inventaire.numero,
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return id;
+      },
+      updateInventaire: (id, data) =>
+        set((state) => {
+          const prev = state.inventaires.find((i) => i.id === id);
+          return {
+            inventaires: state.inventaires.map((i) =>
+              i.id === id ? { ...i, ...data } : i,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "inventaire", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+      deleteInventaire: (id) =>
+        set((state) => {
+          const prev = state.inventaires.find((i) => i.id === id);
+          return {
+            inventaires: state.inventaires.filter((i) => i.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "inventaire", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+      validerInventaire: (id) =>
+        set((state) => {
+          const prev = state.inventaires.find((i) => i.id === id);
+          return {
+            inventaires: state.inventaires.map((i) =>
+              i.id === id
+                ? {
+                    ...i,
+                    statut: "valide",
+                    dateValidation: new Date().toISOString(),
+                  }
+                : i,
+            ),
+            journalActivites: [
+              entreeActivite("validation", "inventaire", {
+                entiteId: id,
+                libelle: prev?.numero,
+                detail: "Clôture d'inventaire",
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+
       addAcompte: (acompte) => {
         const id = uid("aco");
         set((state) => ({
           acomptes: [{ ...acompte, id }, ...state.acomptes],
+          journalActivites: [
+            entreeActivite("creation", "acompte", {
+              entiteId: id,
+              libelle: acompte.numero,
+            }),
+            ...state.journalActivites,
+          ],
         }));
         return id;
       },
       updateAcompte: (id, data) =>
-        set((state) => ({
-          acomptes: state.acomptes.map((a) =>
-            a.id === id ? { ...a, ...data } : a,
-          ),
-        })),
+        set((state) => {
+          const prev = state.acomptes.find((a) => a.id === id);
+          return {
+            acomptes: state.acomptes.map((a) =>
+              a.id === id ? { ...a, ...data } : a,
+            ),
+            journalActivites: [
+              entreeActivite(
+                data.statut === "annule" ? "annulation" : "modification",
+                "acompte",
+                { entiteId: id, libelle: prev?.numero },
+              ),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       deleteAcompte: (id) =>
-        set((state) => ({
-          acomptes: state.acomptes.filter((a) => a.id !== id),
-        })),
+        set((state) => {
+          const prev = state.acomptes.find((a) => a.id === id);
+          return {
+            acomptes: state.acomptes.filter((a) => a.id !== id),
+            journalActivites: [
+              entreeActivite("suppression", "acompte", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
       encaisserAcompte: (data) => {
         const montantTTC = Math.round(Number(data.montantTTC) || 0);
         if (!data.clientId || montantTTC <= 0) {
@@ -970,9 +1589,14 @@ export const useStore = create<Store>()((set, get) => ({
 
       applyBusinessData: (data) =>
         set((state) => {
-          const modele =
-            data.modelesDocuments.find((m) => m.type === "facture" && m.actif) ??
-            state.modelesDocuments.find((m) => m.type === "facture" && m.actif);
+          const modele = modelePourType(
+            data.modelesDocuments,
+            "facture",
+            {
+              preferences: data.preferencesModeles ?? state.preferencesModeles,
+              userId: getActiviteActor().id,
+            },
+          );
           const parametres = data.parametres ?? state.parametres;
           const factures = data.factures.map((f) =>
             avecPresentationSiBesoin(f, parametres, modele, {
@@ -982,6 +1606,7 @@ export const useStore = create<Store>()((set, get) => ({
           const merged = pickAppState({ ...data, factures });
           return {
             ...merged,
+            clients: ensureCodesClients(merged.clients),
             ventes: rebuildVentesDepuisFactures(factures),
           };
         }),

@@ -17,10 +17,12 @@ import { PageHeader } from "@/components/page-header";
 import {
   appliqueTVA,
   acomptesPourDocument,
+  libelleClient,
   lignesAcomptesPourDocument,
   nextNumero,
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 
 export default function CommandesPage() {
   const {
@@ -30,7 +32,6 @@ export default function CommandesPage() {
     produits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     tarifsClients,
     categoriesProduits,
     entrees,
@@ -57,9 +58,7 @@ export default function CommandesPage() {
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
-  const modele = modelesDocuments.find(
-    (m) => m.type === "commande" && m.actif,
-  );
+  const modele = useModelePourType("commande");
   const assujettiTVA = appliqueTVA(parametres);
 
   function ouvrirFormulaire() {
@@ -255,7 +254,7 @@ export default function CommandesPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

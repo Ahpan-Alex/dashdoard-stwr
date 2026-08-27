@@ -21,6 +21,7 @@ import {
   calculerTotaux,
   creerSnapshotAcomptesDocument,
   isLigneProduit,
+  libelleClient,
   MODES_PAIEMENT,
   montantLigneHT,
   recalculerSousTotaux as recalculerSousTotauxBase,
@@ -40,6 +41,7 @@ import {
   stockRestantPourSaisie,
 } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 import { createId } from "@/lib/id";
 import type { FactureStatut, LigneDocument, ModePaiement, TypeLigneDocument } from "@/lib/types";
 
@@ -66,7 +68,6 @@ export default function FacturesPage() {
     pointsDeVente,
     parametres,
     acomptes,
-    modelesDocuments,
     commandes,
     devis,
     tarifsClients,
@@ -111,7 +112,7 @@ export default function FacturesPage() {
   const [dropKey, setDropKey] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
 
-  const modele = modelesDocuments.find((m) => m.type === "facture" && m.actif);
+  const modele = useModelePourType("facture");
 
   const acomptesLies = useMemo(() => {
     const cmd = commandes.find((c) => c.id === form.commandeId);
@@ -668,7 +669,7 @@ export default function FacturesPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

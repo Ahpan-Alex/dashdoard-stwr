@@ -25,6 +25,7 @@ import {
   appliqueTVA,
   acomptesPourDocument,
   creerSnapshotAcomptesDocument,
+  libelleClient,
   lignesAcomptesPourDocument,
   nextNumero,
   totauxCommande,
@@ -32,6 +33,7 @@ import {
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 import type { CommandeStatut } from "@/lib/types";
 
 type Filtre = "tous" | CommandeStatut;
@@ -61,7 +63,6 @@ export default function ListeCommandesPage() {
     produits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     acomptes,
     updateCommande,
     deleteCommande,
@@ -101,9 +102,7 @@ export default function ListeCommandesPage() {
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
-  const modele = modelesDocuments.find(
-    (m) => m.type === "commande" && m.actif,
-  );
+  const modele = useModelePourType("commande");
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = commandes.find((c) => c.id === editId);
   const preview = commandes.find((c) => c.id === previewId);
@@ -400,7 +399,7 @@ export default function ListeCommandesPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>

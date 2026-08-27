@@ -12,8 +12,9 @@ import {
 } from "@/components/document-saisie-wizard";
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, nextNumero } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, nextNumero } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { useModelePourType } from "@/lib/use-modele";
 
 export default function DevisPage() {
   const {
@@ -23,7 +24,6 @@ export default function DevisPage() {
     categoriesProduits,
     pointsDeVente,
     parametres,
-    modelesDocuments,
     tarifsClients,
     entrees,
     ventes,
@@ -41,7 +41,7 @@ export default function DevisPage() {
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
   const [wizardKey, setWizardKey] = useState(0);
 
-  const modele = modelesDocuments.find((m) => m.type === "devis" && m.actif);
+  const modele = useModelePourType("devis");
   const numeroProvisoire = nextNumero(
     "DEV",
     devis.map((d) => d.numero),
@@ -177,7 +177,7 @@ export default function DevisPage() {
                       .filter((c) => c.actif)
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nom}
+                          {libelleClient(c)}
                         </option>
                       ))}
                   </select>
