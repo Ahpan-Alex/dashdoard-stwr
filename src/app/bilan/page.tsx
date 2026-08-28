@@ -81,6 +81,8 @@ export default function BilanPage() {
     immobilisations,
     factures,
     mouvementsCompteCourant,
+    inventaires,
+    achats,
     resetBusinessData,
   } = useStore();
 
@@ -143,6 +145,8 @@ export default function BilanPage() {
     pointsDeVente,
     pointDeVenteActifId,
     range,
+    inventaires,
+    achats,
   );
 
   const bilan = bilanInstantane(
@@ -157,6 +161,8 @@ export default function BilanPage() {
     factures,
     range,
     mouvementsCompteCourant,
+    inventaires,
+    achats,
   );
 
   const periodeLabel = useMemo(() => {
@@ -303,7 +309,7 @@ export default function BilanPage() {
             value={cr.produitsExploitation}
           />
           <Ligne
-            label="Achats de marchandises"
+            label="Achats de marchandises (HT net avoirs)"
             value={-cr.achatsMarchandises}
             indent
           />

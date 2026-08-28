@@ -87,7 +87,11 @@ export type EntreeStock = {
   date: string;
   note?: string;
   /** Ouverture d'inventaire (hors achats de la période). */
-  origine?: "achat" | "stock_initial";
+  origine?: "achat" | "stock_initial" | "livraison_achat" | "retour_fournisseur";
+  /** Achat fournisseur d'origine (livraison ou retour). */
+  achatId?: string;
+  livraisonId?: string;
+  avoirAchatId?: string;
 };
 
 export type MouvementStock = {
@@ -110,6 +114,11 @@ export type Vente = {
   clientId?: string;
   /** Facture d'origine (CA / stock dérivés de la facturation). */
   factureId?: string;
+  /**
+   * CUMP figé à la validation / clôture de la facture.
+   * Les livraisons ultérieures ne recalculent pas ce coût (intégrité des rapports).
+   */
+  cumpFigee?: number;
 };
 
 export type ChargeCategorie =
@@ -183,6 +192,16 @@ export type Parametres = {
   seuilMargePalier1Percent?: number;
   /** Seuil d'alerte taux marge Palier 2 / résultat net (%) */
   seuilMargePalier2Percent?: number;
+};
+
+/**
+ * Identité affichée en tête de la colonne des menus.
+ * Indépendante de nomEntreprise / logoDataUrl (documents commerciaux).
+ * Stockée dans l'état métier du tenant — isolation totale entre comptes.
+ */
+export type IdentiteNavigation = {
+  nom: string;
+  logoDataUrl?: string;
 };
 
 export type BilanInitial = {
@@ -286,11 +305,90 @@ export type Fournisseur = {
   actif: boolean;
 };
 
+export type AchatStatut = "brouillon" | "valide" | "annule";
+export type LivraisonAchatStatut =
+  | "en_attente"
+  | "partielle"
+  | "livree"
+  | "annulee";
+export type PaiementAchatStatut = "non_paye" | "partiel" | "paye";
+
+export type AchatLigne = {
+  id: string;
+  produitId: string;
+  quantite: number;
+  /** Prix d'achat unitaire HT (Ar) */
+  prixAchatUnitaire: number;
+};
+
+export type LivraisonAchatLigne = {
+  produitId: string;
+  quantitePrevue: number;
+  quantiteLivree: number;
+};
+
+export type LivraisonAchat = {
+  id: string;
+  numero: string;
+  date: string;
+  statut: LivraisonAchatStatut;
+  lignes: LivraisonAchatLigne[];
+  note?: string;
+};
+
+export type PaiementFournisseur = {
+  id: string;
+  date: string;
+  /** Montant TTC versé (Ar) */
+  montant: number;
+  modePaiement: ModePaiement;
+  note?: string;
+};
+
+export type AvoirAchatLigne = {
+  produitId: string;
+  quantite: number;
+  /** Prix unitaire HT de l'avoir (défaut : PU de la commande) */
+  prixAchatUnitaire: number;
+};
+
+export type AvoirAchat = {
+  id: string;
+  numero: string;
+  date: string;
+  statut: "brouillon" | "valide";
+  lignes: AvoirAchatLigne[];
+  note?: string;
+};
+
+/** Commande fournisseur : livraisons, paiements et retours rattachés. */
+export type Achat = {
+  id: string;
+  numero: string;
+  fournisseurId: string;
+  pointDeVenteId: string;
+  /** Date de commande */
+  date: string;
+  /** Échéance de paiement */
+  echeance?: string;
+  statut: AchatStatut;
+  tauxTVA: number;
+  lignes: AchatLigne[];
+  livraisons: LivraisonAchat[];
+  paiements: PaiementFournisseur[];
+  avoirs: AvoirAchat[];
+  note?: string;
+  dateValidation?: string;
+};
+
 export type TypeLigneDocument =
   | "produit"
   | "sous_total"
   | "blanche"
   | "commentaire";
+
+/** Saisie d’une remise : pourcentage ou montant fixe (Ar). */
+export type ModeRemise = "percent" | "montant";
 
 export type LigneDocument = {
   id: string;
@@ -301,23 +399,57 @@ export type LigneDocument = {
   codeProduit?: string;
   designation: string;
   quantite: number;
-  /** Prix unitaire HT */
+  /** Prix unitaire HT d’origine (jamais écrasé par une remise) */
   prixUnitaire: number;
   unite: string;
   /** Snapshot du taux TVA ligne */
   tauxTVA?: number;
-  /** Remise en % sur la ligne produit */
+  /** Mode de la remise ligne. Défaut : percent (données historiques). */
+  remiseMode?: ModeRemise;
+  /** Remise en % sur la ligne produit (mode percent) */
   remisePercent?: number;
+  /** Remise en Ar sur le montant HT de la ligne (mode montant) */
+  remiseMontant?: number;
   /** Commentaire sous la ligne produit */
   commentaire?: string;
+  /** CUMP unitaire figé à la validation fiscale (factures uniquement). */
+  cumpFigee?: number;
 };
 
 export type DevisStatut =
   | "brouillon"
   | "envoye"
   | "accepte"
+  | "en_transformation"
+  | "transforme"
   | "refuse"
   | "expire";
+
+export type CibleTransformation = "commande" | "bon_de_livraison" | "facture";
+export type SourceTransformation = "devis" | "commande" | "bon_de_livraison";
+
+/** Verrou temporaire pendant l'écran de validation d'une transformation. */
+export type VerrouTransformation = {
+  jusquA: string;
+  userId?: string;
+  userNom?: string;
+  cible: CibleTransformation;
+  statutPrecedent: string;
+};
+
+/** Lien historisé source → document(s) généré(s) (un-vers-plusieurs). */
+export type TransformationCommerciale = {
+  id: string;
+  date: string;
+  userId?: string;
+  userNom?: string;
+  sourceType: SourceTransformation;
+  sourceId: string;
+  sourceNumero: string;
+  cibleType: CibleTransformation;
+  cibleId: string;
+  cibleNumero: string;
+};
 
 export type Devis = {
   id: string;
@@ -331,14 +463,18 @@ export type Devis = {
   tauxTVA: number;
   conditionsPaiement?: string;
   note?: string;
-  /** Remise globale HT (Ar) */
+  /** Remise globale : % ou Ar selon remiseGlobaleMode */
   remiseGlobale?: number;
+  /** Défaut historique : montant HT (Ar). */
+  remiseGlobaleMode?: ModeRemise;
+  verrouTransformation?: VerrouTransformation | null;
 };
 
 export type CommandeStatut =
   | "brouillon"
   | "confirmee"
   | "en_cours"
+  | "en_transformation"
   | "livree"
   | "annulee";
 
@@ -355,14 +491,17 @@ export type Commande = {
   devisId?: string;
   conditionsPaiement?: string;
   note?: string;
-  /** Remise globale HT (Ar) */
+  /** Remise globale : % ou Ar selon remiseGlobaleMode */
   remiseGlobale?: number;
+  remiseGlobaleMode?: ModeRemise;
+  verrouTransformation?: VerrouTransformation | null;
 };
 
 export type BonDeLivraisonStatut =
   | "brouillon"
   | "prepare"
   | "expedie"
+  | "en_transformation"
   | "livre"
   | "annule";
 
@@ -382,6 +521,8 @@ export type BonDeLivraison = {
   conditionsPaiement?: string;
   note?: string;
   remiseGlobale?: number;
+  remiseGlobaleMode?: ModeRemise;
+  verrouTransformation?: VerrouTransformation | null;
 };
 
 export type FactureType = "standard" | "acompte" | "solde" | "avoir" | "proforma";
@@ -464,8 +605,9 @@ export type Facture = {
   factureParenteId?: string;
   conditionsPaiement?: string;
   note?: string;
-  /** Remise globale HT (Ar) */
+  /** Remise globale : % ou Ar selon remiseGlobaleMode (après remises de ligne, avant TVA) */
   remiseGlobale?: number;
+  remiseGlobaleMode?: ModeRemise;
   /** Date de validation (attribution n° fiscal) */
   dateValidation?: string;
   /** Date d'envoi au client / e-facture */
@@ -598,6 +740,7 @@ export type ActiviteEntite =
   | "produit"
   | "categorie"
   | "fournisseur"
+  | "achat"
   | "point_de_vente"
   | "charge"
   | "tarif_client"
@@ -641,6 +784,7 @@ export type JournalActivite = {
 
 export type AppState = {
   parametres: Parametres;
+  identiteNavigation: IdentiteNavigation;
   modelesDocuments: ModeleDocument[];
   /** Préférences de modèle par utilisateur (personnalisation individuelle). */
   preferencesModeles: PreferencesModeles;
@@ -654,6 +798,8 @@ export type AppState = {
   bonsDeLivraison: BonDeLivraison[];
   factures: Facture[];
   acomptes: Acompte[];
+  transformations: TransformationCommerciale[];
+  achats: Achat[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];

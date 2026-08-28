@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,10 +14,13 @@ import {
   type DraftLigne,
 } from "@/components/document-saisie-wizard";
 import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import { DocumentFiliation } from "@/components/document-filiation";
+import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -28,15 +31,27 @@ import {
   lignesAcomptesPourDocument,
   nextNumero,
   totauxDevis,
+  totauxCommande,
+  persisterRemiseGlobale,
 } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import {
+  clonerLignesDocument,
+  devisEstEnCours,
+  devisPeutEtreTransforme,
+  documentEstVerrouille,
+  raisonDocumentNonModifiable,
+  verrouTransformationActif,
+} from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
-import type { DevisStatut } from "@/lib/types";
+import type { Commande, DevisStatut, ModeRemise } from "@/lib/types";
 
-type Filtre = "tous" | DevisStatut;
+type Filtre = "tous" | "en_cours" | DevisStatut;
 
 const FILTRES: { id: Filtre; label: string }[] = [
+  { id: "en_cours", label: "Devis en cours" },
+  { id: "transforme", label: "Devis transformés" },
   { id: "tous", label: "Tous" },
   { id: "brouillon", label: "Brouillons" },
   { id: "envoye", label: "Envoyés" },
@@ -49,7 +64,7 @@ function filtreDepuisQuery(statut: string | null): Filtre {
   if (statut && FILTRES.some((f) => f.id === statut)) {
     return statut as Filtre;
   }
-  return "tous";
+  return "en_cours";
 }
 
 export default function ListeDevisPage() {
@@ -71,6 +86,10 @@ export default function ListeDevisPage() {
     addCommande,
     updateAcompte,
     encaisserAcompte,
+    verrouillerTransformation,
+    annulerTransformation,
+    libererVerrousExpires,
+    finaliserTransformation,
   } = useStore();
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
@@ -81,13 +100,15 @@ export default function ListeDevisPage() {
     setFiltre(filtreDepuisQuery(searchParams.get("statut")));
   }, [searchParams]);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewSheetRef = useRef<HTMLDivElement>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [wizardKey, setWizardKey] = useState(0);
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
     remiseGlobale: number;
+    remiseGlobaleMode: ModeRemise;
     note: string;
-  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: "",
     pointDeVenteId: "",
@@ -95,8 +116,14 @@ export default function ListeDevisPage() {
     validiteJours: "15",
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
+  const [pendingDevisId, setPendingDevisId] = useState<string | null>(null);
+
+  useEffect(() => {
+    libererVerrousExpires();
+  }, [libererVerrousExpires]);
 
   const modele = useModelePourType("devis");
+  const modeleCommande = useModelePourType("commande");
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = devis.find((d) => d.id === editId);
   const preview = devis.find((d) => d.id === previewId);
@@ -104,7 +131,11 @@ export default function ListeDevisPage() {
   const lignes = useMemo(() => {
     return [...devis]
       .sort((a, b) => b.date.localeCompare(a.date))
-      .filter((d) => (filtre === "tous" ? true : d.statut === filtre))
+      .filter((d) => {
+        if (filtre === "tous") return true;
+        if (filtre === "en_cours") return devisEstEnCours(d.statut);
+        return d.statut === filtre;
+      })
       .map((d) => ({
         d,
         t: totauxDevis(d, parametres, acomptes),
@@ -122,8 +153,13 @@ export default function ListeDevisPage() {
   }, [devis]);
 
   function ouvrirEdition(id: string) {
-    const d = devis.find((x) => x.id === id);
+    const d = useStore.getState().devis.find((x) => x.id === id);
     if (!d) return;
+    const bloque = raisonDocumentNonModifiable(d);
+    if (bloque) {
+      alert(bloque);
+      return;
+    }
     setEditId(id);
     setPreviewId(null);
     setMeta({
@@ -135,20 +171,53 @@ export default function ListeDevisPage() {
     setSeed({
       lignes: lignesToDraft(d.lignes),
       remiseGlobale: d.remiseGlobale ?? 0,
+      remiseGlobaleMode: d.remiseGlobaleMode ?? "montant",
       note: d.note ?? "",
     });
     setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
   }
 
-  function convertirEnCommande(devisId: string) {
+  function demanderConversionCommande(devisId: string) {
     const d = devis.find((x) => x.id === devisId);
     if (!d) return;
+    if (!devisPeutEtreTransforme(d) && d.statut !== "en_transformation") {
+      alert("Ce devis ne peut plus être transformé.");
+      return;
+    }
+    const res = verrouillerTransformation("devis", devisId, "commande");
+    if (!res.ok) {
+      alert(res.reason);
+      return;
+    }
+    setPreviewId(null);
+    setEditId(null);
+    setPendingDevisId(devisId);
+  }
+
+  function fermerValidation(opts?: { edition?: boolean }) {
+    if (pendingDevisId) annulerTransformation("devis", pendingDevisId);
+    const id = pendingDevisId;
+    setPendingDevisId(null);
+    if (opts?.edition && id) ouvrirEdition(id);
+  }
+
+  function confirmerConversionCommande() {
+    const d = useStore.getState().devis.find((x) => x.id === pendingDevisId);
+    if (!d || !verrouTransformationActif(d.verrouTransformation)) {
+      libererVerrousExpires();
+      setPendingDevisId(null);
+      alert(
+        "Le délai de validation (10 min) est dépassé. Le devis a été déverrouillé.",
+      );
+      return;
+    }
+    const numero = nextNumero(
+      "CMD",
+      commandes.map((c) => c.numero),
+    );
     const commandeId = addCommande({
-      numero: nextNumero(
-        "CMD",
-        commandes.map((c) => c.numero),
-      ),
+      numero,
       clientId: d.clientId,
       pointDeVenteId: d.pointDeVenteId,
       date: new Date().toISOString(),
@@ -157,16 +226,52 @@ export default function ListeDevisPage() {
       tauxTVA: d.tauxTVA ?? parametres.tauxTVA,
       conditionsPaiement:
         d.conditionsPaiement || parametres.conditionsPaiementDefaut,
-      lignes: d.lignes.map((l) => ({ ...l, id: `cl-${l.id}` })),
+      lignes: clonerLignesDocument(d.lignes, "cl"),
       remiseGlobale: d.remiseGlobale,
+      remiseGlobaleMode: d.remiseGlobaleMode,
       note: d.note,
     });
+    const fin = finaliserTransformation({
+      sourceType: "devis",
+      sourceId: d.id,
+      cibleType: "commande",
+      cibleId: commandeId,
+      cibleNumero: numero,
+      statutSource: "transforme",
+    });
+    if (!fin.ok) {
+      alert(fin.reason);
+      return;
+    }
     for (const a of acomptesPourDocument(acomptes, { devisId: d.id })) {
       if (!a.commandeId) updateAcompte(a.id, { commandeId });
     }
-    updateDevis(d.id, { statut: "accepte" });
-    alert("Commande créée à partir du devis.");
+    setPendingDevisId(null);
   }
+
+  const pendingDevis = devis.find((d) => d.id === pendingDevisId);
+  const commandeProvisoire: Commande | null = pendingDevis
+    ? {
+        id: "preview",
+        numero: nextNumero(
+          "CMD",
+          commandes.map((c) => c.numero),
+        ),
+        clientId: pendingDevis.clientId,
+        pointDeVenteId: pendingDevis.pointDeVenteId,
+        date: new Date().toISOString(),
+        statut: "confirmee",
+        devisId: pendingDevis.id,
+        tauxTVA: pendingDevis.tauxTVA ?? parametres.tauxTVA,
+        conditionsPaiement:
+          pendingDevis.conditionsPaiement ||
+          parametres.conditionsPaiementDefaut,
+        lignes: pendingDevis.lignes,
+        remiseGlobale: pendingDevis.remiseGlobale,
+        remiseGlobaleMode: pendingDevis.remiseGlobaleMode,
+        note: pendingDevis.note,
+      }
+    : null;
 
   const echeanceProvisoire = (() => {
     const d = new Date(`${meta.date}T12:00:00`);
@@ -199,7 +304,7 @@ export default function ListeDevisPage() {
     <div>
       <PageHeader
         title="Liste des devis"
-        description="Consultez, filtrez et modifiez les devis. Les factures fiscales restent figées une fois créées."
+        description="Consultez, filtrez et modifiez les devis. Toute transformation vers une commande passe par une validation."
         actions={
           <Link href="/devis" className="btn btn-primary">
             <Plus className="h-4 w-4" />
@@ -213,8 +318,8 @@ export default function ListeDevisPage() {
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {(
           [
-            ["brouillon", "Brouillons"],
-            ["envoye", "Envoyés"],
+            ["en_cours", "En cours"],
+            ["transforme", "Transformés"],
             ["accepte", "Acceptés"],
             ["refuse", "Refusés"],
             ["expire", "Expirés"],
@@ -226,7 +331,9 @@ export default function ListeDevisPage() {
           >
             <p className="text-[11px] text-muted">{label}</p>
             <p className="font-display text-lg font-semibold">
-              {resume[id] ?? 0}
+              {id === "en_cours"
+                ? devis.filter((d) => devisEstEnCours(d.statut)).length
+                : (resume[id] ?? 0)}
             </p>
           </div>
         ))}
@@ -261,6 +368,7 @@ export default function ListeDevisPage() {
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
+            initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
             showAcomptes={acomptesTTCEdition > 0}
             acomptesTTC={acomptesTTCEdition}
@@ -280,7 +388,7 @@ export default function ListeDevisPage() {
             }}
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId || !editId) return;
               updateDevis(editId, {
                 clientId: meta.clientId,
@@ -288,7 +396,7 @@ export default function ListeDevisPage() {
                 date: new Date(`${meta.date}T12:00:00`).toISOString(),
                 validiteJours: Number(meta.validiteJours) || 15,
                 lignes,
-                remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
               });
               if (acompteMontantEdition > 0) {
@@ -420,6 +528,7 @@ export default function ListeDevisPage() {
                     <select
                       className="select max-w-[160px]"
                       value={d.statut}
+                      disabled={documentEstVerrouille(d)}
                       onChange={(e) =>
                         updateDevis(d.id, {
                           statut: e.target.value as DevisStatut,
@@ -467,10 +576,13 @@ export default function ListeDevisPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </IconButton>
-                      {d.statut !== "refuse" && d.statut !== "expire" && (
+                      {d.statut !== "transforme" &&
+                        d.statut !== "refuse" &&
+                        d.statut !== "expire" && (
                         <button
                           className="btn btn-secondary"
-                          onClick={() => convertirEnCommande(d.id)}
+                          disabled={documentEstVerrouille(d)}
+                          onClick={() => demanderConversionCommande(d.id)}
                         >
                           → Commande
                         </button>
@@ -496,11 +608,12 @@ export default function ListeDevisPage() {
 
       {preview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-3xl">
+          <div className="my-6 w-full max-w-[220mm]">
             <div className="mb-3 flex justify-end gap-2">
-              <button className="btn btn-primary" onClick={() => window.print()}>
-                Imprimer
-              </button>
+              <DocumentPrintActions
+                sheetRef={previewSheetRef}
+                filename={`Devis ${preview.numero}`}
+              />
               <button
                 className="btn btn-secondary"
                 onClick={() => setPreviewId(null)}
@@ -509,6 +622,7 @@ export default function ListeDevisPage() {
               </button>
             </div>
             <DocumentPreview
+              ref={previewSheetRef}
               type="devis"
               numero={preview.numero}
               date={preview.date}
@@ -524,8 +638,50 @@ export default function ListeDevisPage() {
                 devisId: preview.id,
               })}
             />
+            <DocumentFiliation documentId={preview.id} />
           </div>
         </div>
+      )}
+
+      {pendingDevis && commandeProvisoire && (
+        <TransformationValidationModal
+          open
+          titre={`Transformer ${pendingDevis.numero} en commande`}
+          sourceNumero={pendingDevis.numero}
+          cible="commande"
+          verrou={pendingDevis.verrouTransformation}
+          onConfirmer={confirmerConversionCommande}
+          onAnnuler={() => fermerValidation()}
+          onRetourEdition={() => fermerValidation({ edition: true })}
+          onExpire={() => {
+            libererVerrousExpires();
+            setPendingDevisId(null);
+            alert(
+              "Délai de validation dépassé (10 min). Le devis a été déverrouillé.",
+            );
+          }}
+        >
+          <DocumentPreview
+            type="commande"
+            numero={commandeProvisoire.numero}
+            date={commandeProvisoire.date}
+            client={clients.find((c) => c.id === pendingDevis.clientId)}
+            pdv={pointsDeVente.find(
+              (p) => p.id === pendingDevis.pointDeVenteId,
+            )}
+            parametres={parametres}
+            modele={modeleCommande}
+            lignes={pendingDevis.lignes}
+            totaux={totauxCommande(commandeProvisoire, parametres, acomptes)}
+            conditionsPaiement={commandeProvisoire.conditionsPaiement}
+            note={pendingDevis.note}
+            referenceDevis={pendingDevis.numero}
+            acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+              devisId: pendingDevis.id,
+            })}
+          />
+          <DocumentFiliation documentId={pendingDevis.id} />
+        </TransformationValidationModal>
       )}
     </div>
   );

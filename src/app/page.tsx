@@ -56,6 +56,8 @@ export default function DashboardPage() {
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const factures = useStore((s) => s.factures);
+  const inventaires = useStore((s) => s.inventaires);
+  const achats = useStore((s) => s.achats);
 
   // Recalcule CA / stock depuis les factures validées (source de vérité).
   useEffect(() => {
@@ -81,10 +83,18 @@ export default function DashboardPage() {
     ventes,
     pointDeVenteActifId,
     pointsDeVente,
+    undefined,
+    inventaires,
   );
   const valeurStock = stocks.reduce((s, l) => s + l.valeurAchat, 0);
   const unitesStock = stocks.reduce((s, l) => s + l.quantiteRestante, 0);
-  const achatsSemaine = totalAchats(entrees, pointDeVenteActifId, "semaine");
+  const achatsSemaine = totalAchats(
+    entrees,
+    pointDeVenteActifId,
+    "semaine",
+    new Date(),
+    achats,
+  );
   const series = caParJour(ventes, pointDeVenteActifId, 14);
   const parPdv = caParPointDeVente(ventes, pointsDeVente, "mois");
   const parProduit = caParProduit(
@@ -96,6 +106,7 @@ export default function DashboardPage() {
   const totalCaProduit = parProduit.reduce((s, l) => s + l.montant, 0);
 
   const recentEntrees = [...entrees]
+    .filter((e) => e.origine !== "stock_initial")
     .sort((a, b) => b.date.localeCompare(a.date))
     .filter(
       (e) =>
@@ -108,7 +119,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Tableau de bord"
-        description="Vue d'ensemble des entrées, stocks et performances commerciales (CA issu des factures validées)."
+        description="Vue d'ensemble des achats, stocks et performances commerciales (CA issu des factures validées)."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -322,7 +333,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-sea-600" />
             <h2 className="font-display text-lg font-semibold text-ink">
-              Dernières entrées
+              Dernières réceptions
             </h2>
           </div>
         </div>

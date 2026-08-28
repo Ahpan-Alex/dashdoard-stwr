@@ -31,6 +31,7 @@ export default function MargeObjectifsPage() {
   const entrees = useStore((s) => s.entrees);
   const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
+  const inventaires = useStore((s) => s.inventaires);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const [horizon, setHorizon] = useState<Horizon>("mois");
 
@@ -51,6 +52,7 @@ export default function MargeObjectifsPage() {
           produits,
           pdv.id,
           range,
+          inventaires,
         ).benefice;
         const objectif =
           horizon === "mois"
@@ -60,7 +62,7 @@ export default function MargeObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pointsDeVente, ventes, entrees, charges, produits, range, horizon],
+    [pointsDeVente, ventes, entrees, charges, produits, inventaires, range, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);

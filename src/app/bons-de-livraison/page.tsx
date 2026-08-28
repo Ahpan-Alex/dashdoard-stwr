@@ -10,8 +10,12 @@ import {
 } from "@/components/document-saisie-wizard";
 import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, nextNumero } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import {
+  avancementLivraisonCommande,
+  statutCommandeSelonLivraison,
+} from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
 
 export default function BonsDeLivraisonPage() {
@@ -28,7 +32,9 @@ export default function BonsDeLivraisonPage() {
     entrees,
     ventes,
     addBonDeLivraison,
-    updateCommande,
+    verrouillerTransformation,
+    annulerTransformation,
+    finaliserTransformation,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -36,8 +42,9 @@ export default function BonsDeLivraisonPage() {
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
     remiseGlobale: number;
+    remiseGlobaleMode: "percent" | "montant";
     note: string;
-  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
@@ -50,6 +57,7 @@ export default function BonsDeLivraisonPage() {
   const assujettiTVA = appliqueTVA(parametres);
 
   function ouvrirFormulaire() {
+    if (meta.commandeId) annulerTransformation("commande", meta.commandeId);
     setMeta({
       clientId: clients[0]?.id ?? "",
       pointDeVenteId: pointsDeVente[0]?.id ?? "",
@@ -57,17 +65,30 @@ export default function BonsDeLivraisonPage() {
       date: new Date().toISOString().slice(0, 10),
       dateLivraison: new Date().toISOString().slice(0, 10),
     });
-    setSeed({ lignes: [], remiseGlobale: 0, note: "" });
+    setSeed({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
     setWizardKey((k) => k + 1);
     setOpen(true);
   }
 
   function chargerDepuisCommande(commandeId: string) {
+    if (meta.commandeId && meta.commandeId !== commandeId) {
+      annulerTransformation("commande", meta.commandeId);
+    }
     const c = commandes.find((x) => x.id === commandeId);
     if (!c) {
+      if (meta.commandeId) annulerTransformation("commande", meta.commandeId);
       setMeta((f) => ({ ...f, commandeId }));
-      setSeed({ lignes: [], remiseGlobale: 0, note: "" });
+      setSeed({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
       setWizardKey((k) => k + 1);
+      return;
+    }
+    const res = verrouillerTransformation(
+      "commande",
+      commandeId,
+      "bon_de_livraison",
+    );
+    if (!res.ok) {
+      alert(res.reason);
       return;
     }
     setMeta((f) => ({
@@ -82,6 +103,7 @@ export default function BonsDeLivraisonPage() {
     setSeed({
       lignes: lignesToDraft(c.lignes),
       remiseGlobale: c.remiseGlobale ?? 0,
+      remiseGlobaleMode: c.remiseGlobaleMode ?? "montant",
       note: c.note ?? "",
     });
     setWizardKey((k) => k + 1);
@@ -118,6 +140,7 @@ export default function BonsDeLivraisonPage() {
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
+            initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
             previewMeta={{
               type: "bon_de_livraison",
@@ -141,16 +164,22 @@ export default function BonsDeLivraisonPage() {
                 return devis.find((d) => d.id === cmd?.devisId)?.numero;
               })(),
             }}
-            confirmLabel="Enregistrer le BL"
-            onCancel={() => setOpen(false)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            confirmLabel="Confirmer le BL"
+            onCancel={() => {
+              if (meta.commandeId) {
+                annulerTransformation("commande", meta.commandeId);
+              }
+              setOpen(false);
+            }}
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const cmd = commandes.find((c) => c.id === meta.commandeId);
-              addBonDeLivraison({
-                numero: nextNumero(
-                  "BL",
-                  bonsDeLivraison.map((b) => b.numero),
-                ),
+              const numero = nextNumero(
+                "BL",
+                bonsDeLivraison.map((b) => b.numero),
+              );
+              const blId = addBonDeLivraison({
+                numero,
                 clientId: meta.clientId,
                 pointDeVenteId: meta.pointDeVenteId,
                 date: new Date(`${meta.date}T12:00:00`).toISOString(),
@@ -163,11 +192,23 @@ export default function BonsDeLivraisonPage() {
                 tauxTVA: parametres.tauxTVA,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
-                remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
               });
-              if (meta.commandeId) {
-                updateCommande(meta.commandeId, { statut: "en_cours" });
+              if (meta.commandeId && cmd) {
+                const avancement = avancementLivraisonCommande(
+                  cmd,
+                  useStore.getState().bonsDeLivraison,
+                );
+                const fin = finaliserTransformation({
+                  sourceType: "commande",
+                  sourceId: meta.commandeId,
+                  cibleType: "bon_de_livraison",
+                  cibleId: blId,
+                  cibleNumero: numero,
+                  statutSource: statutCommandeSelonLivraison(avancement),
+                });
+                if (!fin.ok) alert(fin.reason);
               }
               setOpen(false);
             }}
@@ -182,9 +223,7 @@ export default function BonsDeLivraisonPage() {
                   >
                     <option value="">— Nouveau —</option>
                     {commandes
-                      .filter((c) =>
-                        ["confirmee", "en_cours"].includes(c.statut),
-                      )
+                      .filter((c) => c.statut !== "annulee")
                       .map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.numero}

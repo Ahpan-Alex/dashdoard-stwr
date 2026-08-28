@@ -20,6 +20,7 @@ export default function ObjectifsMargePage() {
   const entrees = useStore((s) => s.entrees);
   const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
+  const inventaires = useStore((s) => s.inventaires);
   const updatePointDeVente = useStore((s) => s.updatePointDeVente);
 
   const mois = useMemo(
@@ -108,6 +109,7 @@ export default function ObjectifsMargePage() {
               produits,
               pdv.id,
               mois,
+              inventaires,
             ).benefice;
             const margeAnnee = syntheseBenefices(
               ventes,
@@ -116,6 +118,7 @@ export default function ObjectifsMargePage() {
               produits,
               pdv.id,
               annee,
+              inventaires,
             ).benefice;
             const tauxMois = objMois > 0 ? margeMois / objMois : 0;
             const tauxAnnee = objAnnee > 0 ? margeAnnee / objAnnee : 0;

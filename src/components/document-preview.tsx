@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import {
   montantEnLettres,
   paletteParId,
@@ -8,8 +8,17 @@ import {
   type ColonneArticleId,
   type ModeleDocument,
 } from "@/lib/document-templates";
-import type { TotauxDocument } from "@/lib/commercial";
-import { FACTURE_TYPES, MODES_PAIEMENT, appliqueTVA } from "@/lib/commercial";
+import {
+  FACTURE_TYPES,
+  MODES_PAIEMENT,
+  appliqueTVA,
+  montantLigneBrutHT,
+  montantLigneHT,
+  montantRemiseLigne,
+  modeRemiseLigne,
+  prixUnitaireNetHT,
+  type TotauxDocument,
+} from "@/lib/commercial";
 import { mentionRegimeFiscal } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type {
@@ -67,7 +76,8 @@ const COLONNES_NUMERIQUES: ColonneArticleId[] = [
   "total_ttc",
 ];
 
-export function DocumentPreview(props: Props) {
+export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
+  function DocumentPreview(props, ref) {
   const {
     type,
     titre,
@@ -121,17 +131,18 @@ export function DocumentPreview(props: Props) {
 
   const ligneCalc = (l: LigneDocument) => {
     const pu = l.prixUnitaire;
-    const remisePct = l.remisePercent ?? 0;
-    const puRemise = pu * (1 - remisePct / 100);
-    const brut = l.quantite * pu;
-    const remiseHT = brut * (remisePct / 100);
-    const totalHT = brut - remiseHT;
+    const brut = montantLigneBrutHT(l);
+    const remiseHT = montantRemiseLigne(l);
+    const totalHT = montantLigneHT(l);
+    const remisePct = brut > 0 ? (remiseHT / brut) * 100 : 0;
+    const puRemise = prixUnitaireNetHT(l);
     const tvaPct = tvaActive ? (l.tauxTVA ?? parametres.tauxTVA) : 0;
     const tvaMontant = totalHT * (tvaPct / 100);
     const totalTTC = totalHT + tvaMontant;
     return {
       pu,
       remisePct,
+      remiseMode: modeRemiseLigne(l),
       puRemise,
       puTTC: pu * (1 + tvaPct / 100),
       puTTCRemise: puRemise * (1 + tvaPct / 100),
@@ -156,7 +167,10 @@ export function DocumentPreview(props: Props) {
       case "pu_ttc":
         return formatCurrency(c.puTTC);
       case "remise_pct":
-        return c.remisePct ? `${c.remisePct} %` : "—";
+        if (!c.remiseHT) return "—";
+        return c.remiseMode === "montant"
+          ? formatCurrency(c.remiseHT)
+          : `${Math.round(c.remisePct * 100) / 100} %`;
       case "remise_ht":
         return formatCurrency(c.remiseHT);
       case "pu_ht_remise":
@@ -219,7 +233,7 @@ export function DocumentPreview(props: Props) {
       <img
         src={parametres.logoDataUrl}
         alt={`Logo ${parametres.nomEntreprise}`}
-        className="h-14 w-auto max-w-[160px] shrink-0 object-contain print:h-16"
+        className="h-14 w-auto max-w-[160px] shrink-0 object-contain"
       />
     ) : apercuModele ? (
       <div className="flex h-14 w-20 items-center justify-center rounded border border-dashed border-line text-[10px] text-muted">
@@ -376,7 +390,10 @@ export function DocumentPreview(props: Props) {
   const totalAPayer = totaux.totalTTC;
 
   return (
-    <div className="print-area rounded-[var(--radius)] border border-line bg-white p-6 text-ink shadow-sm">
+    <div
+      ref={ref}
+      className="document-preview-sheet print-area mx-auto w-full max-w-[210mm] rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm"
+    >
       {(estProforma || factureType === "proforma") && (
         <p className="mb-3 rounded bg-amber-100 px-3 py-1 text-center text-xs font-bold uppercase tracking-wider text-amber-900">
           Document proforma — sans valeur fiscale / hors série de facturation
@@ -589,6 +606,28 @@ export function DocumentPreview(props: Props) {
             </>
           ) : (
             <>
+              {totaux.totalRemise > 0 && (
+                <>
+                  <div className="flex justify-between text-muted">
+                    <span>Brut HT</span>
+                    <span>{formatCurrency(totaux.brutHT)}</span>
+                  </div>
+                  {totaux.remisesLignes > 0 && (
+                    <div className="flex justify-between text-muted">
+                      <span>Remises lignes</span>
+                      <span>− {formatCurrency(totaux.remisesLignes)}</span>
+                    </div>
+                  )}
+                  {totaux.remiseGlobaleAppliquee > 0 && (
+                    <div className="flex justify-between text-muted">
+                      <span>Remise globale</span>
+                      <span>
+                        − {formatCurrency(totaux.remiseGlobaleAppliquee)}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
               {tvaActive && z.totaux.totalHT && (
                 <div className="flex justify-between">
                   <span>Total HT</span>
@@ -754,4 +793,6 @@ export function DocumentPreview(props: Props) {
       )}
     </div>
   );
-}
+});
+
+DocumentPreview.displayName = "DocumentPreview";

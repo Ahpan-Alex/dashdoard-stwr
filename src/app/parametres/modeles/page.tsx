@@ -21,6 +21,7 @@ import {
   type TypeDocumentCommercial,
 } from "@/lib/document-templates";
 import { useStore } from "@/lib/store";
+import { calculerTotaux } from "@/lib/commercial";
 import type { Client, LigneDocument } from "@/lib/types";
 
 const TYPE_LABELS: Record<TypeDocumentCommercial, string> = {
@@ -78,24 +79,7 @@ const APERCU_DATE = new Date().toISOString();
 const APERCU_ECHEANCE = new Date(Date.now() + 30 * 86400000).toISOString();
 
 function sampleTotaux() {
-  const brutHT = SAMPLE_LIGNES.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
-  const totalRemise = SAMPLE_LIGNES.reduce(
-    (s, l) => s + l.quantite * l.prixUnitaire * ((l.remisePercent ?? 0) / 100),
-    0,
-  );
-  const totalHT = brutHT - totalRemise;
-  const montantTVA = totalHT * 0.2;
-  const totalTTC = totalHT + montantTVA;
-  return {
-    brutHT,
-    totalRemise,
-    totalHT,
-    tauxTVA: 20,
-    montantTVA,
-    totalTTC,
-    acomptesTTC: 0,
-    netAPayer: totalTTC,
-  };
+  return calculerTotaux(SAMPLE_LIGNES, 20, 0, true, 0);
 }
 
 function snapshotModele(m: ModeleDocument): ModeleDocument {

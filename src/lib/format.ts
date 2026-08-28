@@ -35,6 +35,16 @@ export function formatDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+export function formatDateTime(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(d);
+}
+
 export function formatPercent(value: number): string {
   return new Intl.NumberFormat("fr-FR", {
     style: "percent",

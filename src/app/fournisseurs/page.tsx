@@ -20,6 +20,7 @@ export default function FournisseursPage() {
   const {
     fournisseurs,
     entrees,
+    achats,
     addFournisseur,
     updateFournisseur,
     deleteFournisseur,
@@ -62,7 +63,7 @@ export default function FournisseursPage() {
   }
 
   function supprimer(f: Fournisseur) {
-    const motif = motifLienFournisseur(f.id, f.nom, entrees);
+    const motif = motifLienFournisseur(f.id, f.nom, entrees, achats);
     if (motif) {
       alert(motif);
       return;
@@ -122,7 +123,7 @@ export default function FournisseursPage() {
                 (s, e) => s + e.quantite * e.prixAchatUnitaire,
                 0,
               );
-              const motif = motifLienFournisseur(f.id, f.nom, entrees);
+              const motif = motifLienFournisseur(f.id, f.nom, entrees, achats);
               return (
                 <tr key={f.id}>
                   <td className="font-medium">

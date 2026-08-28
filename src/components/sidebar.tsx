@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Fish,
   LayoutDashboard,
-  PackagePlus,
+  ShoppingCart,
   Boxes,
   Receipt,
   MapPin,
@@ -41,6 +41,7 @@ import {
   couleurStatutDocument,
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { nomAfficheMenu } from "@/lib/identite-navigation";
 
 type NavChild = {
   href: string;
@@ -107,7 +108,7 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Exploitation",
     links: [
-      { href: "/entrees", label: "Entrées", icon: PackagePlus },
+      { href: "/achats", label: "Achats", icon: ShoppingCart },
       { href: "/stocks", label: "Stocks", icon: Boxes },
       {
         href: "/inventaires",
@@ -216,6 +217,11 @@ const sections: { title: string; links: NavLink[] }[] = [
           {
             href: "/parametres/entreprise",
             label: "Entreprise & fiscalité",
+          },
+          {
+            href: "/parametres/identite-menu",
+            label: "Identité du menu",
+            permission: "parametres.lire",
           },
           {
             href: "/parametres/produits",
@@ -414,6 +420,7 @@ export function Sidebar() {
   const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
   const acomptes = useStore((s) => s.acomptes);
   const factures = useStore((s) => s.factures);
+  const identiteNavigation = useStore((s) => s.identiteNavigation);
 
   const pastillesParHref = useMemo(() => {
     return {
@@ -487,15 +494,27 @@ export function Sidebar() {
     <aside className="no-print flex w-64 shrink-0 flex-col bg-sidebar text-sea-100">
       <div className="border-b border-white/10 px-5 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sea-600 text-white shadow-lg shadow-sea-900/40">
-            <Fish className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="font-display text-lg font-semibold leading-tight text-white">
-              STWR
+          {identiteNavigation?.logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={identiteNavigation.logoDataUrl}
+              alt=""
+              className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-0.5 shadow-lg shadow-sea-900/40"
+            />
+          ) : (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea-600 text-white shadow-lg shadow-sea-900/40">
+              <Fish className="h-5 w-5" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p
+              className="truncate font-display text-lg font-semibold leading-tight text-white"
+              title={nomAfficheMenu(identiteNavigation)}
+            >
+              {nomAfficheMenu(identiteNavigation)}
             </p>
             <p className="text-[11px] uppercase tracking-[0.14em] text-sea-300">
-              Poissonnerie
+              Navigation
             </p>
           </div>
         </div>

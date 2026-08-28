@@ -20,8 +20,10 @@ import {
   libelleClient,
   lignesAcomptesPourDocument,
   nextNumero,
+  persisterRemiseGlobale,
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { devisPeutEtreTransforme } from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
 
 export default function CommandesPage() {
@@ -40,6 +42,9 @@ export default function CommandesPage() {
     addCommande,
     updateAcompte,
     encaisserAcompte,
+    verrouillerTransformation,
+    annulerTransformation,
+    finaliserTransformation,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -47,8 +52,9 @@ export default function CommandesPage() {
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
     remiseGlobale: number;
+    remiseGlobaleMode: "percent" | "montant";
     note: string;
-  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
@@ -62,6 +68,7 @@ export default function CommandesPage() {
   const assujettiTVA = appliqueTVA(parametres);
 
   function ouvrirFormulaire() {
+    if (meta.devisId) annulerTransformation("devis", meta.devisId);
     setMeta({
       clientId: clients[0]?.id ?? "",
       pointDeVenteId: pointsDeVente[0]?.id ?? "",
@@ -69,18 +76,27 @@ export default function CommandesPage() {
       date: new Date().toISOString().slice(0, 10),
       dateLivraisonPrevue: "",
     });
-    setSeed({ lignes: [], remiseGlobale: 0, note: "" });
+    setSeed({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
     setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
     setOpen(true);
   }
 
   function chargerDepuisDevis(devisId: string) {
+    if (meta.devisId && meta.devisId !== devisId) {
+      annulerTransformation("devis", meta.devisId);
+    }
     const d = devis.find((x) => x.id === devisId);
     if (!d) {
+      if (meta.devisId) annulerTransformation("devis", meta.devisId);
       setMeta((f) => ({ ...f, devisId }));
-      setSeed({ lignes: [], remiseGlobale: 0, note: "" });
+      setSeed({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
       setWizardKey((k) => k + 1);
+      return;
+    }
+    const res = verrouillerTransformation("devis", devisId, "commande");
+    if (!res.ok) {
+      alert(res.reason);
       return;
     }
     setMeta((f) => ({
@@ -92,6 +108,7 @@ export default function CommandesPage() {
     setSeed({
       lignes: lignesToDraft(d.lignes),
       remiseGlobale: d.remiseGlobale ?? 0,
+      remiseGlobaleMode: d.remiseGlobaleMode ?? "montant",
       note: d.note ?? "",
     });
     setWizardKey((k) => k + 1);
@@ -150,6 +167,7 @@ export default function CommandesPage() {
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
+            initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
             showAcomptes={acomptesTTC > 0}
             acomptesTTC={acomptesTTC}
@@ -173,9 +191,12 @@ export default function CommandesPage() {
               conditionsPaiement: parametres.conditionsPaiementDefaut,
               referenceDevis: devis.find((d) => d.id === meta.devisId)?.numero,
             }}
-            confirmLabel="Enregistrer la commande"
-            onCancel={() => setOpen(false)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            confirmLabel="Confirmer la commande"
+            onCancel={() => {
+              if (meta.devisId) annulerTransformation("devis", meta.devisId);
+              setOpen(false);
+            }}
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const numero = nextNumero(
                 "CMD",
@@ -197,7 +218,7 @@ export default function CommandesPage() {
                 tauxTVA: parametres.tauxTVA,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
-                remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
               });
               for (const a of acomptesLies) {
@@ -219,6 +240,17 @@ export default function CommandesPage() {
                 });
                 if (!res.ok) alert(res.reason);
               }
+              if (meta.devisId) {
+                const fin = finaliserTransformation({
+                  sourceType: "devis",
+                  sourceId: meta.devisId,
+                  cibleType: "commande",
+                  cibleId: commandeId,
+                  cibleNumero: numero,
+                  statutSource: "transforme",
+                });
+                if (!fin.ok) alert(fin.reason);
+              }
               setOpen(false);
             }}
             headerFields={
@@ -232,7 +264,10 @@ export default function CommandesPage() {
                   >
                     <option value="">— Nouveau —</option>
                     {devis
-                      .filter((d) => ["accepte", "envoye"].includes(d.statut))
+                      .filter(
+                        (d) =>
+                          devisPeutEtreTransforme(d) || d.id === meta.devisId,
+                      )
                       .map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.numero}

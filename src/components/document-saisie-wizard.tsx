@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   AlignLeft,
-  FileText,
   GripVertical,
   MessageSquare,
   Minus,
@@ -12,11 +11,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import type { ModeleDocument } from "@/lib/document-templates";
 import {
   calculerTotaux,
   isLigneProduit,
+  modeRemiseGlobale,
   montantLigneHT,
+  montantRemiseLigne,
+  normaliserRemiseLigne,
+  prixUnitaireNetHT,
   recalculerSousTotaux as recalculerSousTotauxBase,
   type TotauxDocument,
 } from "@/lib/commercial";
@@ -30,6 +34,7 @@ import type {
   Client,
   EntreeStock,
   LigneDocument,
+  ModeRemise,
   Parametres,
   PointDeVente,
   Produit,
@@ -43,6 +48,13 @@ import {
   resolvePrixVenteHT,
 } from "@/lib/produits";
 import { createId } from "@/lib/id";
+import { useStore } from "@/lib/store";
+import {
+  libelleRemiseLigne,
+  PrixUnitaireLigneSaisie,
+  RemiseGlobaleSaisie,
+  RemiseLigneSaisie,
+} from "@/components/remise-saisie";
 
 export type DraftLigne = Omit<LigneDocument, "id"> & { key: string };
 export type EtapeDocument = "saisie" | "prevalidation";
@@ -58,19 +70,24 @@ export function recalculerSousTotaux(lignes: DraftLigne[]): DraftLigne[] {
 }
 
 export function draftToLignes(lignes: DraftLigne[]): LigneDocument[] {
-  return lignes.map((l, i) => ({
-    id: `nl-${i}`,
-    type: l.type ?? "produit",
-    produitId: l.produitId,
-    codeProduit: l.codeProduit,
-    designation: l.designation,
-    quantite: l.quantite,
-    prixUnitaire: l.prixUnitaire,
-    unite: l.unite,
-    tauxTVA: l.tauxTVA,
-    remisePercent: l.remisePercent,
-    commentaire: l.commentaire,
-  }));
+  return lignes.map((l, i) => {
+    const remise = normaliserRemiseLigne(l);
+    return {
+      id: `nl-${i}`,
+      type: l.type ?? "produit",
+      produitId: l.produitId,
+      codeProduit: l.codeProduit,
+      designation: l.designation,
+      quantite: l.quantite,
+      prixUnitaire: l.prixUnitaire,
+      unite: l.unite,
+      tauxTVA: l.tauxTVA,
+      remiseMode: remise.remiseMode,
+      remisePercent: remise.remisePercent,
+      remiseMontant: remise.remiseMontant,
+      commentaire: l.commentaire,
+    };
+  });
 }
 
 export function lignesToDraft(lignes: LigneDocument[]): DraftLigne[] {
@@ -121,12 +138,14 @@ type Props = {
   onConfirm: (payload: {
     lignes: LigneDocument[];
     remiseGlobale: number;
+    remiseGlobaleMode: ModeRemise;
     note?: string;
   }) => void;
   onCancel: () => void;
   /** Lignes initiales (ex. depuis un devis) */
   initialLignes?: DraftLigne[];
   initialRemiseGlobale?: number;
+  initialRemiseGlobaleMode?: ModeRemise;
   initialNote?: string;
   acomptesDetail?: {
     numero: string;
@@ -158,11 +177,14 @@ export function DocumentSaisieWizard({
   onCancel,
   initialLignes = [],
   initialRemiseGlobale = 0,
+  initialRemiseGlobaleMode = "montant",
   initialNote = "",
   acomptesDetail = [],
 }: Props) {
+  const inventaires = useStore((s) => s.inventaires);
   const produitsDispo = produitsActifs(produits);
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
+  const previewSheetRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<DraftLigne[]>(initialLignes);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
@@ -171,6 +193,7 @@ export function DocumentSaisieWizard({
   const [rechercheProduit, setRechercheProduit] = useState("");
   const [form, setForm] = useState({
     remiseGlobale: String(initialRemiseGlobale || 0),
+    remiseGlobaleMode: modeRemiseGlobale(initialRemiseGlobaleMode) as ModeRemise,
     note: initialNote,
     commentaireLibre: "",
   });
@@ -230,8 +253,16 @@ export function DocumentSaisieWizard({
       acomptesTTC,
       assujettiTVA,
       Number(form.remiseGlobale) || 0,
+      form.remiseGlobaleMode,
     );
-  }, [lignes, tauxTVA, acomptesTTC, assujettiTVA, form.remiseGlobale]);
+  }, [
+    lignes,
+    tauxTVA,
+    acomptesTTC,
+    assujettiTVA,
+    form.remiseGlobale,
+    form.remiseGlobaleMode,
+  ]);
   const afficherAcomptes = showAcomptes || acomptesTTC > 0;
 
   function ajouterProduit(produitId: string) {
@@ -250,6 +281,8 @@ export function DocumentSaisieWizard({
       entrees,
       ventes,
       lignes,
+      undefined,
+      inventaires,
     );
     if (dispo <= 0) {
       setStockError(
@@ -347,12 +380,17 @@ export function DocumentSaisieWizard({
             ventes,
             prev,
             key,
+            inventaires,
           );
           merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
         }
         return merged;
       });
-      return recalculerSousTotaux(next);
+      return recalculerSousTotaux(
+        next.map((l) =>
+          isLigneProduit(l) ? { ...l, ...normaliserRemiseLigne(l) } : l,
+        ),
+      );
     });
   }
 
@@ -369,6 +407,7 @@ export function DocumentSaisieWizard({
         ventes,
         lignes,
         l.key,
+        inventaires,
       );
       if (l.quantite <= 0) {
         return `Quantité invalide pour « ${l.designation} ».`;
@@ -444,6 +483,7 @@ export function DocumentSaisieWizard({
     onConfirm({
       lignes: draftToLignes(recalculerSousTotaux(lignes)),
       remiseGlobale,
+      remiseGlobaleMode: form.remiseGlobaleMode,
       note: form.note.trim() || undefined,
     });
   }
@@ -559,6 +599,7 @@ export function DocumentSaisieWizard({
                         pointDeVenteId,
                         entrees,
                         ventes,
+                        inventaires,
                       );
                       const restant = stockRestantPourSaisie(
                         p.id,
@@ -566,6 +607,8 @@ export function DocumentSaisieWizard({
                         entrees,
                         ventes,
                         lignes,
+                        undefined,
+                        inventaires,
                       );
                       const indispo = restant <= 0;
                       const prix = resolvePrixVenteHT(p, {
@@ -700,7 +743,7 @@ export function DocumentSaisieWizard({
                   <th className="w-8" />
                   <th>Ligne</th>
                   <th>Qté</th>
-                  <th>P.U. HT</th>
+                  <th>P.U. HT (origine)</th>
                   <th>Remise</th>
                   <th>Montant HT</th>
                   <th />
@@ -819,6 +862,7 @@ export function DocumentSaisieWizard({
                           pointDeVenteId,
                           entrees,
                           ventes,
+                          inventaires,
                         )
                       : 0;
                     const maxLigne = l.produitId
@@ -829,6 +873,7 @@ export function DocumentSaisieWizard({
                           ventes,
                           lignes,
                           l.key,
+                          inventaires,
                         )
                       : 0;
                     return (
@@ -865,33 +910,21 @@ export function DocumentSaisieWizard({
                           />
                         </td>
                         <td>
-                          <input
-                            type="number"
-                            className="input w-28"
-                            value={l.prixUnitaire}
-                            onChange={(e) =>
-                              updateLigne(l.key, {
-                                prixUnitaire: Number(e.target.value) || 0,
-                              })
+                          <PrixUnitaireLigneSaisie
+                            ligne={l}
+                            onChange={(prixUnitaire) =>
+                              updateLigne(l.key, { prixUnitaire })
                             }
                           />
                         </td>
                         <td>
-                          <input
-                            type="number"
-                            className="input w-16"
-                            value={l.remisePercent ?? 0}
-                            onChange={(e) =>
-                              updateLigne(l.key, {
-                                remisePercent:
-                                  Number(e.target.value) || undefined,
-                              })
-                            }
+                          <RemiseLigneSaisie
+                            ligne={l}
+                            onChange={(patch) => updateLigne(l.key, patch)}
                           />
-                          <span className="ml-1 text-xs text-muted">%</span>
                         </td>
                         <td className="font-semibold">
-                          {formatCurrency(montantLigneHT({ ...l, id: l.key }))}
+                          {formatCurrency(montantLigneHT(l))}
                         </td>
                         <td>
                           <button
@@ -911,18 +944,22 @@ export function DocumentSaisieWizard({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-xs font-semibold text-muted">
-              Remise globale HT (Ar)
-              <input
-                type="number"
-                min={0}
-                className="input mt-1"
-                value={form.remiseGlobale}
-                onChange={(e) =>
-                  setForm({ ...form, remiseGlobale: e.target.value })
-                }
-              />
-            </label>
+            <RemiseGlobaleSaisie
+              htApresLignes={Math.max(
+                0,
+                totauxDraft.brutHT - totauxDraft.remisesLignes,
+              )}
+              aDesRemisesLigne={totauxDraft.remisesLignes > 0}
+              mode={form.remiseGlobaleMode}
+              valeur={Number(form.remiseGlobale) || 0}
+              onChange={({ mode, valeur }) =>
+                setForm({
+                  ...form,
+                  remiseGlobaleMode: mode,
+                  remiseGlobale: String(valeur),
+                })
+              }
+            />
             <label className="block text-xs font-semibold text-muted">
               Commentaire général
               <input
@@ -970,6 +1007,15 @@ export function DocumentSaisieWizard({
                 <p className="font-display text-lg font-semibold">
                   {formatCurrency(totauxDraft.totalRemise)}
                 </p>
+                {(totauxDraft.remisesLignes > 0 ||
+                  totauxDraft.remiseGlobaleAppliquee > 0) && (
+                  <p className="text-[10px] text-muted">
+                    Lignes {formatCurrency(totauxDraft.remisesLignes)}
+                    {" · "}
+                    Globale{" "}
+                    {formatCurrency(totauxDraft.remiseGlobaleAppliquee)}
+                  </p>
+                )}
               </div>
               {assujettiTVA && (
                 <div className="rounded-lg bg-card px-3 py-2">
@@ -1025,7 +1071,7 @@ export function DocumentSaisieWizard({
                   <tr>
                     <th>Désignation</th>
                     <th>Qté</th>
-                    <th>P.U. HT</th>
+                    <th>P.U. HT (origine)</th>
                     <th>Remise</th>
                     <th>Montant HT</th>
                   </tr>
@@ -1073,12 +1119,18 @@ export function DocumentSaisieWizard({
                         <td>
                           {formatNumber(l.quantite)} {l.unite}
                         </td>
-                        <td>{formatCurrency(l.prixUnitaire)}</td>
                         <td>
-                          {l.remisePercent ? `${l.remisePercent} %` : "—"}
+                          {formatCurrency(l.prixUnitaire)}
+                          {montantRemiseLigne(l) > 0 ? (
+                            <span className="mt-0.5 block text-[10px] text-muted">
+                              Après remise :{" "}
+                              {formatCurrency(prixUnitaireNetHT(l))}
+                            </span>
+                          ) : null}
                         </td>
+                        <td>{libelleRemiseLigne(l)}</td>
                         <td className="font-semibold">
-                          {formatCurrency(montantLigneHT({ ...l, id: l.key }))}
+                          {formatCurrency(montantLigneHT(l))}
                         </td>
                       </tr>
                     );
@@ -1100,19 +1152,16 @@ export function DocumentSaisieWizard({
               <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
                 Prévisualisation PDF (obligatoire avant enregistrement)
               </p>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => window.print()}
-              >
-                <FileText className="h-4 w-4" />
-                Imprimer / PDF
-              </button>
+              <DocumentPrintActions
+                sheetRef={previewSheetRef}
+                filename={previewMeta.numero}
+              />
             </div>
             <p className="mb-3 text-xs text-muted">
               Aperçu provisoire — non enregistré ({previewMeta.numero})
             </p>
             <DocumentPreview
+              ref={previewSheetRef}
               type={previewMeta.type}
               numero={previewMeta.numero}
               date={previewMeta.date}
@@ -1142,7 +1191,7 @@ export function DocumentSaisieWizard({
               className="btn btn-secondary"
               onClick={() => setEtape("saisie")}
             >
-              Modifier
+              Retour à l&apos;édition
             </button>
             <button type="button" className="btn btn-secondary" onClick={onCancel}>
               Annuler

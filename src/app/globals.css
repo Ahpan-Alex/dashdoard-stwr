@@ -422,16 +422,28 @@ table.ca-report tbody tr.ca-report-row-active td {
     display: none !important;
   }
 
+  html,
   body {
-    background: white;
+    background: #ffffff !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    forced-color-adjust: none !important;
+  }
+
+  /* Ne pas dégrader le document (bordures, fonds, palette). */
+  .print-area,
+  .document-preview-sheet {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    forced-color-adjust: none !important;
   }
 
   .print-area {
     box-shadow: none !important;
-    border: none !important;
   }
 
-  /* Export PDF groupé : n'imprimer que le lot de documents */
   body.print-batch-active * {
     visibility: hidden !important;
   }
@@ -460,7 +472,23 @@ table.ca-report tbody tr.ca-report-row-active td {
   }
 }
 
-/* Hors impression : le lot reste hors écran */
+.document-preview-sheet {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+  color-adjust: exact;
+}
+
+.document-export-host {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  width: 210mm;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Hors impression : le lot reste hors flux visuel mais à largeur A4 */
 .print-batch-root {
   position: absolute;
   left: -10000px;

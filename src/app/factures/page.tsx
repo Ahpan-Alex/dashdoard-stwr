@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import Link from "next/link";
 import {
   AlignLeft,
-  FileText,
   GripVertical,
   MessageSquare,
   Minus,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
   appliqueTVA,
@@ -24,6 +24,10 @@ import {
   libelleClient,
   MODES_PAIEMENT,
   montantLigneHT,
+  montantRemiseLigne,
+  normaliserRemiseLigne,
+  persisterRemiseGlobale,
+  prixUnitaireNetHT,
   recalculerSousTotaux as recalculerSousTotauxBase,
 } from "@/lib/commercial";
 import {
@@ -43,7 +47,19 @@ import {
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
 import { createId } from "@/lib/id";
-import type { FactureStatut, LigneDocument, ModePaiement, TypeLigneDocument } from "@/lib/types";
+import {
+  libelleRemiseLigne,
+  PrixUnitaireLigneSaisie,
+  RemiseGlobaleSaisie,
+  RemiseLigneSaisie,
+} from "@/components/remise-saisie";
+import type {
+  FactureStatut,
+  LigneDocument,
+  ModePaiement,
+  ModeRemise,
+  TypeLigneDocument,
+} from "@/lib/types";
 
 type Etape = "saisie" | "prevalidation";
 
@@ -73,6 +89,7 @@ export default function FacturesPage() {
     tarifsClients,
     entrees,
     ventes,
+    inventaires,
     addFacture,
     updateAcompte,
     encaisserAcompte,
@@ -91,6 +108,8 @@ export default function FacturesPage() {
   const [open, setOpen] = useState(true);
   const [etape, setEtape] = useState<Etape>("saisie");
   const [previewDraft, setPreviewDraft] = useState(false);
+  const previewInlineRef = useRef<HTMLDivElement>(null);
+  const previewDraftRef = useRef<HTMLDivElement>(null);
   const [filtreFamille, setFiltreFamille] = useState("");
   const [rechercheProduit, setRechercheProduit] = useState("");
   const [form, setForm] = useState({
@@ -101,6 +120,7 @@ export default function FacturesPage() {
     date: new Date().toISOString().slice(0, 10),
     echeance: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     remiseGlobale: "0",
+    remiseGlobaleMode: "montant" as ModeRemise,
     note: "",
     commentaireLibre: "",
     acomptePaye: "0",
@@ -136,8 +156,9 @@ export default function FacturesPage() {
       0,
       avecTVA,
       Number(form.remiseGlobale) || 0,
+      form.remiseGlobaleMode,
     );
-  }, [lignes, parametres.tauxTVA, avecTVA, form.remiseGlobale]);
+  }, [lignes, parametres.tauxTVA, avecTVA, form.remiseGlobale, form.remiseGlobaleMode]);
 
   const acomptePayeNum = Math.max(0, Number(form.acomptePaye) || 0);
   const resteAPayerDraft = Math.max(0, totauxDraft.totalTTC - acomptePayeNum);
@@ -154,6 +175,7 @@ export default function FacturesPage() {
       commandeId: "",
       devisId: "",
       remiseGlobale: "0",
+      remiseGlobaleMode: "montant",
       note: "",
       commentaireLibre: "",
       acomptePaye: "0",
@@ -225,7 +247,9 @@ export default function FacturesPage() {
     prixUnitaire: l.prixUnitaire,
     unite: l.unite,
     tauxTVA: l.tauxTVA,
+    remiseMode: l.remiseMode,
     remisePercent: l.remisePercent,
+    remiseMontant: l.remiseMontant,
     commentaire: l.commentaire,
   }));
 
@@ -243,6 +267,8 @@ export default function FacturesPage() {
       entrees,
       ventes,
       lignes,
+      undefined,
+      inventaires,
     );
     if (dispo <= 0) {
       setStockError(
@@ -341,12 +367,17 @@ export default function FacturesPage() {
             ventes,
             prev,
             key,
+            inventaires,
           );
           merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
         }
         return merged;
       });
-      return recalculerSousTotaux(next);
+      return recalculerSousTotaux(
+        next.map((l) =>
+          isLigneProduit(l) ? { ...l, ...normaliserRemiseLigne(l) } : l,
+        ),
+      );
     });
   }
 
@@ -363,6 +394,7 @@ export default function FacturesPage() {
         ventes,
         lignes,
         l.key,
+        inventaires,
       );
       if (l.quantite <= 0) {
         return `Quantité invalide pour « ${l.designation} ».`;
@@ -444,6 +476,10 @@ export default function FacturesPage() {
     }
 
     const remiseGlobale = Number(form.remiseGlobale) || 0;
+    const champsRemise = persisterRemiseGlobale(
+      remiseGlobale,
+      form.remiseGlobaleMode,
+    );
     const paye =
       mode === "validee"
         ? Math.min(totauxDraft.totalTTC, acomptePayeNum)
@@ -519,25 +555,30 @@ export default function FacturesPage() {
         tauxTVA: parametres.tauxTVA,
         conditionsPaiement: parametres.conditionsPaiementDefaut,
         note: form.note.trim() || undefined,
-        remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+        ...champsRemise,
         commandeId: form.commandeId || undefined,
         devisId: form.devisId || undefined,
         dateValidation:
           mode === "validee" ? new Date().toISOString() : undefined,
         acomptesDocument,
-        lignes: lignes.map((l, i) => ({
-          id: `nl-${i}`,
-          type: l.type ?? "produit",
-          produitId: l.produitId,
-          codeProduit: l.codeProduit,
-          designation: l.designation,
-          quantite: l.quantite,
-          prixUnitaire: l.prixUnitaire,
-          unite: l.unite,
-          tauxTVA: l.tauxTVA,
-          remisePercent: l.remisePercent,
-          commentaire: l.commentaire,
-        })),
+        lignes: lignes.map((l, i) => {
+          const remise = normaliserRemiseLigne(l);
+          return {
+            id: `nl-${i}`,
+            type: l.type ?? "produit",
+            produitId: l.produitId,
+            codeProduit: l.codeProduit,
+            designation: l.designation,
+            quantite: l.quantite,
+            prixUnitaire: l.prixUnitaire,
+            unite: l.unite,
+            tauxTVA: l.tauxTVA,
+            remiseMode: remise.remiseMode,
+            remisePercent: remise.remisePercent,
+            remiseMontant: remise.remiseMontant,
+            commentaire: l.commentaire,
+          };
+        }),
       },
       {
         action:
@@ -833,6 +874,7 @@ export default function FacturesPage() {
                             form.pointDeVenteId,
                             entrees,
                             ventes,
+                            inventaires,
                           );
                           const restant = stockRestantPourSaisie(
                             p.id,
@@ -840,6 +882,8 @@ export default function FacturesPage() {
                             entrees,
                             ventes,
                             lignes,
+                            undefined,
+                            inventaires,
                           );
                           const indispo = restant <= 0;
                           const prix = resolvePrixVenteHT(p, {
@@ -977,7 +1021,7 @@ export default function FacturesPage() {
                       <th className="w-8" />
                       <th>Ligne</th>
                       <th>Qté</th>
-                      <th>P.U. HT</th>
+                      <th>P.U. HT (origine)</th>
                       <th>Remise</th>
                       <th>Montant HT</th>
                       <th />
@@ -1113,6 +1157,7 @@ export default function FacturesPage() {
                                         form.pointDeVenteId,
                                         entrees,
                                         ventes,
+                                        inventaires,
                                       ),
                                     )}{" "}
                                     {l.unite}
@@ -1144,6 +1189,7 @@ export default function FacturesPage() {
                                         ventes,
                                         lignes,
                                         l.key,
+                                        inventaires,
                                       )
                                     : undefined
                                 }
@@ -1156,34 +1202,22 @@ export default function FacturesPage() {
                               />
                             </td>
                             <td>
-                              <input
-                                type="number"
-                                className="input w-28"
-                                value={l.prixUnitaire}
-                                onChange={(e) =>
-                                  updateLigne(l.key, {
-                                    prixUnitaire: Number(e.target.value) || 0,
-                                  })
+                              <PrixUnitaireLigneSaisie
+                                ligne={l}
+                                onChange={(prixUnitaire) =>
+                                  updateLigne(l.key, { prixUnitaire })
                                 }
                               />
                             </td>
                             <td>
-                              <input
-                                type="number"
-                                className="input w-16"
-                                value={l.remisePercent ?? 0}
-                                onChange={(e) =>
-                                  updateLigne(l.key, {
-                                    remisePercent:
-                                      Number(e.target.value) || undefined,
-                                  })
-                                }
+                              <RemiseLigneSaisie
+                                ligne={l}
+                                onChange={(patch) => updateLigne(l.key, patch)}
                               />
-                              <span className="ml-1 text-xs text-muted">%</span>
                             </td>
                             <td className="font-semibold">
                               {formatCurrency(
-                                montantLigneHT({ ...l, id: l.key }),
+                                montantLigneHT(l),
                               )}
                             </td>
                             <td>
@@ -1204,18 +1238,22 @@ export default function FacturesPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-xs font-semibold text-muted">
-                  Remise globale HT (Ar)
-                  <input
-                    type="number"
-                    min={0}
-                    className="input mt-1"
-                    value={form.remiseGlobale}
-                    onChange={(e) =>
-                      setForm({ ...form, remiseGlobale: e.target.value })
-                    }
-                  />
-                </label>
+                <RemiseGlobaleSaisie
+                  htApresLignes={Math.max(
+                    0,
+                    totauxDraft.brutHT - totauxDraft.remisesLignes,
+                  )}
+                  aDesRemisesLigne={totauxDraft.remisesLignes > 0}
+                  mode={form.remiseGlobaleMode}
+                  valeur={Number(form.remiseGlobale) || 0}
+                  onChange={({ mode, valeur }) =>
+                    setForm({
+                      ...form,
+                      remiseGlobaleMode: mode,
+                      remiseGlobale: String(valeur),
+                    })
+                  }
+                />
                 <label className="block text-xs font-semibold text-muted">
                   Commentaire général
                   <input
@@ -1341,6 +1379,15 @@ export default function FacturesPage() {
                     <p className="font-display text-lg font-semibold">
                       {formatCurrency(totauxDraft.totalRemise)}
                     </p>
+                    {(totauxDraft.remisesLignes > 0 ||
+                      totauxDraft.remiseGlobaleAppliquee > 0) && (
+                      <p className="text-[10px] text-muted">
+                        Lignes {formatCurrency(totauxDraft.remisesLignes)}
+                        {" · "}
+                        Globale{" "}
+                        {formatCurrency(totauxDraft.remiseGlobaleAppliquee)}
+                      </p>
+                    )}
                   </div>
                   {avecTVA && (
                     <div className="rounded-lg bg-card px-3 py-2">
@@ -1394,7 +1441,7 @@ export default function FacturesPage() {
                       <tr>
                         <th>Désignation</th>
                         <th>Qté</th>
-                        <th>P.U. HT</th>
+                        <th>P.U. HT (origine)</th>
                         <th>Remise</th>
                         <th>Montant HT</th>
                       </tr>
@@ -1439,15 +1486,19 @@ export default function FacturesPage() {
                             <td>
                               {formatNumber(l.quantite)} {l.unite}
                             </td>
-                            <td>{formatCurrency(l.prixUnitaire)}</td>
                             <td>
-                              {l.remisePercent
-                                ? `${l.remisePercent} %`
-                                : "—"}
+                              {formatCurrency(l.prixUnitaire)}
+                              {montantRemiseLigne(l) > 0 ? (
+                                <span className="mt-0.5 block text-[10px] text-muted">
+                                  Après remise :{" "}
+                                  {formatCurrency(prixUnitaireNetHT(l))}
+                                </span>
+                              ) : null}
                             </td>
+                            <td>{libelleRemiseLigne(l)}</td>
                             <td className="font-semibold">
                               {formatCurrency(
-                                montantLigneHT({ ...l, id: l.key }),
+                                montantLigneHT(l),
                               )}
                             </td>
                           </tr>
@@ -1471,14 +1522,10 @@ export default function FacturesPage() {
                     Prévisualisation PDF (obligatoire avant enregistrement)
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => window.print()}
-                    >
-                      <FileText className="h-4 w-4" />
-                      Imprimer / PDF
-                    </button>
+                    <DocumentPrintActions
+                      sheetRef={previewInlineRef}
+                      filename={numeroProvisoire}
+                    />
                     <button
                       type="button"
                       className="btn btn-secondary"
@@ -1492,6 +1539,7 @@ export default function FacturesPage() {
                   Aperçu provisoire — non enregistré ({numeroProvisoire})
                 </p>
                 <DocumentPreview
+                  ref={previewInlineRef}
                   type="facture"
                   factureType={acomptePayeNum > 0 ? "solde" : "standard"}
                   numero={numeroProvisoire}
@@ -1561,7 +1609,7 @@ export default function FacturesPage() {
                   className="btn btn-secondary"
                   onClick={() => setEtape("saisie")}
                 >
-                  Modifier
+                  Retour à l&apos;édition
                 </button>
                 <button
                   type="button"
@@ -1594,18 +1642,16 @@ export default function FacturesPage() {
 
       {previewDraft && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-3xl">
+          <div className="my-6 w-full max-w-[220mm]">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-white/90">
                 Aperçu provisoire — non enregistré ({numeroProvisoire})
               </p>
-              <div className="flex gap-2">
-                <button
-                  className="btn btn-primary"
-                  onClick={() => window.print()}
-                >
-                  Imprimer / PDF
-                </button>
+              <div className="flex flex-wrap gap-2">
+                <DocumentPrintActions
+                  sheetRef={previewDraftRef}
+                  filename={numeroProvisoire}
+                />
                 <button
                   className="btn btn-secondary"
                   onClick={() => setPreviewDraft(false)}
@@ -1615,6 +1661,7 @@ export default function FacturesPage() {
               </div>
             </div>
             <DocumentPreview
+              ref={previewDraftRef}
               type="facture"
               factureType={acomptePayeNum > 0 ? "solde" : "standard"}
               numero={numeroProvisoire}

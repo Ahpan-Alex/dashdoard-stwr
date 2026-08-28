@@ -23,6 +23,7 @@ export type Permission =
   | "rentabilite.lire"
   | "parametres.lire"
   | "parametres.gerer"
+  | "navigation.identite"
   | "users.gerer"
   | "audit.lire"
   | "securite.gerer";
@@ -54,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "rentabilite.lire",
     "parametres.lire",
     "parametres.gerer",
+    "navigation.identite",
     "users.gerer",
     "audit.lire",
     "securite.gerer",
@@ -126,6 +128,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "rentabilite.lire": "Rentabilité — lecture",
   "parametres.lire": "Paramètres — lecture",
   "parametres.gerer": "Paramètres — gestion",
+  "navigation.identite": "Menu — identité (nom et logo)",
   "users.gerer": "Utilisateurs — gestion",
   "audit.lire": "Journal d'audit — lecture",
   "securite.gerer": "Sécurité — gestion",

@@ -8,7 +8,7 @@ import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
 export default function PointsDeVentePage() {
-  const { pointsDeVente, ventes, entrees, produits } = useStore();
+  const { pointsDeVente, ventes, entrees, produits, inventaires } = useStore();
 
   return (
     <div>
@@ -37,6 +37,8 @@ export default function PointsDeVentePage() {
             ventes,
             pdv.id,
             pointsDeVente,
+            undefined,
+            inventaires,
           );
           const valeurStock = stocks.reduce((s, l) => s + l.valeurAchat, 0);
 

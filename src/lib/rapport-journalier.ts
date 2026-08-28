@@ -13,6 +13,7 @@ import {
 import type {
   Charge,
   EntreeStock,
+  Inventaire,
   Produit,
   RapportFinJournee,
   Vente,
@@ -117,6 +118,7 @@ export function construireRapportsJournaliers(opts: {
   entrees: EntreeStock[];
   charges: Charge[];
   produits: Produit[];
+  inventaires?: Inventaire[];
   pointDeVenteId: string | "tous";
   range: DateRange;
   rapports: RapportFinJournee[];
@@ -126,6 +128,7 @@ export function construireRapportsJournaliers(opts: {
     entrees,
     charges,
     produits,
+    inventaires = [],
     pointDeVenteId,
     range,
     rapports,
@@ -150,6 +153,7 @@ export function construireRapportsJournaliers(opts: {
         produits,
         pointDeVenteId,
         bucket,
+        inventaires,
       );
       const saisie = saisiePourJour(rapports, dateJour, pointDeVenteId);
 

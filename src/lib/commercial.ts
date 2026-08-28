@@ -11,6 +11,7 @@ import type {
   FactureStatut,
   Immobilisation,
   LigneDocument,
+  ModeRemise,
   Parametres,
   RapportFinJournee,
   RegimeFiscal,
@@ -22,6 +23,10 @@ import type {
 export type TotauxDocument = {
   /** Somme des lignes produits avant remises */
   brutHT: number;
+  /** Remises de ligne uniquement */
+  remisesLignes: number;
+  /** Remise globale appliquée (après lignes, avant TVA) */
+  remiseGlobaleAppliquee: number;
   /** Remises lignes + remise globale */
   totalRemise: number;
   totalHT: number;
@@ -32,25 +37,138 @@ export type TotauxDocument = {
   netAPayer: number;
 };
 
+type ChampsRemiseLigne = Pick<
+  LigneDocument,
+  "type" | "quantite" | "prixUnitaire" | "remiseMode" | "remisePercent" | "remiseMontant"
+>;
+
+export function modeRemiseLigne(l: Pick<LigneDocument, "remiseMode">): ModeRemise {
+  return l.remiseMode === "montant" ? "montant" : "percent";
+}
+
+export function modeRemiseGlobale(
+  mode?: ModeRemise,
+): ModeRemise {
+  return mode === "percent" ? "percent" : "montant";
+}
+
+/** Plafonne une remise : ≤ 100 % ou ≤ montant de référence (ligne / total HT). */
+export function bornerValeurRemise(
+  valeur: number,
+  mode: ModeRemise,
+  plafondMontant: number,
+): { valeur: number; plafonnee: boolean } {
+  if (!Number.isFinite(valeur) || valeur <= 0) {
+    return { valeur: 0, plafonnee: valeur < 0 };
+  }
+  if (mode === "percent") {
+    if (valeur > 100) return { valeur: 100, plafonnee: true };
+    return { valeur, plafonnee: false };
+  }
+  const cap = Math.max(0, plafondMontant);
+  if (valeur > cap) return { valeur: cap, plafonnee: true };
+  return { valeur, plafonnee: false };
+}
+
+export function convertirModeRemise(
+  from: ModeRemise,
+  to: ModeRemise,
+  valeur: number,
+  plafondMontant: number,
+): number {
+  const source = bornerValeurRemise(valeur, from, plafondMontant).valeur;
+  if (from === to) return source;
+  if (from === "percent") {
+    return bornerValeurRemise(
+      (plafondMontant * source) / 100,
+      "montant",
+      plafondMontant,
+    ).valeur;
+  }
+  if (plafondMontant <= 0) return 0;
+  return bornerValeurRemise(
+    (source / plafondMontant) * 100,
+    "percent",
+    plafondMontant,
+  ).valeur;
+}
+
+export function persisterRemiseGlobale(valeur: number, mode: ModeRemise) {
+  if (!(valeur > 0)) {
+    return { remiseGlobale: undefined, remiseGlobaleMode: undefined };
+  }
+  return { remiseGlobale: valeur, remiseGlobaleMode: mode };
+}
+
+/** Garantit qu’une remise ligne reste ≤ 100 % / ≤ montant HT de la ligne. */
+export function normaliserRemiseLigne<T extends ChampsRemiseLigne>(l: T): T {
+  const brut = montantLigneBrutHT(l);
+  const mode = modeRemiseLigne(l);
+  if (mode === "percent") {
+    const pct = bornerValeurRemise(l.remisePercent ?? 0, "percent", brut).valeur;
+    return {
+      ...l,
+      remiseMode: "percent" as const,
+      remisePercent: pct || undefined,
+      remiseMontant: undefined,
+    };
+  }
+  const montant = bornerValeurRemise(l.remiseMontant ?? 0, "montant", brut).valeur;
+  return {
+    ...l,
+    remiseMode: "montant" as const,
+    remiseMontant: montant || undefined,
+    remisePercent: undefined,
+  };
+}
+
 export function isLigneProduit(l: Pick<LigneDocument, "type"> | { type?: TypeLigneDocument }) {
   return (l.type ?? "produit") === "produit";
 }
 
-export function montantLigneBrutHT(l: LigneDocument) {
+export function montantLigneBrutHT(l: Pick<LigneDocument, "type" | "quantite" | "prixUnitaire">) {
   if (!isLigneProduit(l)) return 0;
   return l.quantite * l.prixUnitaire;
 }
 
-export function montantRemiseLigne(l: LigneDocument) {
+export function montantRemiseLigne(l: ChampsRemiseLigne) {
   if (!isLigneProduit(l)) return 0;
   const brut = montantLigneBrutHT(l);
-  const pct = l.remisePercent ?? 0;
-  if (pct <= 0) return 0;
-  return Math.round(brut * (pct / 100));
+  if (brut <= 0) return 0;
+  const mode = modeRemiseLigne(l);
+  let remise = 0;
+  if (mode === "montant") {
+    remise = Math.max(0, l.remiseMontant ?? 0);
+  } else {
+    const pct = Math.max(0, l.remisePercent ?? 0);
+    if (pct <= 0) return 0;
+    remise = brut * (Math.min(100, pct) / 100);
+  }
+  return Math.min(Math.round(remise), Math.round(brut));
 }
 
-export function montantLigneHT(l: LigneDocument) {
+export function montantLigneHT(l: ChampsRemiseLigne) {
   return montantLigneBrutHT(l) - montantRemiseLigne(l);
+}
+
+/** PU HT après remise de ligne — le PU d’origine (`prixUnitaire`) n’est pas modifié. */
+export function prixUnitaireNetHT(l: ChampsRemiseLigne & Pick<LigneDocument, "prixUnitaire">) {
+  if (!isLigneProduit(l) || !(l.quantite > 0)) return l.prixUnitaire;
+  return montantLigneHT(l) / l.quantite;
+}
+
+export function montantRemiseGlobale(
+  htApresLignes: number,
+  valeur: number,
+  mode: ModeRemise = "montant",
+) {
+  const plafond = Math.max(0, htApresLignes);
+  const bornee = bornerValeurRemise(valeur, mode, plafond);
+  if (bornee.valeur <= 0 || plafond <= 0) return 0;
+  if (mode === "percent") {
+    return Math.min(Math.round((plafond * bornee.valeur) / 100), Math.round(plafond));
+  }
+  return Math.min(Math.round(bornee.valeur), Math.round(plafond));
 }
 
 /**
@@ -96,11 +214,17 @@ export function calculerTotaux(
   acomptesTTC = 0,
   assujettiTVA = true,
   remiseGlobale = 0,
+  remiseGlobaleMode: ModeRemise = "montant",
 ): TotauxDocument {
   const brutHT = lignes.reduce((s, l) => s + montantLigneBrutHT(l), 0);
   const remisesLignes = totalRemisesLignes(lignes);
-  const remiseG = Math.max(0, remiseGlobale);
-  const totalRemise = remisesLignes + remiseG;
+  const htApresLignes = Math.max(0, brutHT - remisesLignes);
+  const remiseGlobaleAppliquee = montantRemiseGlobale(
+    htApresLignes,
+    remiseGlobale,
+    modeRemiseGlobale(remiseGlobaleMode),
+  );
+  const totalRemise = remisesLignes + remiseGlobaleAppliquee;
   const totalHT = Math.max(0, brutHT - totalRemise);
   const taux = assujettiTVA ? tauxTVA : 0;
   const montantTVA = Math.round(totalHT * (taux / 100));
@@ -108,6 +232,8 @@ export function calculerTotaux(
   const acomptes = Math.min(acomptesTTC, totalTTC);
   return {
     brutHT,
+    remisesLignes,
+    remiseGlobaleAppliquee,
     totalRemise,
     totalHT,
     tauxTVA: taux,
@@ -132,6 +258,7 @@ export function totauxDevis(
     acomptesTTC,
     appliqueTVA(parametres),
     devis.remiseGlobale ?? 0,
+    modeRemiseGlobale(devis.remiseGlobaleMode),
   );
 }
 
@@ -150,6 +277,7 @@ export function totauxCommande(
     acomptesTTC,
     appliqueTVA(parametres),
     commande.remiseGlobale ?? 0,
+    modeRemiseGlobale(commande.remiseGlobaleMode),
   );
 }
 
@@ -168,6 +296,7 @@ export function totauxBonDeLivraison(
     acomptesTTC,
     appliqueTVA(parametres),
     bl.remiseGlobale ?? 0,
+    modeRemiseGlobale(bl.remiseGlobaleMode),
   );
 }
 
@@ -187,6 +316,7 @@ export function totauxFacture(
       0,
       assujetti,
       facture.remiseGlobale ?? 0,
+      modeRemiseGlobale(facture.remiseGlobaleMode),
     );
     return {
       ...t,
@@ -203,6 +333,7 @@ export function totauxFacture(
       0,
       assujetti,
       facture.remiseGlobale ?? 0,
+      modeRemiseGlobale(facture.remiseGlobaleMode),
     );
     return {
       ...t,
@@ -220,6 +351,7 @@ export function totauxFacture(
     acomptesDocumentTTC,
     assujetti,
     facture.remiseGlobale ?? 0,
+    modeRemiseGlobale(facture.remiseGlobaleMode),
   );
 }
 
@@ -630,22 +762,29 @@ export function fournisseurEstReference(
   fournisseurId: string,
   nom: string,
   entrees: EntreeStock[],
+  achats: { fournisseurId: string }[] = [],
 ) {
   const n = nom.trim().toLowerCase();
-  return entrees.some(
-    (e) =>
-      e.fournisseurId === fournisseurId ||
-      (n.length > 0 && e.fournisseur.toLowerCase() === n),
-  );
+  if (
+    entrees.some(
+      (e) =>
+        e.fournisseurId === fournisseurId ||
+        (n.length > 0 && e.fournisseur.toLowerCase() === n),
+    )
+  ) {
+    return true;
+  }
+  return achats.some((a) => a.fournisseurId === fournisseurId);
 }
 
 export function motifLienFournisseur(
   fournisseurId: string,
   nom: string,
   entrees: EntreeStock[],
+  achats: { fournisseurId: string }[] = [],
 ) {
-  if (fournisseurEstReference(fournisseurId, nom, entrees)) {
-    return "Fournisseur déjà utilisé sur des entrées de stock. Désactivez-le pour préserver l'historique.";
+  if (fournisseurEstReference(fournisseurId, nom, entrees, achats)) {
+    return "Fournisseur déjà utilisé sur des achats ou des entrées de stock. Désactivez-le pour préserver l'historique.";
   }
   return null;
 }
@@ -662,6 +801,7 @@ export function motifLienPointDeVente(
     charges: Pick<Charge, "pointDeVenteId">[];
     immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
     rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
+    achats?: { pointDeVenteId: string }[];
   },
 ): string | null {
   if (ctx.factures.some((f) => f.pointDeVenteId === pdvId)) {
@@ -691,6 +831,9 @@ export function motifLienPointDeVente(
   if (ctx.rapportsFinJournee.some((r) => r.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des rapports de clôture. Suppression impossible.";
   }
+  if ((ctx.achats ?? []).some((a) => a.pointDeVenteId === pdvId)) {
+    return "Ce point de vente a des achats fournisseurs. Suppression impossible.";
+  }
   return null;
 }
 
@@ -698,6 +841,8 @@ export const DEVIS_STATUTS: Record<string, string> = {
   brouillon: "Brouillon",
   envoye: "Envoyé",
   accepte: "Accepté",
+  en_transformation: "En cours de transformation",
+  transforme: "Transformé",
   refuse: "Refusé",
   expire: "Expiré",
 };
@@ -706,6 +851,7 @@ export const COMMANDE_STATUTS: Record<string, string> = {
   brouillon: "Brouillon",
   confirmee: "Confirmée",
   en_cours: "En cours",
+  en_transformation: "En cours de transformation",
   livree: "Livrée",
   annulee: "Annulée",
 };
@@ -714,6 +860,7 @@ export const BL_STATUTS: Record<string, string> = {
   brouillon: "Brouillon",
   prepare: "Préparé",
   expedie: "Expédié",
+  en_transformation: "En cours de transformation",
   livre: "Livré",
   annule: "Annulé",
 };
@@ -765,11 +912,13 @@ export function couleurStatutDocument(statut: string): CouleurStatutDoc {
     case "expedie":
     case "partiellement_payee":
     case "emise":
+    case "en_transformation":
       return "warning";
     case "accepte":
     case "confirmee":
     case "livree":
     case "livre":
+    case "transforme":
     case "validee":
     case "envoyee":
     case "payee":
@@ -866,6 +1015,7 @@ export function ventesDepuisFacture(
       date: facture.date,
       clientId: facture.clientId,
       factureId: facture.id,
+      cumpFigee: l.cumpFigee,
     }));
 }
 

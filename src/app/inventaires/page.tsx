@@ -21,12 +21,18 @@ import {
   CATEGORIES_BONI,
   CATEGORIES_ECART,
   CATEGORIES_MALI,
+  dateDernierInventaireValide,
   ecartJustifie,
   ecartLigne,
+  fusionnerTheoriqueInventaire,
+  isoMidiDepuisJour,
+  jourDepuisIso,
+  jourLocalISO,
   lignesInventaireInitiales,
   nextNumeroInventaire,
   syntheseInventaire,
   typeEcart,
+  validerDateInventaire,
   valeurEcartLigne,
 } from "@/lib/inventaire";
 import { libelleProduit } from "@/lib/produits";
@@ -36,6 +42,8 @@ import type {
   Inventaire,
   InventaireLigne,
 } from "@/lib/types";
+
+const AUJOURD_HUI = jourLocalISO();
 
 export default function InventairesPage() {
   return (
@@ -82,11 +90,12 @@ function InventairesContent() {
       ventes,
       pointDeVenteId: pointDeVenteActifId,
       pointsDeVente,
+      inventaires,
     });
     const id = addInventaire({
       numero: nextNumeroInventaire(inventaires),
       pointDeVenteId: pointDeVenteActifId,
-      date: new Date().toISOString(),
+      date: isoMidiDepuisJour(AUJOURD_HUI),
       statut: "brouillon",
       lignes,
     });
@@ -114,8 +123,16 @@ function InventairesContent() {
             <InfoButton title="Inventaire & justification des écarts">
               <p>
                 L&apos;inventaire compare le <strong>stock théorique</strong>{" "}
-                (calculé en CUMP : entrées − sorties) au{" "}
+                (chronologie CUMP : entrées − sorties, y compris les
+                inventaires validés antérieurs) au{" "}
                 <strong>stock physique</strong> réellement compté.
+              </p>
+              <p>
+                La <strong>date d&apos;inventaire</strong> est modifiable
+                (pré-remplie au jour J). Elle ne peut pas être dans le futur ni
+                antérieure au dernier inventaire validé du point de vente. Un
+                inventaire rétrodaté recalcule automatiquement le CUMP et les
+                marges des mouvements postérieurs.
               </p>
               <p>
                 L&apos;écart constaté est valorisé au coût unitaire moyen
@@ -292,10 +309,25 @@ function InventaireEditor({
   readOnly: boolean;
   onBack: () => void;
 }) {
-  const { produits, updateInventaire, validerInventaire } = useStore();
+  const { produits, entrees, ventes, inventaires, pointsDeVente, updateInventaire, validerInventaire } =
+    useStore();
   const [lignes, setLignes] = useState<InventaireLigne[]>(inventaire.lignes);
   const [note, setNote] = useState(inventaire.note ?? "");
+  const [dateJour, setDateJour] = useState(jourDepuisIso(inventaire.date));
   const [dirty, setDirty] = useState(false);
+
+  const dernierValide = dateDernierInventaireValide(
+    inventaires,
+    inventaire.pointDeVenteId,
+    inventaire.id,
+  );
+  const controleDate = validerDateInventaire({
+    jour: dateJour,
+    pointDeVenteId: inventaire.pointDeVenteId,
+    inventaires,
+    exclureId: inventaire.id,
+    aujourdHui: AUJOURD_HUI,
+  });
 
   const nomProduit = (id: string) => {
     const p = produits.find((x) => x.id === id);
@@ -318,19 +350,50 @@ function InventaireEditor({
 
   const lignesEcart = lignes.filter((l) => typeEcart(l) !== "conforme");
 
+  const appliquerDate = (jour: string) => {
+    setDateJour(jour);
+    setDirty(true);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(jour)) return;
+    const nouvelles = lignesInventaireInitiales({
+      produits,
+      entrees,
+      ventes,
+      pointDeVenteId: inventaire.pointDeVenteId,
+      pointsDeVente,
+      inventaires,
+      dateArrete: new Date(`${jour}T12:00:00`),
+      exclureInventaireId: inventaire.id,
+    });
+    setLignes((prev) => fusionnerTheoriqueInventaire(prev, nouvelles));
+  };
+
+  const payloadDate = () => ({
+    date: isoMidiDepuisJour(dateJour),
+    lignes,
+    note: note.trim() || undefined,
+  });
+
   const enregistrer = () => {
-    updateInventaire(inventaire.id, { lignes, note: note.trim() || undefined });
+    if (!controleDate.ok) {
+      alert(controleDate.reason);
+      return;
+    }
+    updateInventaire(inventaire.id, payloadDate());
     setDirty(false);
   };
 
   const valider = () => {
+    if (!controleDate.ok) {
+      alert(controleDate.reason);
+      return;
+    }
     if (!synthese.toutJustifie) {
       alert(
         "Tous les écarts (bonis et malis) doivent être justifiés avant de clôturer l'inventaire.",
       );
       return;
     }
-    updateInventaire(inventaire.id, { lignes, note: note.trim() || undefined });
+    updateInventaire(inventaire.id, payloadDate());
     validerInventaire(inventaire.id);
     setDirty(false);
     onBack();
@@ -349,7 +412,7 @@ function InventaireEditor({
 
       <PageHeader
         title={inventaire.numero}
-        description={`Inventaire — ${nomPdv} · ${formatDate(inventaire.date)}`}
+        description={`Inventaire — ${nomPdv}`}
         showPosSelector={false}
         actions={
           <div className="flex items-center gap-2">
@@ -366,7 +429,7 @@ function InventaireEditor({
                   type="button"
                   className="btn btn-secondary"
                   onClick={enregistrer}
-                  disabled={!dirty}
+                  disabled={!dirty || !controleDate.ok}
                 >
                   <Save className="h-4 w-4" />
                   Enregistrer
@@ -375,11 +438,13 @@ function InventaireEditor({
                   type="button"
                   className="btn btn-primary"
                   onClick={valider}
-                  disabled={!synthese.toutJustifie}
+                  disabled={!synthese.toutJustifie || !controleDate.ok}
                   title={
-                    synthese.toutJustifie
-                      ? undefined
-                      : "Justifiez tous les écarts pour clôturer"
+                    !controleDate.ok
+                      ? controleDate.reason
+                      : synthese.toutJustifie
+                        ? undefined
+                        : "Justifiez tous les écarts pour clôturer"
                   }
                 >
                   <ClipboardCheck className="h-4 w-4" />
@@ -390,6 +455,38 @@ function InventaireEditor({
           </div>
         }
       />
+
+      <div className="mb-6 max-w-sm">
+        <label className="block text-xs font-semibold text-muted">
+          Date d&apos;inventaire
+          {readOnly ? (
+            <p className="mt-1 text-sm font-medium text-ink">
+              {formatDate(inventaire.date)}
+            </p>
+          ) : (
+            <input
+              type="date"
+              className="input mt-1"
+              value={dateJour}
+              max={AUJOURD_HUI}
+              min={dernierValide}
+              onChange={(e) => appliquerDate(e.target.value)}
+            />
+          )}
+        </label>
+        {!readOnly && (
+          <p className="mt-1 text-[11px] text-muted">
+            Pré-remplie au jour J, modifiable pour un comptage a posteriori.
+            {dernierValide
+              ? ` Pas avant le dernier inventaire validé (${dernierValide}).`
+              : ""}{" "}
+            Les dates futures sont interdites.
+          </p>
+        )}
+        {!readOnly && !controleDate.ok && (
+          <p className="mt-1 text-xs text-danger">{controleDate.reason}</p>
+        )}
+      </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

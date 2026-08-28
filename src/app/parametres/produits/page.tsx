@@ -66,6 +66,7 @@ export default function ParametresProduitsPage() {
     commandes,
     bonsDeLivraison,
     factures,
+    achats,
     parametres,
     addProduit,
     updateProduit,
@@ -878,6 +879,7 @@ export default function ParametresProduitsPage() {
                             commandes,
                             bonsDeLivraison,
                             factures,
+                            achats,
                           });
                           if (ref) {
                             alert(

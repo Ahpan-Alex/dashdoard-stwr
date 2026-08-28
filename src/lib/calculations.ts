@@ -25,16 +25,24 @@ import {
 import { fr } from "date-fns/locale";
 import { creancesClientsFactures, totalFacture } from "./commercial";
 import {
+  montantAchatsMarchandisesHT,
+  totalPaiementsFournisseurs,
+  dettesFournisseursAchats,
+} from "./achats";
+import {
   fluxTresorerieCompteCourant,
   soldeCompteCourant,
 } from "./compte-courant";
-import { libelleProduit, prixAchatCatalogue, prixVenteCatalogue } from "./produits";
+import { libelleProduit, prixVenteCatalogue } from "./produits";
+import { cumpStockRestant, etatCumpProduit, cmvSortiesPeriode, quantiteStockChronologique } from "./cump";
 import type {
+  Achat,
   BilanInitial,
   Charge,
   EntreeStock,
   Facture,
   Immobilisation,
+  Inventaire,
   MouvementCompteCourant,
   PointDeVente,
   Produit,
@@ -538,6 +546,8 @@ export function calculerStocks(
   pointsDeVente: PointDeVente[],
   /** Si fourni, ne prend que les mouvements jusqu'à cette date (arrêté). */
   dateArrete?: Date,
+  inventaires: Inventaire[] = [],
+  exclureInventaireId?: string,
 ): LigneStock[] {
   const pdvIds =
     pointDeVenteId === "tous"
@@ -555,6 +565,17 @@ export function calculerStocks(
 
   for (const pdvId of pdvIds) {
     for (const produit of produits) {
+      const etat = etatCumpProduit({
+        produitId: produit.id,
+        pointDeVenteId: pdvId,
+        entrees: entreesFiltrees,
+        ventes: ventesFiltrees,
+        inventaires,
+        exclureInventaireId,
+        jusquA: dateArrete,
+        produit,
+      });
+
       const quantiteEntree = entreesFiltrees
         .filter(
           (e) => e.pointDeVenteId === pdvId && e.produitId === produit.id,
@@ -567,24 +588,20 @@ export function calculerStocks(
         )
         .reduce((s, v) => s + v.quantite, 0);
 
-      const quantiteRestante = Math.max(0, quantiteEntree - quantiteVendue);
-      if (quantiteEntree === 0 && quantiteVendue === 0) continue;
+      const quantiteRestante = etat.quantite;
+      if (quantiteEntree === 0 && quantiteVendue === 0 && quantiteRestante === 0) {
+        continue;
+      }
 
       const entreesProduit = entreesFiltrees.filter(
         (e) => e.pointDeVenteId === pdvId && e.produitId === produit.id,
       );
 
-      const coutEntrees = entreesProduit.reduce((s, e) => s + montantAchat(e), 0);
       const valeurVenteEntrees = entreesProduit.reduce(
         (s, e) =>
           s + e.quantite * (e.prixVenteUnitaire ?? prixVenteCatalogue(produit)),
         0,
       );
-
-      const prixAchatMoyen =
-        quantiteEntree > 0
-          ? coutEntrees / quantiteEntree
-          : prixAchatCatalogue(produit);
 
       const prixVenteMoyen =
         quantiteEntree > 0
@@ -597,7 +614,7 @@ export function calculerStocks(
         quantiteEntree,
         quantiteVendue,
         quantiteRestante,
-        valeurAchat: quantiteRestante * prixAchatMoyen,
+        valeurAchat: etat.valeur,
         valeurVente: quantiteRestante * prixVenteMoyen,
       });
     }
@@ -611,15 +628,23 @@ export function totalAchats(
   pointDeVenteId: string | "tous",
   periodeOrRange?: Periode | DateRange,
   reference = new Date(),
+  achats: Achat[] = [],
 ) {
   const range =
     typeof periodeOrRange === "string"
       ? periodToRange(periodeOrRange, reference)
       : periodeOrRange;
-  return filterByPos(entrees, pointDeVenteId)
+  const depuisAchats = montantAchatsMarchandisesHT(
+    achats,
+    pointDeVenteId,
+    range,
+  );
+  const legacy = filterByPos(entrees, pointDeVenteId)
+    .filter((e) => !e.achatId)
     .filter((e) => e.origine !== "stock_initial")
     .filter((e) => (range ? inDateRange(e.date, range) : true))
     .reduce((s, e) => s + montantAchat(e), 0);
+  return depuisAchats + legacy;
 }
 
 export function totalCharges(
@@ -670,6 +695,8 @@ export function compteDeResultat(
   pointsDeVente: PointDeVente[],
   pointDeVenteId: string | "tous",
   periodeOrRange: Periode | DateRange = "annee",
+  inventaires: Inventaire[] = [],
+  achats: Achat[] = [],
 ): CompteResultat {
   const range =
     typeof periodeOrRange === "string"
@@ -681,7 +708,13 @@ export function compteDeResultat(
     pointDeVenteId,
     range,
   );
-  const achatsMarchandises = totalAchats(entrees, pointDeVenteId, range);
+  const achatsMarchandises = totalAchats(
+    entrees,
+    pointDeVenteId,
+    range,
+    new Date(),
+    achats,
+  );
 
   const stocks = calculerStocks(
     produits,
@@ -690,6 +723,7 @@ export function compteDeResultat(
     pointDeVenteId,
     pointsDeVente,
     range.fin,
+    inventaires,
   );
   const stockActuel = stocks.reduce((s, l) => s + l.valeurAchat, 0);
 
@@ -825,6 +859,8 @@ export function bilanInstantane(
   factures: Facture[] = [],
   periodeOrRange: Periode | DateRange = "annee",
   mouvementsCompteCourant: MouvementCompteCourant[] = [],
+  inventaires: Inventaire[] = [],
+  achats: Achat[] = [],
 ): Bilan {
   const range =
     typeof periodeOrRange === "string"
@@ -838,6 +874,7 @@ export function bilanInstantane(
     pointDeVenteId,
     pointsDeVente,
     range.fin,
+    inventaires,
   );
   const valeurStocksCourants = stocks.reduce((s, l) => s + l.valeurAchat, 0);
   // Stocks = max(stock courant calculé, ouverture) — on privilégie le stock réel courant
@@ -867,7 +904,23 @@ export function bilanInstantane(
     .reduce((s, f) => s + totalFacture(f), 0);
 
   const caPeriode = caVentes + caFacturesPeriode;
-  const achatsPeriode = totalAchats(entrees, pointDeVenteId, range);
+  const achatsPeriode = totalAchats(
+    entrees,
+    pointDeVenteId,
+    range,
+    new Date(),
+    achats,
+  );
+  const paiementsFournisseursPeriode = totalPaiementsFournisseurs(
+    achats,
+    pointDeVenteId,
+    range,
+  );
+  const achatsLegacyCash = filterByPos(entrees, pointDeVenteId)
+    .filter((e) => !e.achatId)
+    .filter((e) => e.origine !== "stock_initial")
+    .filter((e) => inDateRange(e.date, range))
+    .reduce((s, e) => s + montantAchat(e), 0);
   const chargesPeriode = totalCharges(charges, pointDeVenteId, range);
   const acquisitionsPeriode = immobilisations
     .filter((i) => inDateRange(i.dateAcquisition, range))
@@ -901,7 +954,8 @@ export function bilanInstantane(
     bilanInitial.disponibilites +
       caVentes +
       encaissementsFactures -
-      achatsPeriode -
+      paiementsFournisseursPeriode -
+      achatsLegacyCash -
       chargesPeriode -
       acquisitionsPeriode +
       fluxCca,
@@ -915,7 +969,8 @@ export function bilanInstantane(
     caPeriode - achatsPeriode - chargesPeriode - amortissements;
 
   const dettesFournisseurs =
-    bilanInitial.dettesFournisseurs + achatsPeriode * 0.1;
+    bilanInitial.dettesFournisseurs +
+    dettesFournisseursAchats(achats, pointDeVenteId, range.fin);
   const dettesSociales =
     bilanInitial.dettesSociales +
     charges
@@ -1028,19 +1083,16 @@ export function stockDisponible(
   pointDeVenteId: string,
   entrees: EntreeStock[],
   ventes: Vente[],
+  inventaires: Inventaire[] = [],
 ) {
   if (!pointDeVenteId || pointDeVenteId === "tous") return 0;
-  const entree = entrees
-    .filter(
-      (e) => e.pointDeVenteId === pointDeVenteId && e.produitId === produitId,
-    )
-    .reduce((s, e) => s + e.quantite, 0);
-  const vendu = ventes
-    .filter(
-      (v) => v.pointDeVenteId === pointDeVenteId && v.produitId === produitId,
-    )
-    .reduce((s, v) => s + v.quantite, 0);
-  return Math.max(0, entree - vendu);
+  return quantiteStockChronologique({
+    produitId,
+    pointDeVenteId,
+    entrees,
+    ventes,
+    inventaires,
+  });
 }
 
 /**
@@ -1059,12 +1111,14 @@ export function stockRestantPourSaisie(
     type?: string;
   }[],
   excludeKey?: string,
+  inventaires: Inventaire[] = [],
 ) {
   const dispo = stockDisponible(
     produitId,
     pointDeVenteId,
     entrees,
     ventes,
+    inventaires,
   );
   const reserve = lignesEnCours
     .filter(
@@ -1133,19 +1187,23 @@ export function detailVentesPeriode(
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 }
 
-/** Coût d'achat unitaire moyen pondéré (entrées), sinon catalogue. */
+/** Coût d'achat unitaire moyen pondéré (chronologie CUMP, inventaires inclus). */
 export function coutAchatMoyen(
   produitId: string,
   pointDeVenteId: string | "tous",
   entrees: EntreeStock[],
   produit: Produit,
+  ventes: Vente[] = [],
+  inventaires: Inventaire[] = [],
 ) {
-  const list = filterByPos(entrees, pointDeVenteId).filter(
-    (e) => e.produitId === produitId,
+  return cumpStockRestant(
+    produitId,
+    pointDeVenteId,
+    entrees,
+    ventes,
+    produit,
+    inventaires,
   );
-  const quantite = list.reduce((s, e) => s + e.quantite, 0);
-  if (quantite <= 0) return prixAchatCatalogue(produit);
-  return list.reduce((s, e) => s + montantAchat(e), 0) / quantite;
 }
 
 export type LigneBeneficeProduit = {
@@ -1164,29 +1222,51 @@ export function beneficesParProduit(
   produits: Produit[],
   pointDeVenteId: string | "tous",
   range: DateRange,
+  inventaires: Inventaire[] = [],
 ): LigneBeneficeProduit[] {
   return produits
     .map((produit) => {
-      const lignes = filterByPos(ventes, pointDeVenteId).filter(
-        (v) => v.produitId === produit.id && inDateRange(v.date, range),
-      );
-      const quantite = lignes.reduce((s, v) => s + v.quantite, 0);
-      const ca = lignes.reduce((s, v) => s + montantVente(v), 0);
-      const coutUnitaire = coutAchatMoyen(
-        produit.id,
-        pointDeVenteId,
-        entrees,
-        produit,
-      );
-      const coutAchat = quantite * coutUnitaire;
+      const pdvIds =
+        pointDeVenteId === "tous"
+          ? [
+              ...new Set(
+                ventes
+                  .filter((v) => v.produitId === produit.id)
+                  .map((v) => v.pointDeVenteId),
+              ),
+            ]
+          : [pointDeVenteId];
+      let quantite = 0;
+      let cmv = 0;
+      let ca = 0;
+      for (const pdvId of pdvIds) {
+        const lignes = ventes.filter(
+          (v) =>
+            v.produitId === produit.id &&
+            v.pointDeVenteId === pdvId &&
+            inDateRange(v.date, range),
+        );
+        ca += lignes.reduce((s, v) => s + montantVente(v), 0);
+        const c = cmvSortiesPeriode({
+          produitId: produit.id,
+          pointDeVenteId: pdvId,
+          entrees,
+          ventes,
+          produit,
+          inventaires,
+          dansPeriode: (iso) => inDateRange(iso, range),
+        });
+        quantite += c.quantite;
+        cmv += c.cmv;
+      }
       return {
         id: produit.id,
         nom: libelleProduit(produit),
         unite: produit.unite,
         quantite,
         ca,
-        coutAchat,
-        benefice: ca - coutAchat,
+        coutAchat: cmv,
+        benefice: ca - cmv,
       };
     })
     .filter((l) => l.ca > 0 || l.quantite > 0)
@@ -1209,6 +1289,7 @@ export function syntheseBenefices(
   produits: Produit[],
   pointDeVenteId: string | "tous",
   range: DateRange,
+  inventaires: Inventaire[] = [],
 ): SyntheseBenefices {
   const lignes = beneficesParProduit(
     ventes,
@@ -1216,6 +1297,7 @@ export function syntheseBenefices(
     produits,
     pointDeVenteId,
     range,
+    inventaires,
   );
   const ca = lignes.reduce((s, l) => s + l.ca, 0);
   const coutAchat = lignes.reduce((s, l) => s + l.coutAchat, 0);
@@ -1247,53 +1329,39 @@ export function beneficesSerieTemporelle(
   pointDeVenteId: string | "tous",
   range: DateRange,
   mode: "jour" | "mois" | "auto" = "auto",
+  inventaires: Inventaire[] = [],
 ): PointBeneficeSerie[] {
   const jours = differenceInCalendarDays(range.fin, range.debut) + 1;
   const granularite: "jour" | "mois" =
     mode === "auto" ? (jours <= 62 ? "jour" : "mois") : mode;
 
-  const coutCache = new Map<string, number>();
-  function cout(produitId: string) {
-    const cached = coutCache.get(produitId);
-    if (cached !== undefined) return cached;
-    const produit = produits.find((p) => p.id === produitId);
-    if (!produit) return 0;
-    const value = coutAchatMoyen(
-      produitId,
-      pointDeVenteId,
+  const agregat = (bucket: DateRange) => {
+    const lignes = beneficesParProduit(
+      ventes,
       entrees,
-      produit,
+      produits,
+      pointDeVenteId,
+      bucket,
+      inventaires,
     );
-    coutCache.set(produitId, value);
-    return value;
-  }
-
-  const ventesFiltrees = filterByPos(ventes, pointDeVenteId).filter((v) =>
-    inDateRange(v.date, range),
-  );
+    const ca = lignes.reduce((s, l) => s + l.ca, 0);
+    const coutAchat = lignes.reduce((s, l) => s + l.coutAchat, 0);
+    return { ca, coutAchat, benefice: ca - coutAchat };
+  };
 
   if (granularite === "jour") {
     return eachDayOfInterval({
       start: startOfDay(range.debut),
       end: endOfDay(range.fin),
     }).map((day) => {
-      const bucket: DateRange = {
+      const t = agregat({
         debut: startOfDay(day),
         fin: endOfDay(day),
-      };
-      let ca = 0;
-      let coutAchat = 0;
-      for (const v of ventesFiltrees) {
-        if (!inDateRange(v.date, bucket)) continue;
-        ca += montantVente(v);
-        coutAchat += v.quantite * cout(v.produitId);
-      }
+      });
       return {
         key: formatDateFns(day, "yyyy-MM-dd"),
         label: formatDateFns(day, "d MMM", { locale: fr }),
-        ca,
-        coutAchat,
-        benefice: ca - coutAchat,
+        ...t,
       };
     });
   }
@@ -1302,23 +1370,14 @@ export function beneficesSerieTemporelle(
     start: startOfMonth(range.debut),
     end: endOfMonth(range.fin),
   }).map((month) => {
-    const bucket: DateRange = {
+    const t = agregat({
       debut: startOfMonth(month),
       fin: endOfMonth(month),
-    };
-    let ca = 0;
-    let coutAchat = 0;
-    for (const v of ventesFiltrees) {
-      if (!inDateRange(v.date, bucket)) continue;
-      ca += montantVente(v);
-      coutAchat += v.quantite * cout(v.produitId);
-    }
+    });
     return {
       key: formatDateFns(month, "yyyy-MM"),
       label: formatDateFns(month, "MMM yyyy", { locale: fr }),
-      ca,
-      coutAchat,
-      benefice: ca - coutAchat,
+      ...t,
     };
   });
 }

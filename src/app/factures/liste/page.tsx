@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, FileMinus2, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -9,6 +9,8 @@ import {
   type DraftLigne,
 } from "@/components/document-saisie-wizard";
 import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPrintActions } from "@/components/document-print-actions";
+import { DocumentFiliation } from "@/components/document-filiation";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
   ExportDocumentPdfButton,
@@ -29,6 +31,7 @@ import {
   totalAvoirsSurFacture,
   totauxFacture,
   detailAcomptesDocument,
+  persisterRemiseGlobale,
   type EtatPaiementFacture,
 } from "@/lib/commercial";
 import {
@@ -41,7 +44,7 @@ import { presentationPourFacture } from "@/lib/document-presentation";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
-import type { Facture, FactureStatut, FactureType, LigneDocument } from "@/lib/types";
+import type { Facture, FactureStatut, FactureType, LigneDocument, ModeRemise } from "@/lib/types";
 
 type FiltreListe =
   | "tous"
@@ -163,13 +166,15 @@ export default function ListeFacturesPage() {
   }, [searchParams]);
 
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewSheetRef = useRef<HTMLDivElement>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [wizardKey, setWizardKey] = useState(0);
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
     remiseGlobale: number;
+    remiseGlobaleMode: ModeRemise;
     note: string;
-  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: "",
     pointDeVenteId: "",
@@ -267,6 +272,7 @@ export default function ListeFacturesPage() {
     setSeed({
       lignes: lignesToDraft(f.lignes),
       remiseGlobale: f.remiseGlobale ?? 0,
+      remiseGlobaleMode: f.remiseGlobaleMode ?? "montant",
       note: f.note ?? "",
     });
     setWizardKey((k) => k + 1);
@@ -385,6 +391,10 @@ export default function ListeFacturesPage() {
           modeAvoir === "total" && montantTTC >= max - 1
             ? factureAvoir.remiseGlobale
             : undefined,
+        remiseGlobaleMode:
+          modeAvoir === "total" && montantTTC >= max - 1
+            ? factureAvoir.remiseGlobaleMode
+            : undefined,
         lignes: lignesAvoir,
       },
       {
@@ -405,6 +415,10 @@ export default function ListeFacturesPage() {
       remiseGlobale:
         modeAvoir === "total" && montantTTC >= max - 1
           ? factureAvoir.remiseGlobale
+          : undefined,
+      remiseGlobaleMode:
+        modeAvoir === "total" && montantTTC >= max - 1
+          ? factureAvoir.remiseGlobaleMode
           : undefined,
     };
     const avecAvoir = [fictifAvoir, ...factures];
@@ -526,6 +540,7 @@ export default function ListeFacturesPage() {
         conditionsPaiement: f.conditionsPaiement,
         note: f.note,
         remiseGlobale: f.remiseGlobale,
+        remiseGlobaleMode: f.remiseGlobaleMode,
         commandeId: f.commandeId,
         devisId: f.devisId,
         factureParenteId: f.id,
@@ -574,6 +589,7 @@ export default function ListeFacturesPage() {
             assujettiTVA={assujetti}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
+            initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
             previewMeta={{
               type: "facture",
@@ -593,7 +609,7 @@ export default function ListeFacturesPage() {
             }}
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               updateFacture(
                 editId,
@@ -603,7 +619,7 @@ export default function ListeFacturesPage() {
                   date: new Date(`${meta.date}T12:00:00`).toISOString(),
                   echeance: new Date(`${meta.echeance}T12:00:00`).toISOString(),
                   lignes,
-                  remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                  ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                   note,
                 },
                 { action: "facture_modifiee", detail: editDoc.numero },
@@ -1020,13 +1036,13 @@ export default function ListeFacturesPage() {
 
       {preview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-3xl">
+          <div className="my-6 w-full max-w-[220mm]">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted">
                 Document commercial figé à l&apos;émission — le règlement
                 ultérieur ne modifie pas le PDF (seul le statut change).
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {!factureEstFiscale(preview) && (
                   <button
                     type="button"
@@ -1037,12 +1053,10 @@ export default function ListeFacturesPage() {
                     Supprimer
                   </button>
                 )}
-                <button
-                  className="btn btn-primary"
-                  onClick={() => window.print()}
-                >
-                  Imprimer / PDF
-                </button>
+                <DocumentPrintActions
+                  sheetRef={previewSheetRef}
+                  filename={`Facture ${preview.numero}`}
+                />
                 <button
                   className="btn btn-secondary"
                   onClick={() => setPreviewId(null)}
@@ -1064,6 +1078,7 @@ export default function ListeFacturesPage() {
               </p>
             ) : null}
             <DocumentPreview
+              ref={previewSheetRef}
               type="facture"
               factureType={preview.type}
               estProforma={
@@ -1089,6 +1104,7 @@ export default function ListeFacturesPage() {
               }
               acomptesDetail={detailAcomptesDocument(preview, acomptes)}
             />
+            <DocumentFiliation documentId={preview.id} />
           </div>
         </div>
       )}

@@ -17,6 +17,7 @@ export default function StocksPage() {
     ventes,
     pointsDeVente,
     pointDeVenteActifId,
+    inventaires,
   } = useStore();
 
   const stocks = calculerStocks(
@@ -25,6 +26,8 @@ export default function StocksPage() {
     ventes,
     pointDeVenteActifId,
     pointsDeVente,
+    undefined,
+    inventaires,
   );
 
   const valeurAchat = stocks.reduce((s, l) => s + l.valeurAchat, 0);
@@ -76,8 +79,10 @@ export default function StocksPage() {
             </p>
           </div>
           <p>
-            Chaque unité vendue et le stock restant sont ensuite valorisés à ce
-            coût moyen, jusqu&apos;à la prochaine entrée qui recalcule le CUMP.
+            Les entrées proviennent des <strong>livraisons d&apos;achats</strong>{" "}
+            (menu Achats). Un retour fournisseur diminue le stock et réajuste le
+            CUMP. Les ventes déjà validées conservent le coût figé à la clôture
+            : un nouvel arrivage ne recalcule pas les rapports déjà émis.
           </p>
           <div className="rounded-[var(--radius)] border border-line bg-card p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">

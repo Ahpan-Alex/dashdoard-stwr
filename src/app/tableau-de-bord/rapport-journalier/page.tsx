@@ -37,6 +37,7 @@ export default function RapportJournalierPage() {
   const entrees = useStore((s) => s.entrees);
   const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
+  const inventaires = useStore((s) => s.inventaires);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const rapportsFinJournee = useStore((s) => s.rapportsFinJournee);
@@ -91,6 +92,7 @@ export default function RapportJournalierPage() {
         entrees,
         charges,
         produits,
+        inventaires,
         pointDeVenteId: pointDeVenteActifId,
         range,
         rapports: rapportsFinJournee ?? [],
@@ -100,6 +102,7 @@ export default function RapportJournalierPage() {
       entrees,
       charges,
       produits,
+      inventaires,
       pointDeVenteActifId,
       range,
       rapportsFinJournee,

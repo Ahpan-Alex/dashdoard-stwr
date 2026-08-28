@@ -1,4 +1,5 @@
 import type {
+  Achat,
   BonDeLivraison,
   CategorieProduit,
   Commande,
@@ -228,6 +229,7 @@ export function produitEstReference(
     commandes: Commande[];
     bonsDeLivraison: BonDeLivraison[];
     factures: Facture[];
+    achats?: Achat[];
   },
 ) {
   if (ctx.entrees.some((e) => e.produitId === produitId)) return true;
@@ -238,6 +240,7 @@ export function produitEstReference(
   if (ctx.commandes.some((c) => inLignes(c.lignes))) return true;
   if (ctx.bonsDeLivraison.some((b) => inLignes(b.lignes))) return true;
   if (ctx.factures.some((f) => inLignes(f.lignes))) return true;
+  if ((ctx.achats ?? []).some((a) => inLignes(a.lignes))) return true;
   return false;
 }
 

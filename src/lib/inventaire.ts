@@ -1,4 +1,6 @@
-import { calculerStocks, coutAchatMoyen } from "./calculations";
+import { calculerStocks } from "./calculations";
+import { etatCumpProduit } from "./cump";
+import { format as formatDateFns, parseISO } from "date-fns";
 import type {
   CategorieEcartInventaire,
   EntreeStock,
@@ -117,7 +119,8 @@ export function syntheseInventaire(inv: Inventaire): SyntheseInventaire {
 
 /**
  * Prépare les lignes d'inventaire pour un point de vente : stock théorique
- * (CUMP : entrées − sorties) et coût unitaire moyen pondéré figés.
+ * (chronologie CUMP : entrées − sorties ± inventaires validés) et coût unitaire
+ * figés à la date d'inventaire.
  * Le stock physique est initialisé au théorique (à corriger par le comptage).
  */
 export function lignesInventaireInitiales(opts: {
@@ -126,27 +129,133 @@ export function lignesInventaireInitiales(opts: {
   ventes: Vente[];
   pointDeVenteId: string;
   pointsDeVente: PointDeVente[];
+  inventaires?: Inventaire[];
+  dateArrete?: Date;
+  exclureInventaireId?: string;
 }): InventaireLigne[] {
-  const { produits, entrees, ventes, pointDeVenteId, pointsDeVente } = opts;
+  const {
+    produits,
+    entrees,
+    ventes,
+    pointDeVenteId,
+    pointsDeVente,
+    inventaires = [],
+    dateArrete,
+    exclureInventaireId,
+  } = opts;
   const lignes = calculerStocks(
     produits,
     entrees,
     ventes,
     pointDeVenteId,
     pointsDeVente,
+    dateArrete,
+    inventaires,
+    exclureInventaireId,
   );
   return lignes.map((l) => {
-    const coutUnitaire =
-      l.quantiteRestante > 0
-        ? l.valeurAchat / l.quantiteRestante
-        : coutAchatMoyen(l.produit.id, pointDeVenteId, entrees, l.produit);
+    const etat = etatCumpProduit({
+      produitId: l.produit.id,
+      pointDeVenteId,
+      entrees,
+      ventes,
+      inventaires,
+      exclureInventaireId,
+      jusquA: dateArrete,
+      produit: l.produit,
+    });
     return {
       produitId: l.produit.id,
       stockTheorique: l.quantiteRestante,
       stockPhysique: l.quantiteRestante,
-      coutUnitaire,
+      coutUnitaire: etat.cump,
     };
   });
+}
+
+/** Fusionne un nouveau théorique (date changée) en conservant le comptage physique. */
+export function fusionnerTheoriqueInventaire(
+  actuelles: InventaireLigne[],
+  nouvelles: InventaireLigne[],
+): InventaireLigne[] {
+  const parId = new Map(actuelles.map((l) => [l.produitId, l]));
+  return nouvelles.map((n) => {
+    const prev = parId.get(n.produitId);
+    if (!prev) return n;
+    return {
+      ...n,
+      stockPhysique: prev.stockPhysique,
+      motif: prev.motif,
+      categorieEcart: prev.categorieEcart,
+    };
+  });
+}
+
+export function jourLocalISO(d: Date = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function jourDepuisIso(iso: string) {
+  try {
+    return formatDateFns(parseISO(iso), "yyyy-MM-dd");
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+export function isoMidiDepuisJour(jour: string) {
+  return new Date(`${jour}T12:00:00`).toISOString();
+}
+
+export function dateDernierInventaireValide(
+  inventaires: Inventaire[],
+  pointDeVenteId: string,
+  exclureId?: string,
+): string | undefined {
+  const jours = inventaires
+    .filter(
+      (i) =>
+        i.statut === "valide" &&
+        i.pointDeVenteId === pointDeVenteId &&
+        i.id !== exclureId,
+    )
+    .map((i) => jourDepuisIso(i.date));
+  if (jours.length === 0) return undefined;
+  return [...jours].sort()[jours.length - 1];
+}
+
+export function validerDateInventaire(opts: {
+  jour: string;
+  pointDeVenteId: string;
+  inventaires: Inventaire[];
+  exclureId?: string;
+  aujourdHui?: string;
+}): { ok: true } | { ok: false; reason: string } {
+  const aujourdHui = opts.aujourdHui ?? jourLocalISO();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.jour)) {
+    return { ok: false, reason: "Date d'inventaire invalide." };
+  }
+  if (opts.jour > aujourdHui) {
+    return {
+      ok: false,
+      reason: "La date d'inventaire ne peut pas être dans le futur.",
+    };
+  }
+  const dernier = dateDernierInventaireValide(
+    opts.inventaires,
+    opts.pointDeVenteId,
+    opts.exclureId,
+  );
+  if (dernier && opts.jour < dernier) {
+    return {
+      ok: false,
+      reason: `La date ne peut pas être antérieure au dernier inventaire validé (${dernier}).`,
+    };
+  }
+  return { ok: true };
 }
 
 /** Génère le prochain numéro d'inventaire (INV-AAAA-####). */

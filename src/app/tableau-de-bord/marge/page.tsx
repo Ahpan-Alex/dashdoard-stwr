@@ -50,6 +50,7 @@ export default function MargePage() {
     charges,
     produits,
     pointDeVenteActifId,
+    inventaires,
   } = useStore();
 
   const moisEnCours = {
@@ -90,8 +91,9 @@ export default function MargePage() {
         produits,
         pointDeVenteActifId,
         range,
+        inventaires,
       ),
-    [ventes, entrees, charges, produits, pointDeVenteActifId, range],
+    [ventes, entrees, charges, produits, pointDeVenteActifId, range, inventaires],
   );
 
   const serieMode =
@@ -106,8 +108,9 @@ export default function MargePage() {
         pointDeVenteActifId,
         range,
         serieMode,
+        inventaires,
       ),
-    [ventes, entrees, produits, pointDeVenteActifId, range, serieMode],
+    [ventes, entrees, produits, pointDeVenteActifId, range, serieMode, inventaires],
   );
 
   const periodeLabel = useMemo(() => {

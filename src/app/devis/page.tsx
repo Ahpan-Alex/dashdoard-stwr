@@ -12,7 +12,7 @@ import {
 } from "@/components/document-saisie-wizard";
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, nextNumero } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
 
@@ -126,7 +126,7 @@ export default function DevisPage() {
             }}
             confirmLabel="Enregistrer le devis"
             onCancel={() => setOpen(false)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const numero = nextNumero(
                 "DEV",
@@ -143,7 +143,7 @@ export default function DevisPage() {
                 tauxTVA: parametres.tauxTVA,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
-                remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
               });
               if (acompteMontant > 0) {

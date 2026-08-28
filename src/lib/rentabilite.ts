@@ -4,18 +4,20 @@ import {
   totauxFacture,
 } from "./commercial";
 import {
-  coutAchatMoyen,
   inDateRange,
   type DateRange,
 } from "./calculations";
+import { cmvSortiesPeriode } from "./cump";
 import type {
   Charge,
   ChargeCategorie,
   ChargeNatureEconomique,
   EntreeStock,
   Facture,
+  Inventaire,
   Parametres,
   Produit,
+  Vente,
 } from "./types";
 
 export const NATURE_ECONOMIQUE_LABELS: Record<ChargeNatureEconomique, string> =
@@ -85,53 +87,64 @@ export function caHtFacturesPeriode(
   return Math.round(ca);
 }
 
+function ventesSynthetiquesDepuisFactures(factures: Facture[]): Vente[] {
+  const out: Vente[] = [];
+  for (const f of factures) {
+    if (!factureCompteDansCA(f)) continue;
+    const signe = f.type === "avoir" ? -1 : 1;
+    for (const l of f.lignes) {
+      if (!isLigneProduit(l) || !l.produitId) continue;
+      out.push({
+        id: `cmv-${f.id}-${l.id}`,
+        pointDeVenteId: f.pointDeVenteId,
+        produitId: l.produitId,
+        quantite: signe * l.quantite,
+        prixUnitaire: l.prixUnitaire,
+        date: f.date,
+        factureId: f.id,
+      });
+    }
+  }
+  return out;
+}
+
+function pdvPourProduit(
+  pointDeVenteId: string | "tous",
+  ventes: Vente[],
+  produitId: string,
+) {
+  if (pointDeVenteId !== "tous") return [pointDeVenteId];
+  return [
+    ...new Set(
+      ventes.filter((v) => v.produitId === produitId).map((v) => v.pointDeVenteId),
+    ),
+  ];
+}
+
 export function cmvDepuisFactures(
   factures: Facture[],
   produits: Produit[],
   entrees: EntreeStock[],
   pointDeVenteId: string | "tous",
   range: DateRange,
+  inventaires: Inventaire[] = [],
 ) {
-  const coutCache = new Map<string, number>();
-  function cout(produitId: string) {
-    const cached = coutCache.get(produitId);
-    if (cached !== undefined) return cached;
-    const produit = produits.find((p) => p.id === produitId);
-    if (!produit) {
-      coutCache.set(produitId, 0);
-      return 0;
-    }
-    const v = coutAchatMoyen(produitId, pointDeVenteId, entrees, produit);
-    coutCache.set(produitId, v);
-    return v;
-  }
-
+  const ventes = ventesSynthetiquesDepuisFactures(factures);
   let cmv = 0;
-  for (const f of factures) {
-    if (!factureCompteDansCA(f) || f.type === "avoir") continue;
-    if (pointDeVenteId !== "tous" && f.pointDeVenteId !== pointDeVenteId) {
-      continue;
-    }
-    if (!inDateRange(f.date, range)) continue;
-    for (const l of f.lignes) {
-      if (!isLigneProduit(l) || !l.produitId) continue;
-      cmv += l.quantite * cout(l.produitId);
-    }
-  }
-
-  // Avoirs : réduire le CMV au prorata des quantités annulées
-  for (const f of factures) {
-    if (f.type !== "avoir" || f.statut === "annulee") continue;
-    if (pointDeVenteId !== "tous" && f.pointDeVenteId !== pointDeVenteId) {
-      continue;
-    }
-    if (!inDateRange(f.date, range)) continue;
-    for (const l of f.lignes) {
-      if (!isLigneProduit(l) || !l.produitId) continue;
-      cmv -= l.quantite * cout(l.produitId);
+  for (const produit of produits) {
+    for (const pdvId of pdvPourProduit(pointDeVenteId, ventes, produit.id)) {
+      const c = cmvSortiesPeriode({
+        produitId: produit.id,
+        pointDeVenteId: pdvId,
+        entrees,
+        ventes,
+        produit,
+        inventaires,
+        dansPeriode: (iso) => inDateRange(iso, range),
+      });
+      cmv += c.cmv;
     }
   }
-
   return Math.round(Math.max(0, cmv));
 }
 
@@ -201,6 +214,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
   charges: Charge[];
   produits: Produit[];
   entrees: EntreeStock[];
+  inventaires?: Inventaire[];
   parametres: Parametres;
   pointDeVenteId: string | "tous";
   range: DateRange;
@@ -210,6 +224,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
     charges,
     produits,
     entrees,
+    inventaires = [],
     parametres,
     pointDeVenteId,
     range,
@@ -227,6 +242,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
     entrees,
     pointDeVenteId,
     range,
+    inventaires,
   );
   const chargesVariables = totalChargesParNature(
     charges,
@@ -289,6 +305,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
     entrees,
     pointDeVenteId,
     range,
+    inventaires,
   );
 
   return {
@@ -317,25 +334,13 @@ export function margeParProduitFactures(
   entrees: EntreeStock[],
   pointDeVenteId: string | "tous",
   range: DateRange,
+  inventaires: Inventaire[] = [],
 ): LigneMargeProduitFacture[] {
+  const ventes = ventesSynthetiquesDepuisFactures(factures);
   const map = new Map<
     string,
     { quantite: number; ca: number; cmv: number }
   >();
-
-  const coutCache = new Map<string, number>();
-  function cout(produitId: string) {
-    const cached = coutCache.get(produitId);
-    if (cached !== undefined) return cached;
-    const produit = produits.find((p) => p.id === produitId);
-    if (!produit) {
-      coutCache.set(produitId, 0);
-      return 0;
-    }
-    const v = coutAchatMoyen(produitId, pointDeVenteId, entrees, produit);
-    coutCache.set(produitId, v);
-    return v;
-  }
 
   for (const f of factures) {
     if (!factureCompteDansCA(f)) continue;
@@ -349,9 +354,26 @@ export function margeParProduitFactures(
       const prev = map.get(l.produitId) ?? { quantite: 0, ca: 0, cmv: 0 };
       prev.quantite += signe * l.quantite;
       prev.ca += signe * montantLigneHT(l);
-      prev.cmv += signe * l.quantite * cout(l.produitId);
       map.set(l.produitId, prev);
     }
+  }
+
+  for (const [produitId, prev] of map) {
+    const produit = produits.find((p) => p.id === produitId);
+    if (!produit) continue;
+    let cmv = 0;
+    for (const pdvId of pdvPourProduit(pointDeVenteId, ventes, produitId)) {
+      cmv += cmvSortiesPeriode({
+        produitId,
+        pointDeVenteId: pdvId,
+        entrees,
+        ventes,
+        produit,
+        inventaires,
+        dansPeriode: (iso) => inDateRange(iso, range),
+      }).cmv;
+    }
+    prev.cmv = cmv;
   }
 
   return [...map.entries()]
@@ -376,6 +398,7 @@ export function serieRentabiliteMensuelle(opts: {
   charges: Charge[];
   produits: Produit[];
   entrees: EntreeStock[];
+  inventaires?: Inventaire[];
   parametres: Parametres;
   pointDeVenteId: string | "tous";
   annee: number;

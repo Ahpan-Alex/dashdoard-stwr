@@ -9,6 +9,10 @@ export const PARAMETRES_MENUS = [
     label: "Entreprise & fiscalité",
   },
   {
+    href: "/parametres/identite-menu",
+    label: "Identité du menu",
+  },
+  {
     href: "/parametres/produits",
     label: "Catalogue produits",
   },

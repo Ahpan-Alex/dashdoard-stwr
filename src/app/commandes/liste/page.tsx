@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,10 +14,16 @@ import {
   type DraftLigne,
 } from "@/components/document-saisie-wizard";
 import { DocumentPreview } from "@/components/document-preview";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import {
+  BadgesAvancementCommande,
+  DocumentFiliation,
+} from "@/components/document-filiation";
+import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -29,12 +35,21 @@ import {
   lignesAcomptesPourDocument,
   nextNumero,
   totauxCommande,
+  persisterRemiseGlobale,
 } from "@/lib/commercial";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import {
+  avancementLivraisonCommande,
+  clonerLignesDocument,
+  documentEstVerrouille,
+  raisonDocumentNonModifiable,
+  statutCommandeSelonLivraison,
+  verrouTransformationActif,
+} from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
-import type { CommandeStatut } from "@/lib/types";
+import type { CommandeStatut, ModeRemise } from "@/lib/types";
 
 type Filtre = "tous" | CommandeStatut;
 
@@ -76,6 +91,10 @@ export default function ListeCommandesPage() {
     ventes,
     updateAcompte,
     encaisserAcompte,
+    verrouillerTransformation,
+    annulerTransformation,
+    libererVerrousExpires,
+    finaliserTransformation,
   } = useStore();
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
@@ -86,13 +105,15 @@ export default function ListeCommandesPage() {
     setFiltre(filtreDepuisQuery(searchParams.get("statut")));
   }, [searchParams]);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewSheetRef = useRef<HTMLDivElement>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [wizardKey, setWizardKey] = useState(0);
   const [seed, setSeed] = useState<{
     lignes: DraftLigne[];
     remiseGlobale: number;
+    remiseGlobaleMode: ModeRemise;
     note: string;
-  }>({ lignes: [], remiseGlobale: 0, note: "" });
+  }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: "",
     pointDeVenteId: "",
@@ -101,8 +122,18 @@ export default function ListeCommandesPage() {
     dateLivraisonPrevue: "",
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
+  const [pending, setPending] = useState<{
+    commandeId: string;
+    cible: "bon_de_livraison" | "facture";
+  } | null>(null);
+
+  useEffect(() => {
+    libererVerrousExpires();
+  }, [libererVerrousExpires]);
 
   const modele = useModelePourType("commande");
+  const modeleBl = useModelePourType("bon_de_livraison");
+  const modeleFacture = useModelePourType("facture");
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = commandes.find((c) => c.id === editId);
   const preview = commandes.find((c) => c.id === previewId);
@@ -127,8 +158,13 @@ export default function ListeCommandesPage() {
   }, [commandes]);
 
   function ouvrirEdition(id: string) {
-    const c = commandes.find((x) => x.id === id);
+    const c = useStore.getState().commandes.find((x) => x.id === id);
     if (!c) return;
+    const bloque = raisonDocumentNonModifiable(c);
+    if (bloque) {
+      alert(bloque);
+      return;
+    }
     setEditId(id);
     setPreviewId(null);
     setMeta({
@@ -143,20 +179,52 @@ export default function ListeCommandesPage() {
     setSeed({
       lignes: lignesToDraft(c.lignes),
       remiseGlobale: c.remiseGlobale ?? 0,
+      remiseGlobaleMode: c.remiseGlobaleMode ?? "montant",
       note: c.note ?? "",
     });
     setAcompte(SAISIE_ACOMPTE_VIDE);
     setWizardKey((k) => k + 1);
   }
 
-  function convertirEnBonDeLivraison(commandeId: string) {
+  function demanderTransformation(
+    commandeId: string,
+    cible: "bon_de_livraison" | "facture",
+  ) {
     const c = commandes.find((x) => x.id === commandeId);
-    if (!c) return;
-    addBonDeLivraison({
-      numero: nextNumero(
-        "BL",
-        bonsDeLivraison.map((b) => b.numero),
-      ),
+    if (!c || c.statut === "annulee") return;
+    const res = verrouillerTransformation("commande", commandeId, cible);
+    if (!res.ok) {
+      alert(res.reason);
+      return;
+    }
+    setPreviewId(null);
+    setEditId(null);
+    setPending({ commandeId, cible });
+  }
+
+  function fermerValidation(opts?: { edition?: boolean }) {
+    if (pending) annulerTransformation("commande", pending.commandeId);
+    const id = pending?.commandeId;
+    setPending(null);
+    if (opts?.edition && id) ouvrirEdition(id);
+  }
+
+  function confirmerBonDeLivraison() {
+    const c = useStore.getState().commandes.find((x) => x.id === pending?.commandeId);
+    if (!c || !verrouTransformationActif(c.verrouTransformation)) {
+      libererVerrousExpires();
+      setPending(null);
+      alert(
+        "Le délai de validation (10 min) est dépassé. La commande a été déverrouillée.",
+      );
+      return;
+    }
+    const numero = nextNumero(
+      "BL",
+      bonsDeLivraison.map((b) => b.numero),
+    );
+    const blId = addBonDeLivraison({
+      numero,
       clientId: c.clientId,
       pointDeVenteId: c.pointDeVenteId,
       date: new Date().toISOString(),
@@ -166,17 +234,40 @@ export default function ListeCommandesPage() {
       devisId: c.devisId,
       tauxTVA: c.tauxTVA,
       conditionsPaiement: c.conditionsPaiement,
-      lignes: c.lignes.map((l) => ({ ...l, id: `bl-${l.id}` })),
+      lignes: clonerLignesDocument(c.lignes, "bl"),
       remiseGlobale: c.remiseGlobale,
+      remiseGlobaleMode: c.remiseGlobaleMode,
       note: c.note,
     });
-    updateCommande(c.id, { statut: "en_cours" });
-    alert("Bon de livraison créé.");
+    const avancement = avancementLivraisonCommande(
+      c,
+      useStore.getState().bonsDeLivraison,
+    );
+    const fin = finaliserTransformation({
+      sourceType: "commande",
+      sourceId: c.id,
+      cibleType: "bon_de_livraison",
+      cibleId: blId,
+      cibleNumero: numero,
+      statutSource: statutCommandeSelonLivraison(avancement),
+    });
+    if (!fin.ok) {
+      alert(fin.reason);
+      return;
+    }
+    setPending(null);
   }
 
-  function convertirEnFacture(commandeId: string) {
-    const c = commandes.find((x) => x.id === commandeId);
-    if (!c) return;
+  function confirmerFacture() {
+    const c = useStore.getState().commandes.find((x) => x.id === pending?.commandeId);
+    if (!c || !verrouTransformationActif(c.verrouTransformation)) {
+      libererVerrousExpires();
+      setPending(null);
+      alert(
+        "Le délai de validation (10 min) est dépassé. La commande a été déverrouillée.",
+      );
+      return;
+    }
     const echeance = new Date();
     echeance.setDate(echeance.getDate() + 30);
     const t = totauxCommande(c, parametres, acomptes);
@@ -190,13 +281,14 @@ export default function ListeCommandesPage() {
         devisId: c.devisId,
       }),
     );
+    const numero = nextNumeroDocumentCommercial({
+      prefix: "FAC",
+      pointDeVenteId: c.pointDeVenteId,
+      pointsDeVente,
+      existing: factures.map((f) => f.numero),
+    });
     const factureId = addFacture({
-      numero: nextNumeroDocumentCommercial({
-        prefix: "FAC",
-        pointDeVenteId: c.pointDeVenteId,
-        pointsDeVente,
-        existing: factures.map((f) => f.numero),
-      }),
+      numero,
       type: t.acomptesTTC > 0 ? "solde" : "standard",
       clientId: c.clientId,
       pointDeVenteId: c.pointDeVenteId,
@@ -215,10 +307,23 @@ export default function ListeCommandesPage() {
       conditionsPaiement: c.conditionsPaiement,
       dateValidation: new Date().toISOString(),
       acomptesDocument: acomptesDoc,
-      lignes: c.lignes.map((l) => ({ ...l, id: `fl-${l.id}` })),
+      lignes: clonerLignesDocument(c.lignes, "fl"),
       remiseGlobale: c.remiseGlobale,
+      remiseGlobaleMode: c.remiseGlobaleMode,
       note: c.note,
     });
+    const fin = finaliserTransformation({
+      sourceType: "commande",
+      sourceId: c.id,
+      cibleType: "facture",
+      cibleId: factureId,
+      cibleNumero: numero,
+      statutSource: c.verrouTransformation?.statutPrecedent ?? "en_cours",
+    });
+    if (!fin.ok) {
+      alert(fin.reason);
+      return;
+    }
     for (const a of acomptesLies) {
       updateAcompte(a.id, {
         commandeId: a.commandeId || c.id,
@@ -226,17 +331,26 @@ export default function ListeCommandesPage() {
         statut: "impute",
       });
     }
-    updateCommande(c.id, { statut: "livree" });
-    alert(
-      "Facture créée (acomptes figés sur le document ; le solde ultérieur ne modifiera pas le PDF).",
-    );
+    setPending(null);
   }
+
+  const pendingCmd = commandes.find((c) => c.id === pending?.commandeId);
+  const numeroBlProvisoire = nextNumero(
+    "BL",
+    bonsDeLivraison.map((b) => b.numero),
+  );
+  const numeroFacProvisoire = nextNumeroDocumentCommercial({
+    prefix: "FAC",
+    pointDeVenteId: pendingCmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "",
+    pointsDeVente,
+    existing: factures.map((f) => f.numero),
+  });
 
   return (
     <div>
       <PageHeader
         title="Liste des commandes"
-        description="Consultez, filtrez et modifiez les commandes. Une facture créée reste figée."
+        description="Consultez, filtrez et modifiez les commandes. Toute transformation vers un BL ou une facture passe par une validation."
         actions={
           <Link href="/commandes" className="btn btn-primary">
             <Plus className="h-4 w-4" />
@@ -298,6 +412,7 @@ export default function ListeCommandesPage() {
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
+            initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
             showAcomptes={
               acomptesPourDocument(acomptes, {
@@ -350,7 +465,7 @@ export default function ListeCommandesPage() {
             }}
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
-            onConfirm={({ lignes, remiseGlobale, note }) => {
+            onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId || !editId) return;
               updateCommande(editId, {
                 clientId: meta.clientId,
@@ -363,7 +478,7 @@ export default function ListeCommandesPage() {
                   : undefined,
                 devisId: meta.devisId || undefined,
                 lignes,
-                remiseGlobale: remiseGlobale > 0 ? remiseGlobale : undefined,
+                ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
               });
               const montant = Math.max(0, Number(acompte.montant) || 0);
@@ -478,6 +593,7 @@ export default function ListeCommandesPage() {
               <th>Client</th>
               <th>Total TTC</th>
               <th>Acomptes</th>
+              <th>Avancement</th>
               <th>Statut</th>
               <th />
             </tr>
@@ -485,7 +601,7 @@ export default function ListeCommandesPage() {
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={8} className="text-muted">
                   Aucune commande pour ce filtre.
                 </td>
               </tr>
@@ -500,9 +616,13 @@ export default function ListeCommandesPage() {
                   </td>
                   <td>{formatCurrency(t.acomptesTTC)}</td>
                   <td>
+                    <BadgesAvancementCommande commande={c} />
+                  </td>
+                  <td>
                     <select
                       className="select max-w-[140px]"
                       value={c.statut}
+                      disabled={documentEstVerrouille(c)}
                       onChange={(e) =>
                         updateCommande(c.id, {
                           statut: e.target.value as CommandeStatut,
@@ -560,13 +680,19 @@ export default function ListeCommandesPage() {
                         <>
                           <button
                             className="btn btn-secondary"
-                            onClick={() => convertirEnBonDeLivraison(c.id)}
+                            disabled={documentEstVerrouille(c)}
+                            onClick={() =>
+                              demanderTransformation(c.id, "bon_de_livraison")
+                            }
                           >
                             → BL
                           </button>
                           <button
                             className="btn btn-secondary"
-                            onClick={() => convertirEnFacture(c.id)}
+                            disabled={documentEstVerrouille(c)}
+                            onClick={() =>
+                              demanderTransformation(c.id, "facture")
+                            }
                           >
                             → Facture
                           </button>
@@ -593,11 +719,12 @@ export default function ListeCommandesPage() {
 
       {preview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-3xl">
+          <div className="my-6 w-full max-w-[220mm]">
             <div className="mb-3 flex justify-end gap-2">
-              <button className="btn btn-primary" onClick={() => window.print()}>
-                Imprimer
-              </button>
+              <DocumentPrintActions
+                sheetRef={previewSheetRef}
+                filename={`Commande ${preview.numero}`}
+              />
               <button
                 className="btn btn-secondary"
                 onClick={() => setPreviewId(null)}
@@ -606,6 +733,7 @@ export default function ListeCommandesPage() {
               </button>
             </div>
             <DocumentPreview
+              ref={previewSheetRef}
               type="commande"
               numero={preview.numero}
               date={preview.date}
@@ -625,8 +753,88 @@ export default function ListeCommandesPage() {
                 devisId: preview.devisId,
               })}
             />
+            <DocumentFiliation documentId={preview.id} />
           </div>
         </div>
+      )}
+
+      {pending && pendingCmd && (
+        <TransformationValidationModal
+          open
+          titre={
+            pending.cible === "bon_de_livraison"
+              ? `Transformer ${pendingCmd.numero} en bon de livraison`
+              : `Transformer ${pendingCmd.numero} en facture`
+          }
+          sourceNumero={pendingCmd.numero}
+          cible={pending.cible}
+          verrou={pendingCmd.verrouTransformation}
+          onConfirmer={
+            pending.cible === "bon_de_livraison"
+              ? confirmerBonDeLivraison
+              : confirmerFacture
+          }
+          onAnnuler={() => fermerValidation()}
+          onRetourEdition={() => fermerValidation({ edition: true })}
+          onExpire={() => {
+            libererVerrousExpires();
+            setPending(null);
+            alert(
+              "Délai de validation dépassé (10 min). La commande a été déverrouillée.",
+            );
+          }}
+        >
+          {pending.cible === "bon_de_livraison" ? (
+            <DocumentPreview
+              type="bon_de_livraison"
+              numero={numeroBlProvisoire}
+              date={new Date().toISOString()}
+              echeance={pendingCmd.dateLivraisonPrevue}
+              client={clients.find((x) => x.id === pendingCmd.clientId)}
+              pdv={pointsDeVente.find(
+                (p) => p.id === pendingCmd.pointDeVenteId,
+              )}
+              parametres={parametres}
+              modele={modeleBl}
+              lignes={pendingCmd.lignes}
+              totaux={totauxCommande(pendingCmd, parametres, acomptes)}
+              conditionsPaiement={pendingCmd.conditionsPaiement}
+              note={pendingCmd.note}
+              referenceDevis={
+                devis.find((d) => d.id === pendingCmd.devisId)?.numero
+              }
+              referenceCommande={pendingCmd.numero}
+            />
+          ) : (
+            <DocumentPreview
+              type="facture"
+              numero={numeroFacProvisoire}
+              date={new Date().toISOString()}
+              echeance={new Date(
+                Date.now() + 30 * 24 * 60 * 60 * 1000,
+              ).toISOString()}
+              client={clients.find((x) => x.id === pendingCmd.clientId)}
+              pdv={pointsDeVente.find(
+                (p) => p.id === pendingCmd.pointDeVenteId,
+              )}
+              parametres={parametres}
+              modele={modeleFacture}
+              lignes={pendingCmd.lignes}
+              totaux={totauxCommande(pendingCmd, parametres, acomptes)}
+              conditionsPaiement={pendingCmd.conditionsPaiement}
+              note={pendingCmd.note}
+              referenceDevis={
+                devis.find((d) => d.id === pendingCmd.devisId)?.numero
+              }
+              referenceCommande={pendingCmd.numero}
+              acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                commandeId: pendingCmd.id,
+                devisId: pendingCmd.devisId,
+              })}
+            />
+          )}
+          <DocumentFiliation documentId={pendingCmd.id} />
+        </TransformationValidationModal>
       )}
     </div>
   );

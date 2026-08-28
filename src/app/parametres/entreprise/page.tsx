@@ -383,8 +383,11 @@ export default function ParametresEntreprisePage() {
                 )}
               </div>
               <p className="w-full text-[11px] text-muted">
-                PNG, JPG ou WebP · max. 2,5 Mo · affiché sur devis, commandes et
-                factures (activable dans Modèles documents).
+                PNG, JPG ou WebP · max. 2,5 Mo · affiché uniquement sur les
+                documents commerciaux (devis, commandes, BL, factures — activable
+                dans Modèles documents). Ce logo n&apos;est pas repris dans la
+                colonne des menus : l&apos;identité du menu se paramètre à part
+                dans <strong>Identité du menu</strong>.
               </p>
               {logoError && (
                 <p className="w-full text-sm text-danger">{logoError}</p>

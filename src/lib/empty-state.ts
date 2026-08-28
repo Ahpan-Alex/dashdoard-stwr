@@ -28,6 +28,7 @@ export function emptyAppState(): AppState {
       conditionsPaiementDefaut:
         "Paiement à 30 jours. Acompte de 30 % à la commande. Espèces, virement ou Mobile Money.",
     },
+    identiteNavigation: { nom: "" },
     modelesDocuments: createDefaultModeles(),
     preferencesModeles: {},
     bilanInitial: {
@@ -52,6 +53,8 @@ export function emptyAppState(): AppState {
     bonsDeLivraison: [],
     factures: [],
     acomptes: [],
+    transformations: [],
+    achats: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
     produits: [],
@@ -70,6 +73,7 @@ export function emptyAppState(): AppState {
 export function pickAppState(state: AppState): AppState {
   return {
     parametres: state.parametres,
+    identiteNavigation: state.identiteNavigation ?? { nom: "" },
     modelesDocuments: state.modelesDocuments,
     preferencesModeles: state.preferencesModeles ?? {},
     bilanInitial: state.bilanInitial,
@@ -82,6 +86,8 @@ export function pickAppState(state: AppState): AppState {
     bonsDeLivraison: state.bonsDeLivraison,
     factures: state.factures,
     acomptes: state.acomptes,
+    transformations: state.transformations ?? [],
+    achats: state.achats ?? [],
     pointsDeVente: state.pointsDeVente,
     categoriesProduits: state.categoriesProduits,
     produits: state.produits,

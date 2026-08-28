@@ -1,60 +1,57 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileDown } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
+import {
+  feuilleDepuisConteneur,
+  imprimerFeuilleCommerciale,
+} from "@/lib/imprimer-document";
 
 type Props = {
-  /** Libellé accessibilité / tooltip. */
   label?: string;
-  /** Prévisualisation PDF du document (rendue uniquement pendant l'export). */
   children: ReactNode;
-  /** Bouton texte au lieu d'une icône. */
   variant?: "icon" | "button";
   className?: string;
+  filename?: string;
 };
 
 /**
- * Export PDF d'un seul document via la boîte d'impression du navigateur.
+ * Export PDF d'un document : même feuille que l'aperçu (HTML + CSS + couleurs).
  */
 export function ExportDocumentPdfButton({
   label = "Exporter PDF",
   children,
   variant = "icon",
   className = "",
+  filename,
 }: Props) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
-  const rootId = useId().replace(/:/g, "");
 
   useEffect(() => {
     if (!active) return;
+    let cancelled = false;
 
-    document.body.classList.add("print-batch-active");
-
-    const timer = window.setTimeout(() => {
-      window.print();
-    }, 150);
-
-    const finish = () => {
-      setActive(false);
-      document.body.classList.remove("print-batch-active");
+    const run = async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      if (cancelled) return;
+      const sheet = feuilleDepuisConteneur(hostRef.current);
+      if (sheet) {
+        await imprimerFeuilleCommerciale(sheet, {
+          filename: filename ?? label,
+        });
+      }
+      if (!cancelled) setActive(false);
     };
 
-    window.addEventListener("afterprint", finish);
-    const fallback = window.setTimeout(finish, 60_000);
-
+    void run();
     return () => {
-      window.clearTimeout(timer);
-      window.clearTimeout(fallback);
-      window.removeEventListener("afterprint", finish);
-      document.body.classList.remove("print-batch-active");
+      cancelled = true;
     };
-  }, [active, rootId]);
+  }, [active, filename, label]);
 
   return (
     <>
@@ -63,7 +60,7 @@ export function ExportDocumentPdfButton({
           type="button"
           className={`btn btn-secondary ${className}`.trim()}
           disabled={active}
-          title="Ouvre l'impression — choisissez « Enregistrer au format PDF »"
+          title="Enregistrer au format PDF — identique à l'aperçu, couleurs conservées"
           onClick={() => setActive(true)}
         >
           <FileDown className="h-4 w-4" />
@@ -74,6 +71,7 @@ export function ExportDocumentPdfButton({
           label={active ? "Préparation…" : label}
           disabled={active}
           className={className}
+          title="Enregistrer au format PDF — identique à l'aperçu, couleurs conservées"
           onClick={() => setActive(true)}
         >
           <FileDown className="h-4 w-4" />
@@ -81,8 +79,12 @@ export function ExportDocumentPdfButton({
       )}
 
       {active && (
-        <div id={rootId} className="print-batch-root" aria-hidden>
-          <div className="print-batch-page">{children}</div>
+        <div
+          ref={hostRef}
+          className="document-export-host"
+          aria-hidden
+        >
+          {children}
         </div>
       )}
     </>

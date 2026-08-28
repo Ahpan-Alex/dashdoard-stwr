@@ -13,9 +13,22 @@ import {
 } from "./produits";
 import { creerEntreeJournal, factureEstFiscale, nextNumeroDocumentCommercial } from "./facturation-mg";
 import { stockDisponible } from "./calculations";
+import { quantiteStockChronologique, snapshotCumpLignesFacture } from "./cump";
+import {
+  entreesDepuisAchat,
+  nextNumeroAchat,
+  nextNumeroAvoirAchat,
+  nextNumeroLivraison,
+  quantiteLivreeProduit,
+  quantiteRetourneeProduit,
+  reliquatProduit,
+  soldeAchat,
+  statutLivraisonRecord,
+} from "./achats";
 import {
   appliqueTVA,
   ensureCodesClients,
+  factureImpacteExploitation,
   fournisseurEstReference,
   motifLienClient,
   motifLienPointDeVente,
@@ -37,33 +50,48 @@ import {
 import { emptyAppState, pickAppState } from "./empty-state";
 import { createId } from "./id";
 import { getActiviteActor } from "./activity-actor";
+import { useAuthStore } from "./auth-store";
+import {
+  creerVerrouTransformation,
+  verrouTransformationActif,
+} from "./transformation-document";
 import type {
+  Achat,
   Acompte,
   ActiviteAction,
   ActiviteEntite,
   AppState,
+  AvoirAchatLigne,
   BilanInitial,
   BonDeLivraison,
+  BonDeLivraisonStatut,
   CategorieProduit,
   Charge,
+  CibleTransformation,
   Client,
   Commande,
+  CommandeStatut,
   Devis,
+  DevisStatut,
   EntreeStock,
   Facture,
   Fournisseur,
   HistoriquePrix,
+  IdentiteNavigation,
   Immobilisation,
   Inventaire,
   JournalActivite,
   JournalAudit,
+  LivraisonAchatLigne,
   ModePaiement,
   MouvementCompteCourant,
   Parametres,
   PointDeVente,
   Produit,
   RapportFinJournee,
+  SourceTransformation,
   TarifClient,
+  TransformationCommerciale,
   Vente,
 } from "./types";
 
@@ -81,6 +109,8 @@ type Store = {
   bonsDeLivraison: BonDeLivraison[];
   factures: Facture[];
   acomptes: Acompte[];
+  transformations: TransformationCommerciale[];
+  achats: Achat[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];
@@ -93,10 +123,14 @@ type Store = {
   rapportsFinJournee: RapportFinJournee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
+  identiteNavigation: IdentiteNavigation;
   pointDeVenteActifId: string | "tous";
 
   setPointDeVenteActif: (id: string | "tous") => void;
   updateParametres: (data: Partial<Parametres>) => void;
+  updateIdentiteNavigation: (
+    data: Partial<IdentiteNavigation>,
+  ) => { ok: true } | { ok: false; reason: string };
   updateBilanInitial: (data: Partial<BilanInitial>) => void;
 
   addModeleDocument: (m: Omit<ModeleDocument, "id">) => string;
@@ -119,6 +153,60 @@ type Store = {
     reason?: string;
   };
   deleteEntree: (id: string) => { ok: boolean; reason?: string };
+
+  addAchat: (
+    achat: Omit<Achat, "id" | "livraisons" | "paiements" | "avoirs"> & {
+      livraisons?: Achat["livraisons"];
+      paiements?: Achat["paiements"];
+      avoirs?: Achat["avoirs"];
+    },
+  ) => string;
+  updateAchat: (
+    id: string,
+    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note">>,
+  ) => { ok: boolean; reason?: string };
+  validerAchat: (id: string) => { ok: boolean; reason?: string };
+  annulerAchat: (id: string) => { ok: boolean; reason?: string };
+  deleteAchat: (id: string) => { ok: boolean; reason?: string };
+  ajouterLivraisonAchat: (
+    achatId: string,
+    data: {
+      date: string;
+      lignes: LivraisonAchatLigne[];
+      note?: string;
+      confirmer?: boolean;
+    },
+  ) => { ok: boolean; reason?: string; id?: string };
+  confirmerLivraisonAchat: (
+    achatId: string,
+    livraisonId: string,
+    lignes?: LivraisonAchatLigne[],
+  ) => { ok: boolean; reason?: string };
+  annulerLivraisonAchat: (
+    achatId: string,
+    livraisonId: string,
+  ) => { ok: boolean; reason?: string };
+  ajouterPaiementAchat: (
+    achatId: string,
+    data: { date: string; montant: number; modePaiement: ModePaiement; note?: string },
+  ) => { ok: boolean; reason?: string };
+  supprimerPaiementAchat: (
+    achatId: string,
+    paiementId: string,
+  ) => { ok: boolean; reason?: string };
+  ajouterAvoirAchat: (
+    achatId: string,
+    data: { date: string; lignes: AvoirAchatLigne[]; note?: string },
+  ) => { ok: boolean; reason?: string; id?: string };
+  validerAvoirAchat: (achatId: string, avoirId: string) => {
+    ok: boolean;
+    reason?: string;
+  };
+  supprimerAvoirAchat: (achatId: string, avoirId: string) => {
+    ok: boolean;
+    reason?: string;
+  };
+
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
 
@@ -179,9 +267,25 @@ type Store = {
   updateCommande: (id: string, data: Partial<Commande>) => void;
   deleteCommande: (id: string) => void;
 
-  addBonDeLivraison: (bl: Omit<BonDeLivraison, "id">) => void;
+  addBonDeLivraison: (bl: Omit<BonDeLivraison, "id">) => string;
   updateBonDeLivraison: (id: string, data: Partial<BonDeLivraison>) => void;
   deleteBonDeLivraison: (id: string) => void;
+
+  verrouillerTransformation: (
+    kind: SourceTransformation,
+    id: string,
+    cible: CibleTransformation,
+  ) => { ok: boolean; reason?: string };
+  annulerTransformation: (kind: SourceTransformation, id: string) => void;
+  libererVerrousExpires: () => void;
+  finaliserTransformation: (payload: {
+    sourceType: SourceTransformation;
+    sourceId: string;
+    cibleType: CibleTransformation;
+    cibleId: string;
+    cibleNumero: string;
+    statutSource: string;
+  }) => { ok: true } | { ok: false; reason: string };
 
   addFacture: (
     facture: Omit<Facture, "id">,
@@ -246,6 +350,68 @@ function uid(prefix: string) {
   return createId(prefix);
 }
 
+function nomFournisseur(state: { fournisseurs: Fournisseur[] }, id: string) {
+  return state.fournisseurs.find((f) => f.id === id)?.nom ?? "Fournisseur";
+}
+
+function regenererEntreesAchat(
+  entrees: EntreeStock[],
+  achat: Achat,
+  produits: Produit[],
+  fournisseurNom: string,
+): EntreeStock[] {
+  const hors = entrees.filter((e) => e.achatId !== achat.id);
+  const gen = entreesDepuisAchat(achat, produits, fournisseurNom).map((e) => ({
+    ...e,
+    id: e.livraisonId
+      ? `ent-liv-${e.livraisonId}-${e.produitId}`
+      : `ent-avr-${e.avoirAchatId}-${e.produitId}`,
+  }));
+  return [...gen, ...hors];
+}
+
+function stockDevientNegatif(
+  entrees: EntreeStock[],
+  ventes: Vente[],
+  inventaires: Inventaire[],
+  pointDeVenteId: string,
+  produitIds: string[],
+) {
+  for (const produitId of produitIds) {
+    const q = quantiteStockChronologique({
+      produitId,
+      pointDeVenteId,
+      entrees,
+      ventes,
+      inventaires,
+    });
+    if (q < -1e-9) return true;
+  }
+  return false;
+}
+
+function figerCumpSiCloture(
+  facture: Facture,
+  ctx: {
+    entrees: EntreeStock[];
+    ventes: Vente[];
+    inventaires: Inventaire[];
+    produits: Produit[];
+  },
+): Facture {
+  if (!factureImpacteExploitation(facture)) return facture;
+  if (facture.lignes.some((l) => l.cumpFigee != null)) return facture;
+  return {
+    ...facture,
+    lignes: snapshotCumpLignesFacture(facture, {
+      entrees: ctx.entrees,
+      ventes: ctx.ventes.filter((v) => v.factureId !== facture.id),
+      inventaires: ctx.inventaires,
+      produits: ctx.produits,
+    }),
+  };
+}
+
 function modeleCourant(
   state: { modelesDocuments: ModeleDocument[]; preferencesModeles: PreferencesModeles },
   type: TypeDocumentCommercial,
@@ -276,6 +442,63 @@ function entreeActivite(
   };
 }
 
+type DocSource = Devis | Commande | BonDeLivraison;
+
+function trouverSource(
+  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison">,
+  kind: SourceTransformation,
+  id: string,
+): DocSource | undefined {
+  if (kind === "devis") return state.devis.find((d) => d.id === id);
+  if (kind === "commande") return state.commandes.find((c) => c.id === id);
+  return state.bonsDeLivraison.find((b) => b.id === id);
+}
+
+function patcherSource(
+  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison">,
+  kind: SourceTransformation,
+  id: string,
+  patch: Record<string, unknown>,
+): Partial<Pick<Store, "devis" | "commandes" | "bonsDeLivraison">> {
+  if (kind === "devis") {
+    return {
+      devis: state.devis.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+    };
+  }
+  if (kind === "commande") {
+    return {
+      commandes: state.commandes.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      ),
+    };
+  }
+  return {
+    bonsDeLivraison: state.bonsDeLivraison.map((b) =>
+      b.id === id ? { ...b, ...patch } : b,
+    ),
+  };
+}
+
+function entiteSource(kind: SourceTransformation): ActiviteEntite {
+  if (kind === "devis") return "devis";
+  if (kind === "commande") return "commande";
+  return "bon_de_livraison";
+}
+
+function libererSiExpire<T extends DocSource>(doc: T): T {
+  const v = doc.verrouTransformation;
+  if (!v) return doc;
+  if (verrouTransformationActif(v)) return doc;
+  if (doc.statut === "transforme") {
+    return { ...doc, verrouTransformation: null };
+  }
+  return {
+    ...doc,
+    statut: v.statutPrecedent as T["statut"],
+    verrouTransformation: null,
+  };
+}
+
 export const useStore = create<Store>()((set, get) => ({
       ...emptyAppState(),
       setPointDeVenteActif: (id) => set({ pointDeVenteActifId: id }),
@@ -298,6 +521,31 @@ export const useStore = create<Store>()((set, get) => ({
             ],
           };
         }),
+      updateIdentiteNavigation: (data) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("navigation.identite")) {
+          return {
+            ok: false as const,
+            reason:
+              "Seul l'administrateur peut modifier le nom et le logo du menu.",
+          };
+        }
+        set((state) => ({
+          identiteNavigation: {
+            nom: state.identiteNavigation?.nom ?? "",
+            logoDataUrl: state.identiteNavigation?.logoDataUrl,
+            ...data,
+          },
+          journalActivites: [
+            entreeActivite("modification", "parametres", {
+              libelle: "Identité du menu",
+              detail: "Nom et logo de la colonne de navigation",
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
       updateBilanInitial: (data) =>
         set((state) => ({
           bilanInitial: { ...state.bilanInitial, ...data },
@@ -397,6 +645,7 @@ export const useStore = create<Store>()((set, get) => ({
           charges: state.charges,
           immobilisations: state.immobilisations,
           rapportsFinJournee: state.rapportsFinJournee,
+          achats: state.achats,
         });
         if (motif) return { ok: false, reason: motif };
         set((s) => ({
@@ -433,6 +682,7 @@ export const useStore = create<Store>()((set, get) => ({
           prev.pointDeVenteId,
           state.entrees,
           state.ventes,
+          state.inventaires,
         );
         if (retireQty > 0 && dispo + 1e-9 < retireQty) {
           return {
@@ -455,6 +705,7 @@ export const useStore = create<Store>()((set, get) => ({
           prev.pointDeVenteId,
           state.entrees,
           state.ventes,
+          state.inventaires,
         );
         if (dispo + 1e-9 < prev.quantite) {
           return {
@@ -468,6 +719,498 @@ export const useStore = create<Store>()((set, get) => ({
         }));
         return { ok: true };
       },
+
+      addAchat: (achat) => {
+        const id = uid("ach");
+        const numero = achat.numero || nextNumeroAchat(get().achats);
+        set((state) => ({
+          achats: [
+            {
+              ...achat,
+              id,
+              numero,
+              livraisons: achat.livraisons ?? [],
+              paiements: achat.paiements ?? [],
+              avoirs: achat.avoirs ?? [],
+            },
+            ...state.achats,
+          ],
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: id,
+              libelle: numero,
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return id;
+      },
+      updateAchat: (id, data) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === id);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut !== "brouillon") {
+          if (data.lignes || data.fournisseurId || data.pointDeVenteId) {
+            return {
+              ok: false,
+              reason: "La commande validée ne peut plus être modifiée. Seuls l'échéance et la note restent éditables.",
+            };
+          }
+        }
+        if (data.lignes && prev.livraisons.some((l) => l.statut !== "annulee")) {
+          return {
+            ok: false,
+            reason: "Des livraisons existent déjà : les lignes de commande ne peuvent plus être modifiées.",
+          };
+        }
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === id ? { ...a, ...data } : a)),
+          journalActivites: [
+            entreeActivite("modification", "achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      validerAchat: (id) => {
+        const prev = get().achats.find((a) => a.id === id);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut === "annule") {
+          return { ok: false, reason: "Cet achat est annulé." };
+        }
+        if (prev.lignes.length === 0) {
+          return { ok: false, reason: "Ajoutez au moins un article." };
+        }
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  statut: "valide" as const,
+                  dateValidation: new Date().toISOString(),
+                }
+              : a,
+          ),
+          journalActivites: [
+            entreeActivite("validation", "achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      annulerAchat: (id) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === id);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (quantiteLivreeProduit(prev, prev.lignes[0]?.produitId ?? "") > 0 ||
+            prev.livraisons.some((l) => l.statut !== "annulee" && l.lignes.some((x) => x.quantiteLivree > 0))) {
+          return {
+            ok: false,
+            reason: "Annulez d'abord les livraisons déjà réceptionnées.",
+          };
+        }
+        if (prev.paiements.length > 0) {
+          return {
+            ok: false,
+            reason: "Des paiements sont enregistrés. Supprimez-les avant d'annuler.",
+          };
+        }
+        const next: Achat = {
+          ...prev,
+          statut: "annule",
+          livraisons: prev.livraisons.map((l) => ({ ...l, statut: "annulee" as const })),
+        };
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === id ? next : a)),
+          entrees: regenererEntreesAchat(
+            s.entrees,
+            next,
+            s.produits,
+            nomFournisseur(s, next.fournisseurId),
+          ),
+          journalActivites: [
+            entreeActivite("annulation", "achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      deleteAchat: (id) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === id);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut === "valide") {
+          return {
+            ok: false,
+            reason: "Un achat validé ne peut pas être supprimé. Annulez-le.",
+          };
+        }
+        if (prev.livraisons.some((l) => l.statut !== "annulee" && l.lignes.some((x) => x.quantiteLivree > 0))) {
+          return { ok: false, reason: "Des réceptions existent encore." };
+        }
+        set((s) => ({
+          achats: s.achats.filter((a) => a.id !== id),
+          entrees: s.entrees.filter((e) => e.achatId !== id),
+          journalActivites: [
+            entreeActivite("suppression", "achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      ajouterLivraisonAchat: (achatId, data) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut !== "valide") {
+          return { ok: false, reason: "Validez la commande avant d'enregistrer une livraison." };
+        }
+        for (const l of data.lignes) {
+          const reliquat = reliquatProduit(prev, l.produitId);
+          const q = data.confirmer === false ? 0 : l.quantiteLivree;
+          if (q - reliquat > 1e-9) {
+            return {
+              ok: false,
+              reason: "Quantité livrée supérieure au reliquat commandé.",
+            };
+          }
+        }
+        const id = uid("liv");
+        const draft = {
+          id,
+          numero: nextNumeroLivraison(state.achats),
+          date: data.date,
+          statut: "en_attente" as const,
+          lignes: data.lignes,
+          note: data.note,
+        };
+        const confirmer = data.confirmer !== false;
+        const liv = {
+          ...draft,
+          statut: confirmer
+            ? statutLivraisonRecord({ ...draft, statut: "livree" })
+            : ("en_attente" as const),
+        };
+        const next: Achat = { ...prev, livraisons: [liv, ...prev.livraisons] };
+        const entrees = regenererEntreesAchat(
+          state.entrees,
+          next,
+          state.produits,
+          nomFournisseur(state, next.fournisseurId),
+        );
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+          entrees,
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: `${prev.numero} · ${liv.numero}`,
+              detail: "Livraison",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id };
+      },
+      confirmerLivraisonAchat: (achatId, livraisonId, lignes) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const livPrev = prev.livraisons.find((l) => l.id === livraisonId);
+        if (!livPrev) return { ok: false, reason: "Livraison introuvable." };
+        if (livPrev.statut === "annulee") {
+          return { ok: false, reason: "Cette livraison est annulée." };
+        }
+        const livLignes = lignes ?? livPrev.lignes;
+        const horsCette = {
+          ...prev,
+          livraisons: prev.livraisons.filter((l) => l.id !== livraisonId),
+        };
+        for (const l of livLignes) {
+          if (l.quantiteLivree - reliquatProduit(horsCette, l.produitId) > 1e-9) {
+            return {
+              ok: false,
+              reason: "Quantité livrée supérieure au reliquat commandé.",
+            };
+          }
+        }
+        const liv = {
+          ...livPrev,
+          lignes: livLignes,
+          statut: statutLivraisonRecord({ ...livPrev, lignes: livLignes, statut: "livree" }),
+        };
+        const next: Achat = {
+          ...prev,
+          livraisons: prev.livraisons.map((l) => (l.id === livraisonId ? liv : l)),
+        };
+        const entrees = regenererEntreesAchat(
+          state.entrees,
+          next,
+          state.produits,
+          nomFournisseur(state, next.fournisseurId),
+        );
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+          entrees,
+          journalActivites: [
+            entreeActivite("validation", "achat", {
+              entiteId: achatId,
+              libelle: `${prev.numero} · ${liv.numero}`,
+              detail: "Confirmation de livraison",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      annulerLivraisonAchat: (achatId, livraisonId) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const next: Achat = {
+          ...prev,
+          livraisons: prev.livraisons.map((l) =>
+            l.id === livraisonId ? { ...l, statut: "annulee" as const } : l,
+          ),
+        };
+        const entrees = regenererEntreesAchat(
+          state.entrees,
+          next,
+          state.produits,
+          nomFournisseur(state, next.fournisseurId),
+        );
+        const produitIds = [...new Set(prev.lignes.map((l) => l.produitId))];
+        if (
+          stockDevientNegatif(
+            entrees,
+            state.ventes,
+            state.inventaires,
+            prev.pointDeVenteId,
+            produitIds,
+          )
+        ) {
+          return {
+            ok: false,
+            reason:
+              "Stock insuffisant : cette réception a déjà été consommée par des ventes.",
+          };
+        }
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+          entrees,
+          journalActivites: [
+            entreeActivite("annulation", "achat", {
+              entiteId: achatId,
+              libelle: prev.numero,
+              detail: "Livraison annulée",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      ajouterPaiementAchat: (achatId, data) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut !== "valide") {
+          return { ok: false, reason: "Validez la commande avant d'enregistrer un paiement." };
+        }
+        if (data.montant <= 0) {
+          return { ok: false, reason: "Montant de paiement invalide." };
+        }
+        const solde = soldeAchat(prev);
+        if (data.montant - solde > 0.5) {
+          return {
+            ok: false,
+            reason: `Le paiement dépasse le solde restant (${Math.round(solde)} Ar).`,
+          };
+        }
+        const paiement = { ...data, id: uid("pay") };
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId
+              ? { ...a, paiements: [paiement, ...a.paiements] }
+              : a,
+          ),
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: prev.numero,
+              detail: "Paiement fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      supprimerPaiementAchat: (achatId, paiementId) => {
+        const prev = get().achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId
+              ? { ...a, paiements: a.paiements.filter((p) => p.id !== paiementId) }
+              : a,
+          ),
+          journalActivites: [
+            entreeActivite("suppression", "achat", {
+              entiteId: achatId,
+              libelle: prev.numero,
+              detail: "Paiement fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      ajouterAvoirAchat: (achatId, data) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut !== "valide") {
+          return { ok: false, reason: "Validez la commande avant un retour." };
+        }
+        for (const l of data.lignes) {
+          const dispo =
+            quantiteLivreeProduit(prev, l.produitId) -
+            quantiteRetourneeProduit(prev, l.produitId);
+          if (l.quantite - dispo > 1e-9) {
+            return {
+              ok: false,
+              reason: "Quantité retournée supérieure à la quantité encore en stock sur cet achat.",
+            };
+          }
+        }
+        const id = uid("avr");
+        const avoir = {
+          id,
+          numero: nextNumeroAvoirAchat(state.achats),
+          date: data.date,
+          statut: "brouillon" as const,
+          lignes: data.lignes,
+          note: data.note,
+        };
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId ? { ...a, avoirs: [avoir, ...a.avoirs] } : a,
+          ),
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: `${prev.numero} · ${avoir.numero}`,
+              detail: "Avoir fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id };
+      },
+      validerAvoirAchat: (achatId, avoirId) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const avPrev = prev.avoirs.find((a) => a.id === avoirId);
+        if (!avPrev) return { ok: false, reason: "Avoir introuvable." };
+        const next: Achat = {
+          ...prev,
+          avoirs: prev.avoirs.map((a) =>
+            a.id === avoirId ? { ...a, statut: "valide" as const } : a,
+          ),
+        };
+        const entrees = regenererEntreesAchat(
+          state.entrees,
+          next,
+          state.produits,
+          nomFournisseur(state, next.fournisseurId),
+        );
+        const produitIds = avPrev.lignes.map((l) => l.produitId);
+        if (
+          stockDevientNegatif(
+            entrees,
+            state.ventes,
+            state.inventaires,
+            prev.pointDeVenteId,
+            produitIds,
+          )
+        ) {
+          return {
+            ok: false,
+            reason: "Stock insuffisant pour ce retour fournisseur.",
+          };
+        }
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+          entrees,
+          journalActivites: [
+            entreeActivite("validation", "achat", {
+              entiteId: achatId,
+              libelle: `${prev.numero} · ${avPrev.numero}`,
+              detail: "Avoir fournisseur validé",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      supprimerAvoirAchat: (achatId, avoirId) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const avPrev = prev.avoirs.find((a) => a.id === avoirId);
+        if (!avPrev) return { ok: false, reason: "Avoir introuvable." };
+        const next: Achat = {
+          ...prev,
+          avoirs: prev.avoirs.filter((a) => a.id !== avoirId),
+        };
+        const entrees = regenererEntreesAchat(
+          state.entrees,
+          next,
+          state.produits,
+          nomFournisseur(state, next.fournisseurId),
+        );
+        if (avPrev.statut === "valide") {
+          const produitIds = avPrev.lignes.map((l) => l.produitId);
+          // Removing a return adds stock back — should not go negative.
+          if (
+            stockDevientNegatif(
+              entrees,
+              state.ventes,
+              state.inventaires,
+              prev.pointDeVenteId,
+              produitIds,
+            )
+          ) {
+            return { ok: false, reason: "Impossible de supprimer cet avoir." };
+          }
+        }
+        set((s) => ({
+          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+          entrees,
+          journalActivites: [
+            entreeActivite("suppression", "achat", {
+              entiteId: achatId,
+              libelle: `${prev.numero} · ${avPrev.numero}`,
+              detail: "Avoir fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
       addVente: (vente) =>
         set((state) => ({
           ventes: [{ ...vente, id: uid("v") }, ...state.ventes],
@@ -654,6 +1397,7 @@ export const useStore = create<Store>()((set, get) => ({
             commandes: state.commandes,
             bonsDeLivraison: state.bonsDeLivraison,
             factures: state.factures,
+            achats: state.achats,
           })
         ) {
           return {
@@ -1009,7 +1753,7 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const frn = state.fournisseurs.find((f) => f.id === id);
         if (!frn) return { ok: false, reason: "Fournisseur introuvable." };
-        if (fournisseurEstReference(id, frn.nom, state.entrees)) {
+        if (fournisseurEstReference(id, frn.nom, state.entrees, state.achats)) {
           return {
             ok: false,
             reason:
@@ -1046,6 +1790,9 @@ export const useStore = create<Store>()((set, get) => ({
       updateDevis: (id, data) =>
         set((state) => {
           const prev = state.devis.find((d) => d.id === id);
+          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+            return state;
+          }
           const annulation = data.statut === "refuse" || data.statut === "expire";
           return {
             devis: state.devis.map((d) =>
@@ -1093,6 +1840,9 @@ export const useStore = create<Store>()((set, get) => ({
       updateCommande: (id, data) =>
         set((state) => {
           const prev = state.commandes.find((c) => c.id === id);
+          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+            return state;
+          }
           return {
             commandes: state.commandes.map((c) =>
               c.id === id ? { ...c, ...data } : c,
@@ -1122,23 +1872,26 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
 
-      addBonDeLivraison: (bl) =>
-        set((state) => {
-          const id = uid("bl");
-          return {
-            bonsDeLivraison: [{ ...bl, id }, ...state.bonsDeLivraison],
-            journalActivites: [
-              entreeActivite("creation", "bon_de_livraison", {
-                entiteId: id,
-                libelle: bl.numero,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
+      addBonDeLivraison: (bl) => {
+        const id = uid("bl");
+        set((state) => ({
+          bonsDeLivraison: [{ ...bl, id }, ...state.bonsDeLivraison],
+          journalActivites: [
+            entreeActivite("creation", "bon_de_livraison", {
+              entiteId: id,
+              libelle: bl.numero,
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return id;
+      },
       updateBonDeLivraison: (id, data) =>
         set((state) => {
           const prev = state.bonsDeLivraison.find((b) => b.id === id);
+          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+            return state;
+          }
           return {
             bonsDeLivraison: state.bonsDeLivraison.map((b) =>
               b.id === id ? { ...b, ...data } : b,
@@ -1168,14 +1921,126 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
 
+      verrouillerTransformation: (kind, id, cible) => {
+        get().libererVerrousExpires();
+        const state = get();
+        const doc = trouverSource(state, kind, id);
+        if (!doc) return { ok: false, reason: "Document introuvable." };
+        if (kind === "devis" && doc.statut === "transforme") {
+          return {
+            ok: false,
+            reason: "Ce devis a déjà été transformé.",
+          };
+        }
+        if (verrouTransformationActif(doc.verrouTransformation)) {
+          const v = doc.verrouTransformation!;
+          const actor = getActiviteActor();
+          if (
+            v.cible === cible &&
+            v.userId &&
+            actor.id &&
+            v.userId === actor.id
+          ) {
+            return { ok: true };
+          }
+          return {
+            ok: false,
+            reason: `Document verrouillé par ${v.userNom || "un autre utilisateur"} (transformation en cours).`,
+          };
+        }
+        const statutPrecedent =
+          doc.statut === "en_transformation"
+            ? (doc.verrouTransformation?.statutPrecedent ?? "brouillon")
+            : doc.statut;
+        const verrou = creerVerrouTransformation(cible, statutPrecedent);
+        const statutVerrou =
+          kind === "devis"
+            ? ("en_transformation" as DevisStatut)
+            : kind === "commande"
+              ? ("en_transformation" as CommandeStatut)
+              : ("en_transformation" as BonDeLivraisonStatut);
+        set((s) => ({
+          ...patcherSource(s, kind, id, {
+            statut: statutVerrou,
+            verrouTransformation: verrou,
+          }),
+        }));
+        return { ok: true };
+      },
+
+      annulerTransformation: (kind, id) => {
+        const doc = trouverSource(get(), kind, id);
+        if (!doc?.verrouTransformation) return;
+        const precedent = doc.verrouTransformation.statutPrecedent;
+        set((s) => ({
+          ...patcherSource(s, kind, id, {
+            statut: precedent,
+            verrouTransformation: null,
+          }),
+        }));
+      },
+
+      libererVerrousExpires: () =>
+        set((state) => ({
+          devis: state.devis.map(libererSiExpire),
+          commandes: state.commandes.map(libererSiExpire),
+          bonsDeLivraison: state.bonsDeLivraison.map(libererSiExpire),
+        })),
+
+      finaliserTransformation: (payload) => {
+        const state = get();
+        const doc = trouverSource(state, payload.sourceType, payload.sourceId);
+        if (!doc) return { ok: false, reason: "Document source introuvable." };
+        if (!verrouTransformationActif(doc.verrouTransformation)) {
+          get().libererVerrousExpires();
+          return {
+            ok: false,
+            reason:
+              "Le délai de validation (10 min) est dépassé, ou le document n'est plus verrouillé.",
+          };
+        }
+        const actor = getActiviteActor();
+        const transformation: TransformationCommerciale = {
+          id: uid("trf"),
+          date: new Date().toISOString(),
+          userId: actor.id,
+          userNom: actor.nom,
+          sourceType: payload.sourceType,
+          sourceId: payload.sourceId,
+          sourceNumero: doc.numero,
+          cibleType: payload.cibleType,
+          cibleId: payload.cibleId,
+          cibleNumero: payload.cibleNumero,
+        };
+        set((s) => ({
+          ...patcherSource(s, payload.sourceType, payload.sourceId, {
+            statut: payload.statutSource,
+            verrouTransformation: null,
+          }),
+          transformations: [transformation, ...(s.transformations ?? [])],
+          journalActivites: [
+            entreeActivite("validation", entiteSource(payload.sourceType), {
+              entiteId: payload.sourceId,
+              libelle: doc.numero,
+              detail: `${doc.numero} → ${payload.cibleNumero}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
       addFacture: (facture, audit) => {
         const id = uid("fac");
         set((state) => {
           const modele = modeleCourant(state, "facture");
-          const complete = avecPresentationSiBesoin(
-            { ...facture, id },
-            state.parametres,
-            modele,
+          const complete = figerCumpSiCloture(
+            avecPresentationSiBesoin(
+              { ...facture, id },
+              state.parametres,
+              modele,
+            ),
+            state,
           );
           const factures = [complete, ...state.factures];
           return {
@@ -1226,6 +2091,7 @@ export const useStore = create<Store>()((set, get) => ({
             conditionsPaiement,
             note,
             remiseGlobale,
+            remiseGlobaleMode,
             devisId,
             commandeId,
             bonDeLivraisonId,
@@ -1257,7 +2123,9 @@ export const useStore = create<Store>()((set, get) => ({
             if (conditionsPaiement !== undefined)
               patch.conditionsPaiement = conditionsPaiement;
             if (note !== undefined) patch.note = note;
-            if (remiseGlobale !== undefined) patch.remiseGlobale = remiseGlobale;
+            if ("remiseGlobale" in data) patch.remiseGlobale = remiseGlobale;
+            if ("remiseGlobaleMode" in data)
+              patch.remiseGlobaleMode = remiseGlobaleMode;
             if (devisId !== undefined) patch.devisId = devisId;
             if (commandeId !== undefined) patch.commandeId = commandeId;
             if (bonDeLivraisonId !== undefined)
@@ -1297,7 +2165,9 @@ export const useStore = create<Store>()((set, get) => ({
             });
           }
           const factures = state.factures.map((f) =>
-            f.id === id ? { ...f, ...patch } : f,
+            f.id === id
+              ? figerCumpSiCloture({ ...f, ...patch }, state)
+              : f,
           );
           const estAnnulation = data.statut === "annulee";
           return {
@@ -1609,7 +2479,9 @@ export const useStore = create<Store>()((set, get) => ({
             clients: ensureCodesClients(merged.clients),
             ventes: rebuildVentesDepuisFactures(factures),
           };
-        }),
+        });
+        get().libererVerrousExpires();
+      },
       clearBusinessData: () => set({ ...emptyAppState() }),
       resetBusinessData: async (password) => {
         setBusinessSyncEnabled(false);

@@ -47,6 +47,7 @@ export default function ParametresPointsDeVentePage() {
     charges,
     immobilisations,
     rapportsFinJournee,
+    achats,
     addPointDeVente,
     updatePointDeVente,
     deletePointDeVente,
@@ -71,6 +72,7 @@ export default function ParametresPointsDeVentePage() {
       charges,
       immobilisations,
       rapportsFinJournee,
+      achats,
     };
   }
 
