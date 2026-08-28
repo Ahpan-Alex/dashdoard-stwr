@@ -11,6 +11,7 @@ import {
 import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
 import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
+import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import {
   avancementLivraisonCommande,
@@ -35,6 +36,7 @@ export default function BonsDeLivraisonPage() {
     verrouillerTransformation,
     annulerTransformation,
     finaliserTransformation,
+    pointDeVenteActifId,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -47,7 +49,7 @@ export default function BonsDeLivraisonPage() {
   }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
-    pointDeVenteId: pointsDeVente[0]?.id ?? "",
+    pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
     commandeId: "",
     date: new Date().toISOString().slice(0, 10),
     dateLivraison: new Date().toISOString().slice(0, 10),
@@ -60,7 +62,7 @@ export default function BonsDeLivraisonPage() {
     if (meta.commandeId) annulerTransformation("commande", meta.commandeId);
     setMeta({
       clientId: clients[0]?.id ?? "",
-      pointDeVenteId: pointsDeVente[0]?.id ?? "",
+      pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
       commandeId: "",
       date: new Date().toISOString().slice(0, 10),
       dateLivraison: new Date().toISOString().slice(0, 10),
@@ -222,8 +224,11 @@ export default function BonsDeLivraisonPage() {
                     onChange={(e) => chargerDepuisCommande(e.target.value)}
                   >
                     <option value="">— Nouveau —</option>
-                    {commandes
-                      .filter((c) => c.statut !== "annulee")
+                    {filterByPos(commandes, pointDeVenteActifId)
+                      .filter(
+                        (c) =>
+                          c.statut !== "annulee" || c.id === meta.commandeId,
+                      )
                       .map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.numero}

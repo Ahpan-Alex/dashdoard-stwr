@@ -548,6 +548,37 @@ export function caFactures(
     .reduce((s, f) => s + totalFacture(f, parametres), 0);
 }
 
+/** PDV d'un acompte via la facture, commande ou devis lié. */
+export function pointDeVenteAcompte(
+  acompte: Acompte,
+  refs: {
+    factures: Facture[];
+    commandes: Commande[];
+    devis: Devis[];
+  },
+): string | undefined {
+  const fac = refs.factures.find(
+    (f) => f.id === acompte.factureAcompteId || f.id === acompte.factureId,
+  );
+  if (fac) return fac.pointDeVenteId;
+  const cmd = refs.commandes.find((c) => c.id === acompte.commandeId);
+  if (cmd) return cmd.pointDeVenteId;
+  return refs.devis.find((d) => d.id === acompte.devisId)?.pointDeVenteId;
+}
+
+export function filterAcomptesByPos(
+  acomptes: Acompte[],
+  pointDeVenteId: string | "tous",
+  refs: {
+    factures: Facture[];
+    commandes: Commande[];
+    devis: Devis[];
+  },
+) {
+  if (pointDeVenteId === "tous") return acomptes;
+  return acomptes.filter((a) => pointDeVenteAcompte(a, refs) === pointDeVenteId);
+}
+
 /** Montant HT max encore annulable (TTC net converti en HT). */
 export function montantAvoirRestantTTC(
   facture: Facture,

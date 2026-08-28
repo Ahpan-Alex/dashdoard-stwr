@@ -28,11 +28,20 @@ type Horizon = "mois" | "annee";
 export default function CaObjectifsPage() {
   const ventes = useStore((s) => s.ventes);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const [horizon, setHorizon] = useState<Horizon>("mois");
+
+  const pdvVisibles = useMemo(
+    () =>
+      pointDeVenteActifId === "tous"
+        ? pointsDeVente
+        : pointsDeVente.filter((p) => p.id === pointDeVenteActifId),
+    [pointsDeVente, pointDeVenteActifId],
+  );
 
   const lignes = useMemo(
     () =>
-      pointsDeVente.map((pdv) => {
+      pdvVisibles.map((pdv) => {
         const realise = chiffreAffaires(ventes, pdv.id, horizon);
         const objectif =
           horizon === "mois"
@@ -42,7 +51,7 @@ export default function CaObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pointsDeVente, ventes, horizon],
+    [pdvVisibles, ventes, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);
@@ -179,7 +188,14 @@ export default function CaObjectifsPage() {
             </tr>
           </thead>
           <tbody>
-            {lignes.map((l) => (
+            {lignes.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-muted">
+                  Aucun point de vente pour ce filtre.
+                </td>
+              </tr>
+            ) : (
+              lignes.map((l) => (
               <tr key={l.id}>
                 <td className="font-medium">
                   {l.nom}
@@ -217,7 +233,8 @@ export default function CaObjectifsPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

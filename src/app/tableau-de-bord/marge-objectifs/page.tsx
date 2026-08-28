@@ -33,6 +33,7 @@ export default function MargeObjectifsPage() {
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const [horizon, setHorizon] = useState<Horizon>("mois");
 
   const range = useMemo(() => {
@@ -42,9 +43,17 @@ export default function MargeObjectifsPage() {
       : { debut: startOfYear(now), fin: endOfYear(now) };
   }, [horizon]);
 
+  const pdvVisibles = useMemo(
+    () =>
+      pointDeVenteActifId === "tous"
+        ? pointsDeVente
+        : pointsDeVente.filter((p) => p.id === pointDeVenteActifId),
+    [pointsDeVente, pointDeVenteActifId],
+  );
+
   const lignes = useMemo(
     () =>
-      pointsDeVente.map((pdv) => {
+      pdvVisibles.map((pdv) => {
         const realise = syntheseBenefices(
           ventes,
           entrees,
@@ -62,7 +71,7 @@ export default function MargeObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pointsDeVente, ventes, entrees, charges, produits, inventaires, range, horizon],
+    [pdvVisibles, ventes, entrees, charges, produits, inventaires, range, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);
@@ -199,7 +208,14 @@ export default function MargeObjectifsPage() {
             </tr>
           </thead>
           <tbody>
-            {lignes.map((l) => (
+            {lignes.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-muted">
+                  Aucun point de vente pour ce filtre.
+                </td>
+              </tr>
+            ) : (
+              lignes.map((l) => (
               <tr key={l.id}>
                 <td className="font-medium">
                   {l.nom}
@@ -237,7 +253,8 @@ export default function MargeObjectifsPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

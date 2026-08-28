@@ -22,6 +22,7 @@ import {
   nextNumero,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { devisPeutEtreTransforme } from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
@@ -45,6 +46,7 @@ export default function CommandesPage() {
     verrouillerTransformation,
     annulerTransformation,
     finaliserTransformation,
+    pointDeVenteActifId,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -57,7 +59,7 @@ export default function CommandesPage() {
   }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
-    pointDeVenteId: pointsDeVente[0]?.id ?? "",
+    pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
     devisId: "",
     date: new Date().toISOString().slice(0, 10),
     dateLivraisonPrevue: "",
@@ -71,7 +73,7 @@ export default function CommandesPage() {
     if (meta.devisId) annulerTransformation("devis", meta.devisId);
     setMeta({
       clientId: clients[0]?.id ?? "",
-      pointDeVenteId: pointsDeVente[0]?.id ?? "",
+      pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
       devisId: "",
       date: new Date().toISOString().slice(0, 10),
       dateLivraisonPrevue: "",
@@ -263,7 +265,7 @@ export default function CommandesPage() {
                     onChange={(e) => chargerDepuisDevis(e.target.value)}
                   >
                     <option value="">— Nouveau —</option>
-                    {devis
+                    {filterByPos(devis, pointDeVenteActifId)
                       .filter(
                         (d) =>
                           devisPeutEtreTransforme(d) || d.id === meta.devisId,

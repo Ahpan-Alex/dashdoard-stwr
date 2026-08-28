@@ -15,8 +15,10 @@ import { PageHeader } from "@/components/page-header";
 import {
   caFactures,
   creancesClientsFactures,
+  filterAcomptesByPos,
   totauxDevis,
 } from "@/lib/commercial";
+import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -76,16 +78,25 @@ export default function CommercialPage() {
     pointDeVenteActifId,
   } = useStore();
 
-  const devisOuverts = devis.filter((d) =>
+  const devisPdv = filterByPos(devis, pointDeVenteActifId);
+  const commandesPdv = filterByPos(commandes, pointDeVenteActifId);
+  const facturesPdv = filterByPos(factures, pointDeVenteActifId);
+  const acomptesPdv = filterAcomptesByPos(acomptes, pointDeVenteActifId, {
+    factures,
+    commandes,
+    devis,
+  });
+
+  const devisOuverts = devisPdv.filter((d) =>
     ["brouillon", "envoye"].includes(d.statut),
   );
   const montantDevis = devisOuverts.reduce(
     (s, d) => s + totauxDevis(d, parametres).totalTTC,
     0,
   );
-  const creances = creancesClientsFactures(factures, parametres, acomptes);
+  const creances = creancesClientsFactures(facturesPdv, parametres, acomptes);
   const caFac = caFactures(factures, pointDeVenteActifId, parametres);
-  const totalAcomptes = acomptes
+  const totalAcomptes = acomptesPdv
     .filter((a) => a.statut !== "annule")
     .reduce((s, a) => s + a.montantTTC, 0);
 
@@ -118,7 +129,7 @@ export default function CommercialPage() {
             Commandes / acomptes
           </p>
           <p className="mt-1 font-display text-2xl font-semibold">
-            {formatNumber(commandes.length, 0)} /{" "}
+            {formatNumber(commandesPdv.length, 0)} /{" "}
             {formatCurrency(totalAcomptes)}
           </p>
         </div>

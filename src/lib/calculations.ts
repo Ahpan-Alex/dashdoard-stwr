@@ -96,7 +96,7 @@ function inPeriod(dateIso: string, periode: Periode, reference = new Date()) {
   return inDateRange(dateIso, periodToRange(periode, reference));
 }
 
-function filterByPos<T extends { pointDeVenteId: string }>(
+export function filterByPos<T extends { pointDeVenteId: string }>(
   items: T[],
   pointDeVenteId: string | "tous",
 ) {
@@ -106,6 +106,14 @@ function filterByPos<T extends { pointDeVenteId: string }>(
       item.pointDeVenteId === pointDeVenteId ||
       item.pointDeVenteId === "tous",
   );
+}
+
+export function pointDeVenteSaisieDefaut(
+  pointsDeVente: { id: string }[],
+  actif: string | "tous",
+) {
+  if (actif !== "tous") return actif;
+  return pointsDeVente[0]?.id ?? "";
 }
 
 export function montantVente(v: Vente) {

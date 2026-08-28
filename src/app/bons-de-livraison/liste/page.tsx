@@ -32,6 +32,7 @@ import {
   totauxBonDeLivraison,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { filterByPos } from "@/lib/calculations";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -75,6 +76,7 @@ export default function ListeBonsDeLivraisonPage() {
     pointsDeVente,
     parametres,
     acomptes,
+    pointDeVenteActifId,
     factures,
     tarifsClients,
     categoriesProduits,
@@ -128,7 +130,7 @@ export default function ListeBonsDeLivraisonPage() {
   const preview = bonsDeLivraison.find((b) => b.id === previewId);
 
   const lignes = useMemo(() => {
-    return [...bonsDeLivraison]
+    return [...filterByPos(bonsDeLivraison, pointDeVenteActifId)]
       .sort((a, b) => b.date.localeCompare(a.date))
       .filter((bl) => (filtre === "tous" ? true : bl.statut === filtre))
       .map((bl) => ({
@@ -137,15 +139,23 @@ export default function ListeBonsDeLivraisonPage() {
         client: clients.find((x) => x.id === bl.clientId),
         cmd: commandes.find((c) => c.id === bl.commandeId),
       }));
-  }, [bonsDeLivraison, filtre, parametres, acomptes, clients, commandes]);
+  }, [
+    bonsDeLivraison,
+    filtre,
+    parametres,
+    acomptes,
+    clients,
+    commandes,
+    pointDeVenteActifId,
+  ]);
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const bl of bonsDeLivraison) {
+    for (const bl of filterByPos(bonsDeLivraison, pointDeVenteActifId)) {
       counts[bl.statut] = (counts[bl.statut] ?? 0) + 1;
     }
     return counts;
-  }, [bonsDeLivraison]);
+  }, [bonsDeLivraison, pointDeVenteActifId]);
 
   function ouvrirEdition(id: string) {
     const bl = useStore.getState().bonsDeLivraison.find((x) => x.id === id);

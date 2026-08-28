@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ACOMPTE_STATUTS, MODES_PAIEMENT, libelleClient } from "@/lib/commercial";
+import { ACOMPTE_STATUTS, MODES_PAIEMENT, filterAcomptesByPos, libelleClient } from "@/lib/commercial";
+import { filterByPos, pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { ModePaiement } from "@/lib/types";
@@ -34,6 +35,7 @@ export default function AcomptesPage() {
     commandes,
     factures,
     pointsDeVente,
+    pointDeVenteActifId,
     updateAcompte,
     deleteAcompte,
     encaisserAcompte,
@@ -59,11 +61,21 @@ export default function AcomptesPage() {
     note: "",
   });
 
+  const acomptesDuPos = useMemo(
+    () =>
+      filterAcomptesByPos(acomptes, pointDeVenteActifId, {
+        factures,
+        commandes,
+        devis,
+      }),
+    [acomptes, pointDeVenteActifId, factures, commandes, devis],
+  );
+
   const acomptesFiltres = useMemo(() => {
-    return [...acomptes]
+    return [...acomptesDuPos]
       .sort((a, b) => b.date.localeCompare(a.date))
       .filter((a) => (filtre === "tous" ? true : a.statut === filtre));
-  }, [acomptes, filtre]);
+  }, [acomptesDuPos, filtre]);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -71,11 +83,15 @@ export default function AcomptesPage() {
     if (!form.clientId || montantTTC <= 0) return;
 
     const cmd = commandes.find((c) => c.id === form.commandeId);
+    const d = devis.find((x) => x.id === form.devisId);
     const refDoc =
       cmd?.numero ||
-      devis.find((d) => d.id === form.devisId)?.numero ||
+      d?.numero ||
       "commande";
-    const pdvId = cmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "";
+    const pdvId =
+      cmd?.pointDeVenteId ??
+      d?.pointDeVenteId ??
+      pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId);
 
     const res = encaisserAcompte({
       clientId: form.clientId,
@@ -115,7 +131,7 @@ export default function AcomptesPage() {
         Total acomptes enregistrés :{" "}
         <strong>
           {formatCurrency(
-            acomptes
+            acomptesDuPos
               .filter((a) => a.statut !== "annule")
               .reduce((s, a) => s + a.montantTTC, 0),
           )}
@@ -195,7 +211,7 @@ export default function AcomptesPage() {
               onChange={(e) => setForm({ ...form, devisId: e.target.value })}
             >
               <option value="">—</option>
-              {devis.map((d) => (
+              {filterByPos(devis, pointDeVenteActifId).map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.numero}
                 </option>
@@ -218,7 +234,7 @@ export default function AcomptesPage() {
               }}
             >
               <option value="">—</option>
-              {commandes
+              {filterByPos(commandes, pointDeVenteActifId)
                 .filter((c) => c.statut !== "annulee")
                 .map((c) => (
                   <option key={c.id} value={c.id}>

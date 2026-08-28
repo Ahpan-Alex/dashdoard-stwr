@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import { PageHeader } from "@/components/page-header";
 import { FACTURE_STATUTS_MG } from "@/lib/facturation-mg";
@@ -21,7 +22,17 @@ const ACTIONS: Record<JournalAuditAction, string> = {
 };
 
 export default function JournalFacturationPage() {
-  const { journalAudit } = useStore();
+  const { journalAudit, factures, pointDeVenteActifId } = useStore();
+
+  const entrees = useMemo(() => {
+    if (pointDeVenteActifId === "tous") return journalAudit;
+    const ids = new Set(
+      factures
+        .filter((f) => f.pointDeVenteId === pointDeVenteActifId)
+        .map((f) => f.id),
+    );
+    return journalAudit.filter((e) => ids.has(e.entiteId));
+  }, [journalAudit, factures, pointDeVenteActifId]);
 
   return (
     <div>
@@ -42,14 +53,14 @@ export default function JournalFacturationPage() {
             </tr>
           </thead>
           <tbody>
-            {journalAudit.length === 0 ? (
+            {entrees.length === 0 ? (
               <tr>
                 <td colSpan={4} className="text-muted">
                   Aucune entrée pour le moment.
                 </td>
               </tr>
             ) : (
-              journalAudit.map((e) => (
+              entrees.map((e) => (
                 <tr key={e.id}>
                   <td>{formatDate(e.date)}</td>
                   <td>

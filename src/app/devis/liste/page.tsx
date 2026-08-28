@@ -34,6 +34,7 @@ import {
   totauxCommande,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import {
@@ -81,6 +82,7 @@ export default function ListeDevisPage() {
     entrees,
     ventes,
     acomptes,
+    pointDeVenteActifId,
     updateDevis,
     deleteDevis,
     addCommande,
@@ -129,7 +131,7 @@ export default function ListeDevisPage() {
   const preview = devis.find((d) => d.id === previewId);
 
   const lignes = useMemo(() => {
-    return [...devis]
+    return [...filterByPos(devis, pointDeVenteActifId)]
       .sort((a, b) => b.date.localeCompare(a.date))
       .filter((d) => {
         if (filtre === "tous") return true;
@@ -142,15 +144,15 @@ export default function ListeDevisPage() {
         client: clients.find((c) => c.id === d.clientId),
         pdv: pointsDeVente.find((p) => p.id === d.pointDeVenteId),
       }));
-  }, [devis, filtre, parametres, acomptes, clients, pointsDeVente]);
+  }, [devis, filtre, parametres, acomptes, clients, pointsDeVente, pointDeVenteActifId]);
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const d of devis) {
+    for (const d of filterByPos(devis, pointDeVenteActifId)) {
       counts[d.statut] = (counts[d.statut] ?? 0) + 1;
     }
     return counts;
-  }, [devis]);
+  }, [devis, pointDeVenteActifId]);
 
   function ouvrirEdition(id: string) {
     const d = useStore.getState().devis.find((x) => x.id === id);
@@ -332,7 +334,9 @@ export default function ListeDevisPage() {
             <p className="text-[11px] text-muted">{label}</p>
             <p className="font-display text-lg font-semibold">
               {id === "en_cours"
-                ? devis.filter((d) => devisEstEnCours(d.statut)).length
+                ? filterByPos(devis, pointDeVenteActifId).filter((d) =>
+                    devisEstEnCours(d.statut),
+                  ).length
                 : (resume[id] ?? 0)}
             </p>
           </div>

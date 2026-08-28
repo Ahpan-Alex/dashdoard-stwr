@@ -41,6 +41,8 @@ import {
 } from "@/lib/produits";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import {
+  filterByPos,
+  pointDeVenteSaisieDefaut,
   stockDisponible,
   stockRestantPourSaisie,
 } from "@/lib/calculations";
@@ -93,6 +95,7 @@ export default function FacturesPage() {
     addFacture,
     updateAcompte,
     encaisserAcompte,
+    pointDeVenteActifId,
   } = useStore();
 
   const avecTVA = appliqueTVA(parametres);
@@ -114,7 +117,7 @@ export default function FacturesPage() {
   const [rechercheProduit, setRechercheProduit] = useState("");
   const [form, setForm] = useState({
     clientId: clients[0]?.id ?? "",
-    pointDeVenteId: pointsDeVente[0]?.id ?? "",
+    pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
     commandeId: "",
     devisId: "",
     date: new Date().toISOString().slice(0, 10),
@@ -632,10 +635,10 @@ export default function FacturesPage() {
     enregistrerDocument("validee");
   }
 
-  const commandesClient = commandes.filter(
+  const commandesClient = filterByPos(commandes, pointDeVenteActifId).filter(
     (c) => c.clientId === form.clientId && c.statut !== "annulee",
   );
-  const devisClient = devis.filter(
+  const devisClient = filterByPos(devis, pointDeVenteActifId).filter(
     (d) => d.clientId === form.clientId && d.statut !== "refuse",
   );
 

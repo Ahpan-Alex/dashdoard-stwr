@@ -37,6 +37,7 @@ import {
   totauxCommande,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { filterByPos } from "@/lib/calculations";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -79,6 +80,7 @@ export default function ListeCommandesPage() {
     pointsDeVente,
     parametres,
     acomptes,
+    pointDeVenteActifId,
     updateCommande,
     deleteCommande,
     addBonDeLivraison,
@@ -139,7 +141,7 @@ export default function ListeCommandesPage() {
   const preview = commandes.find((c) => c.id === previewId);
 
   const lignes = useMemo(() => {
-    return [...commandes]
+    return [...filterByPos(commandes, pointDeVenteActifId)]
       .sort((a, b) => b.date.localeCompare(a.date))
       .filter((c) => (filtre === "tous" ? true : c.statut === filtre))
       .map((c) => ({
@@ -147,15 +149,15 @@ export default function ListeCommandesPage() {
         t: totauxCommande(c, parametres, acomptes),
         client: clients.find((x) => x.id === c.clientId),
       }));
-  }, [commandes, filtre, parametres, acomptes, clients]);
+  }, [commandes, filtre, parametres, acomptes, clients, pointDeVenteActifId]);
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const c of commandes) {
+    for (const c of filterByPos(commandes, pointDeVenteActifId)) {
       counts[c.statut] = (counts[c.statut] ?? 0) + 1;
     }
     return counts;
-  }, [commandes]);
+  }, [commandes, pointDeVenteActifId]);
 
   function ouvrirEdition(id: string) {
     const c = useStore.getState().commandes.find((x) => x.id === id);

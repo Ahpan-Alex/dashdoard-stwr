@@ -13,6 +13,7 @@ import {
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
 import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
+import { pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
 
@@ -29,12 +30,13 @@ export default function DevisPage() {
     ventes,
     addDevis,
     encaisserAcompte,
+    pointDeVenteActifId,
   } = useStore();
 
   const [open, setOpen] = useState(true);
   const [meta, setMeta] = useState({
     clientId: clients[0]?.id ?? "",
-    pointDeVenteId: pointsDeVente[0]?.id ?? "",
+    pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
     date: new Date().toISOString().slice(0, 10),
     validiteJours: "15",
   });
@@ -70,7 +72,7 @@ export default function DevisPage() {
   function ouvrirFormulaire() {
     setMeta({
       clientId: clients[0]?.id ?? "",
-      pointDeVenteId: pointsDeVente[0]?.id ?? "",
+      pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
       date: new Date().toISOString().slice(0, 10),
       validiteJours: "15",
     });

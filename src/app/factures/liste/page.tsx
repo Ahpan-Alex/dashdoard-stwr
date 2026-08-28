@@ -41,6 +41,7 @@ import {
   statutEffectifFacture,
 } from "@/lib/facturation-mg";
 import { presentationPourFacture } from "@/lib/document-presentation";
+import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
@@ -143,6 +144,7 @@ export default function ListeFacturesPage() {
     pointsDeVente,
     parametres,
     acomptes,
+    pointDeVenteActifId,
     commandes,
     devis,
     tarifsClients,
@@ -196,7 +198,7 @@ export default function ListeFacturesPage() {
     : 0;
 
   const lignes = useMemo(() => {
-    return [...factures]
+    return [...filterByPos(factures, pointDeVenteActifId)]
       .filter((f) => matchFiltreType(f.type, filtreType))
       .sort((a, b) => b.date.localeCompare(a.date))
       .map((f) => {
@@ -234,10 +236,12 @@ export default function ListeFacturesPage() {
         }
         return row.f.statut === filtre || row.statutAffiche === filtre;
       });
-  }, [factures, parametres, acomptes, filtre, filtreType]);
+  }, [factures, parametres, acomptes, filtre, filtreType, pointDeVenteActifId]);
 
   const resume = useMemo(() => {
-    const base = factures.filter((f) => f.type !== "avoir");
+    const base = filterByPos(factures, pointDeVenteActifId).filter(
+      (f) => f.type !== "avoir",
+    );
     let payees = 0;
     let partielles = 0;
     let impayees = 0;
@@ -257,7 +261,7 @@ export default function ListeFacturesPage() {
       else impayees += 1;
     }
     return { payees, partielles, impayees, annulees, creances, enRetard };
-  }, [factures, parametres, acomptes]);
+  }, [factures, parametres, acomptes, pointDeVenteActifId]);
 
   function ouvrirEdition(f: Facture) {
     if (factureEstFiscale(f)) return;
