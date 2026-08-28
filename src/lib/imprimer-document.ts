@@ -147,10 +147,13 @@ ${collectHeadHtml()}
   }
 }
 
-export function feuilleDepuisConteneur(root: ParentNode | null) {
+export function feuilleDepuisConteneur(
+  root: ParentNode | null,
+): HTMLElement | null {
   if (!root) return null;
   if (root instanceof HTMLElement && root.classList.contains("document-preview-sheet")) {
     return root;
   }
-  return root.querySelector(".document-preview-sheet");
+  const found = root.querySelector(".document-preview-sheet");
+  return found instanceof HTMLElement ? found : null;
 }
