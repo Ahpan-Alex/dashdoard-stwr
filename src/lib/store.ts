@@ -2457,7 +2457,7 @@ export const useStore = create<Store>()((set, get) => ({
         };
       },
 
-      applyBusinessData: (data) =>
+      applyBusinessData: (data) => {
         set((state) => {
           const modele = modelePourType(
             data.modelesDocuments,
