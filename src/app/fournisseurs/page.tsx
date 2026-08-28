@@ -119,7 +119,7 @@ export default function FournisseursPage() {
                   e.fournisseurId === f.id ||
                   e.fournisseur.toLowerCase() === f.nom.toLowerCase(),
               );
-              const achats = lignes.reduce(
+              const achatsCumules = lignes.reduce(
                 (s, e) => s + e.quantite * e.prixAchatUnitaire,
                 0,
               );
@@ -144,7 +144,7 @@ export default function FournisseursPage() {
                     )}
                   </td>
                   <td>{formatNumber(lignes.length, 0)}</td>
-                  <td className="font-semibold">{formatCurrency(achats)}</td>
+                  <td className="font-semibold">{formatCurrency(achatsCumules)}</td>
                   <td>
                     <button
                       className={`badge ${f.actif ? "badge-success" : "badge-sand"}`}
