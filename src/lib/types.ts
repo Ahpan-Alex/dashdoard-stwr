@@ -1,3 +1,5 @@
+import type { PreferencesAffichage } from "./affichage-tableaux";
+import type { AlertesSuivi, ParametresAlertes } from "./alertes";
 import type { ModeleDocument, PreferencesModeles } from "./document-templates";
 
 export type PointDeVente = {
@@ -45,6 +47,14 @@ export type Produit = {
   /** Taux TVA applicable au produit (0 = exonéré / export) */
   tauxTVA: number;
   actif: boolean;
+  /** Seuil de réapprovisionnement (unité produit) — alerte stock, par produit. */
+  seuilReappro?: number;
+  /** Seuil de rupture imminente / effective (0 = rupture dès stock à 0). */
+  seuilRupture?: number;
+  /** Seuil de surstockage (unité produit). */
+  seuilSurstock?: number;
+  /** Si vrai, les lots d'entrée peuvent porter une date de péremption. */
+  gerePeremption?: boolean;
 };
 
 export type TarifClient = {
@@ -92,6 +102,8 @@ export type EntreeStock = {
   achatId?: string;
   livraisonId?: string;
   avoirAchatId?: string;
+  /** Date limite de consommation du lot (si le produit gère la péremption). */
+  datePeremption?: string;
 };
 
 export type MouvementStock = {
@@ -334,6 +346,8 @@ export type LivraisonAchat = {
   statut: LivraisonAchatStatut;
   lignes: LivraisonAchatLigne[];
   note?: string;
+  /** DLC appliquée aux lots générés par cette réception. */
+  datePeremption?: string;
 };
 
 export type PaiementFournisseur = {
@@ -788,6 +802,12 @@ export type AppState = {
   modelesDocuments: ModeleDocument[];
   /** Préférences de modèle par utilisateur (personnalisation individuelle). */
   preferencesModeles: PreferencesModeles;
+  /** Types d'affichage de colonnes par utilisateur et par tableau. */
+  preferencesAffichage: PreferencesAffichage;
+  /** Configuration des alertes (globale entreprise / tenant). */
+  parametresAlertes: ParametresAlertes;
+  /** Suivi lu / traité des alertes, par utilisateur. */
+  alertesSuivi: AlertesSuivi;
   bilanInitial: BilanInitial;
   immobilisations: Immobilisation[];
   mouvementsCompteCourant: MouvementCompteCourant[];

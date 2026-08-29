@@ -11,6 +11,8 @@ import {
 } from "@/components/client-fiche-form";
 import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import {
   CLIENT_TYPES,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { Client } from "@/lib/types";
 
 export default function ClientsPage() {
@@ -39,6 +42,7 @@ export default function ClientsPage() {
     updateClient,
     deleteClient,
   } = useStore();
+  const { visible } = useAffichageTable("clients");
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [apercuId, setApercuId] = useState<string | null>(null);
@@ -133,18 +137,46 @@ export default function ClientsPage() {
         />
       )}
 
+      <TableAffichageBarre
+        tableId="clients"
+        lignes={clients.map((c) => {
+          const ca = factures
+            .filter(
+              (f) =>
+                f.clientId === c.id &&
+                f.statut !== "annulee" &&
+                f.statut !== "brouillon",
+            )
+            .reduce((s, f) => s + totalFacture(f), 0);
+          return {
+            code: c.code ?? "",
+            nom: c.nom,
+            type: CLIENT_TYPES[c.type] ?? c.type,
+            contact: [c.telephone, c.email].filter(Boolean).join(" · "),
+            ca: formatCurrency(ca),
+            acomptes: formatCurrency(totalAcomptesClient(c.id, acomptes)),
+            reste: formatCurrency(
+              creancesDunClient(c.id, factures, parametres, acomptes),
+            ),
+            statut: c.actif ? "Actif" : "Inactif",
+          };
+        })}
+        fichier="clients"
+        titre="Clients"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Code</th>
-              <th>Client</th>
-              <th>Type</th>
-              <th>Contact</th>
-              <th>CA facturé</th>
-              <th>Acomptes</th>
-              <th>Reste dû</th>
-              <th>Statut</th>
+              <ThCol id="code" show={visible}>Code</ThCol>
+              <ThCol id="nom" show={visible}>Client</ThCol>
+              <ThCol id="type" show={visible}>Type</ThCol>
+              <ThCol id="contact" show={visible}>Contact</ThCol>
+              <ThCol id="ca" show={visible}>CA facturé</ThCol>
+              <ThCol id="acomptes" show={visible}>Acomptes</ThCol>
+              <ThCol id="reste" show={visible}>Reste dû</ThCol>
+              <ThCol id="statut" show={visible}>Statut</ThCol>
               <th>Actions</th>
             </tr>
           </thead>
@@ -166,9 +198,9 @@ export default function ClientsPage() {
                 parametres,
                 acomptes,
               );
-              return (
+                return (
                 <tr key={c.id}>
-                  <td>
+                  <TdCol id="code" show={visible}>
                     {c.code ? (
                       <span className="badge badge-sand font-mono">
                         {c.code}
@@ -176,8 +208,8 @@ export default function ClientsPage() {
                     ) : (
                       <span className="text-muted">—</span>
                     )}
-                  </td>
-                  <td className="font-medium">
+                  </TdCol>
+                  <TdCol id="nom" show={visible} className="font-medium">
                     <Link
                       href={`/clients/${c.id}`}
                       className="text-sea-700 hover:underline"
@@ -189,37 +221,39 @@ export default function ClientsPage() {
                         {c.ville}
                       </span>
                     )}
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="type" show={visible}>
                     <span className="badge badge-sea">
                       {CLIENT_TYPES[c.type]}
                     </span>
-                  </td>
-                  <td className="text-sm">
+                  </TdCol>
+                  <TdCol id="contact" show={visible} className="text-sm">
                     {c.telephone || "—"}
                     {c.email && (
                       <span className="mt-0.5 block text-xs text-muted">
                         {c.email}
                       </span>
                     )}
-                  </td>
-                  <td className="font-semibold">{formatCurrency(ca)}</td>
-                  <td>{formatCurrency(acomptesClient)}</td>
-                  <td
+                  </TdCol>
+                  <TdCol id="ca" show={visible} className="font-semibold">{formatCurrency(ca)}</TdCol>
+                  <TdCol id="acomptes" show={visible}>{formatCurrency(acomptesClient)}</TdCol>
+                  <TdCol
+                    id="reste"
+                    show={visible}
                     className={
                       resteDu > 0 ? "font-semibold text-coral" : "font-semibold"
                     }
                   >
                     {formatCurrency(resteDu)}
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="statut" show={visible}>
                     <button
                       className={`badge ${c.actif ? "badge-success" : "badge-sand"}`}
                       onClick={() => updateClient(c.id, { actif: !c.actif })}
                     >
                       {c.actif ? "Actif" : "Inactif"}
                     </button>
-                  </td>
+                  </TdCol>
                   <td>
                     <RowCrudActions
                       onView={() => {

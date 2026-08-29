@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import { caParProduit, type Periode } from "@/lib/calculations";
 import {
@@ -20,6 +22,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 
 const periodes: { id: Periode; label: string }[] = [
   { id: "semaine", label: "Hebdomadaire" },
@@ -29,6 +32,7 @@ const periodes: { id: Periode; label: string }[] = [
 
 export default function CaProduitsPage() {
   const { ventes, produits, pointDeVenteActifId } = useStore();
+  const { visible, colSpan } = useAffichageTable("ca_produits");
   const [periode, setPeriode] = useState<Periode>("mois");
 
   const parProduit = useMemo(
@@ -121,34 +125,46 @@ export default function CaProduitsPage() {
         </div>
       </div>
 
+      <TableAffichageBarre
+        tableId="ca_produits"
+        lignes={parProduit.map((ligne) => ({
+          produit: ligne.nom,
+          quantite: `${formatNumber(ligne.quantite)} ${ligne.unite}`,
+          ca: formatCurrency(ligne.montant),
+          part: total > 0 ? formatPercent(ligne.montant / total) : "—",
+        }))}
+        fichier="ca-produits"
+        titre="CA produits"
+      />
+
       <div className="mt-6 table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Produit</th>
-              <th>Quantité vendue</th>
-              <th>Chiffre d&apos;affaires</th>
-              <th>Part</th>
+              <ThCol id="produit" show={visible}>Produit</ThCol>
+              <ThCol id="quantite" show={visible}>Quantité vendue</ThCol>
+              <ThCol id="ca" show={visible}>Chiffre d&apos;affaires</ThCol>
+              <ThCol id="part" show={visible}>Part</ThCol>
             </tr>
           </thead>
           <tbody>
             {parProduit.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-muted">
+                <td colSpan={colSpan(false)} className="text-muted">
                   Aucune vente sur cette période.
                 </td>
               </tr>
             ) : (
               parProduit.map((ligne) => (
                 <tr key={ligne.id}>
-                  <td className="font-medium">{ligne.nom}</td>
-                  <td>
+                  <TdCol id="produit" show={visible} className="font-medium">{ligne.nom}</TdCol>
+                  <TdCol id="quantite" show={visible}>
                     {formatNumber(ligne.quantite)} {ligne.unite}
-                  </td>
-                  <td className="font-semibold">
+                  </TdCol>
+                  <TdCol id="ca" show={visible} className="font-semibold">
                     {formatCurrency(ligne.montant)}
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="part" show={visible}>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-20 overflow-hidden rounded-full bg-sea-100">
                         <div
@@ -166,7 +182,7 @@ export default function CaProduitsPage() {
                           : "—"}
                       </span>
                     </div>
-                  </td>
+                  </TdCol>
                 </tr>
               ))
             )}

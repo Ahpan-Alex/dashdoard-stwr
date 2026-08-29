@@ -1,3 +1,7 @@
+import {
+  normaliserParametresAlertes,
+  PARAMETRES_ALERTES_DEFAUT,
+} from "./alertes";
 import { createDefaultModeles } from "./document-templates";
 import { seedCategoriesProduits } from "./produits";
 import type { AppState } from "./types";
@@ -31,6 +35,9 @@ export function emptyAppState(): AppState {
     identiteNavigation: { nom: "" },
     modelesDocuments: createDefaultModeles(),
     preferencesModeles: {},
+    preferencesAffichage: {},
+    parametresAlertes: { ...PARAMETRES_ALERTES_DEFAUT },
+    alertesSuivi: {},
     bilanInitial: {
       date: new Date().toISOString(),
       immobilisations: 0,
@@ -76,6 +83,9 @@ export function pickAppState(state: AppState): AppState {
     identiteNavigation: state.identiteNavigation ?? { nom: "" },
     modelesDocuments: state.modelesDocuments,
     preferencesModeles: state.preferencesModeles ?? {},
+    preferencesAffichage: state.preferencesAffichage ?? {},
+    parametresAlertes: normaliserParametresAlertes(state.parametresAlertes),
+    alertesSuivi: state.alertesSuivi ?? {},
     bilanInitial: state.bilanInitial,
     immobilisations: state.immobilisations,
     mouvementsCompteCourant: state.mouvementsCompteCourant ?? [],

@@ -23,6 +23,8 @@ import { DocumentFiliation } from "@/components/document-filiation";
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import {
   DEVIS_STATUTS,
   appliqueTVA,
@@ -37,6 +39,7 @@ import {
 import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import {
   clonerLignesDocument,
   devisEstEnCours,
@@ -124,6 +127,7 @@ export default function ListeDevisPage() {
     libererVerrousExpires();
   }, [libererVerrousExpires]);
 
+  const { visible, colSpan } = useAffichageTable("devis");
   const modele = useModelePourType("devis");
   const modeleCommande = useModelePourType("commande");
   const assujettiTVA = appliqueTVA(parametres);
@@ -145,6 +149,20 @@ export default function ListeDevisPage() {
         pdv: pointsDeVente.find((p) => p.id === d.pointDeVenteId),
       }));
   }, [devis, filtre, parametres, acomptes, clients, pointsDeVente, pointDeVenteActifId]);
+
+  const lignesExport = useMemo(
+    () =>
+      lignes.map(({ d, t, client, pdv }) => ({
+        numero: d.numero,
+        date: formatDate(d.date),
+        client: client?.nom ?? "",
+        pdv: pdv?.nom ?? "",
+        montant: formatCurrency(t.totalTTC),
+        acomptes: formatCurrency(t.acomptesTTC),
+        statut: DEVIS_STATUTS[d.statut] ?? d.statut,
+      })),
+    [lignes],
+  );
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -496,39 +514,46 @@ export default function ListeDevisPage() {
         </div>
       )}
 
+      <TableAffichageBarre
+        tableId="devis"
+        lignes={lignesExport}
+        fichier="devis"
+        titre="Liste des devis"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>PDV</th>
-              <th>Montant</th>
-              <th>Acomptes</th>
-              <th>Statut</th>
+              <ThCol id="numero" show={visible}>N°</ThCol>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="client" show={visible}>Client</ThCol>
+              <ThCol id="pdv" show={visible}>PDV</ThCol>
+              <ThCol id="montant" show={visible}>Montant</ThCol>
+              <ThCol id="acomptes" show={visible}>Acomptes</ThCol>
+              <ThCol id="statut" show={visible}>Statut</ThCol>
               <th />
             </tr>
           </thead>
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={colSpan()} className="text-muted">
                   Aucun devis pour ce filtre.
                 </td>
               </tr>
             ) : (
               lignes.map(({ d, t, client, pdv }) => (
                 <tr key={d.id}>
-                  <td className="font-medium">{d.numero}</td>
-                  <td>{formatDate(d.date)}</td>
-                  <td>{client?.nom ?? "—"}</td>
-                  <td>{pdv?.nom ?? "—"}</td>
-                  <td className="font-semibold">
+                  <TdCol id="numero" show={visible} className="font-medium">{d.numero}</TdCol>
+                  <TdCol id="date" show={visible}>{formatDate(d.date)}</TdCol>
+                  <TdCol id="client" show={visible}>{client?.nom ?? "—"}</TdCol>
+                  <TdCol id="pdv" show={visible}>{pdv?.nom ?? "—"}</TdCol>
+                  <TdCol id="montant" show={visible} className="font-semibold">
                     {formatCurrency(t.totalTTC)}
-                  </td>
-                  <td>{formatCurrency(t.acomptesTTC)}</td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="acomptes" show={visible}>{formatCurrency(t.acomptesTTC)}</TdCol>
+                  <TdCol id="statut" show={visible}>
                     <select
                       className="select max-w-[160px]"
                       value={d.statut}
@@ -545,7 +570,7 @@ export default function ListeDevisPage() {
                         </option>
                       ))}
                     </select>
-                  </td>
+                  </TdCol>
                   <td>
                     <div className="flex flex-wrap gap-1">
                       <IconButton

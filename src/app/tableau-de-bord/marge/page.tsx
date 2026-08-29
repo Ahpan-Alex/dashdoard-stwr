@@ -23,6 +23,8 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import {
   beneficesSerieTemporelle,
@@ -36,6 +38,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 
 type Preset = "jour" | "mois" | "annee" | "personnalise";
 
@@ -52,6 +55,7 @@ export default function MargePage() {
     pointDeVenteActifId,
     inventaires,
   } = useStore();
+  const { visible, colSpan } = useAffichageTable("marge_produits");
 
   const moisEnCours = {
     debut: startOfMonth(new Date()),
@@ -345,22 +349,39 @@ export default function MargePage() {
         </div>
       </div>
 
+      <TableAffichageBarre
+        tableId="marge_produits"
+        lignes={synthese.lignes.map((ligne) => ({
+          produit: ligne.nom,
+          quantite: `${formatNumber(ligne.quantite)} ${ligne.unite}`,
+          ca: formatCurrency(ligne.ca),
+          cout: formatCurrency(ligne.coutAchat),
+          benefice: formatCurrency(ligne.benefice),
+          part:
+            synthese.benefice > 0
+              ? formatPercent(ligne.benefice / synthese.benefice)
+              : "—",
+        }))}
+        fichier="marge-produits"
+        titre="Marge produits"
+      />
+
       <div className="mt-6 table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Produit</th>
-              <th>Quantité</th>
-              <th>CA</th>
-              <th>Coût d&apos;achat</th>
-              <th>Bénéfice</th>
-              <th>Part du bénéfice</th>
+              <ThCol id="produit" show={visible}>Produit</ThCol>
+              <ThCol id="quantite" show={visible}>Quantité</ThCol>
+              <ThCol id="ca" show={visible}>CA</ThCol>
+              <ThCol id="cout" show={visible}>Coût d&apos;achat</ThCol>
+              <ThCol id="benefice" show={visible}>Bénéfice</ThCol>
+              <ThCol id="part" show={visible}>Part du bénéfice</ThCol>
             </tr>
           </thead>
           <tbody>
             {synthese.lignes.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-muted">
+                <td colSpan={colSpan(false)} className="text-muted">
                   Aucune vente sur cette période.
                 </td>
               </tr>
@@ -368,13 +389,15 @@ export default function MargePage() {
               <>
                 {synthese.lignes.map((ligne) => (
                   <tr key={ligne.id}>
-                    <td className="font-medium">{ligne.nom}</td>
-                    <td>
+                    <TdCol id="produit" show={visible} className="font-medium">{ligne.nom}</TdCol>
+                    <TdCol id="quantite" show={visible}>
                       {formatNumber(ligne.quantite)} {ligne.unite}
-                    </td>
-                    <td>{formatCurrency(ligne.ca)}</td>
-                    <td>{formatCurrency(ligne.coutAchat)}</td>
-                    <td
+                    </TdCol>
+                    <TdCol id="ca" show={visible}>{formatCurrency(ligne.ca)}</TdCol>
+                    <TdCol id="cout" show={visible}>{formatCurrency(ligne.coutAchat)}</TdCol>
+                    <TdCol
+                      id="benefice"
+                      show={visible}
                       className={
                         ligne.benefice >= 0
                           ? "font-semibold text-success"
@@ -382,8 +405,8 @@ export default function MargePage() {
                       }
                     >
                       {formatCurrency(ligne.benefice)}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="part" show={visible}>
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-sea-100">
                           <div
@@ -410,24 +433,26 @@ export default function MargePage() {
                             : "—"}
                         </span>
                       </div>
-                    </td>
+                    </TdCol>
                   </tr>
                 ))}
                 <tr className="bg-sea-50/60 font-semibold">
-                  <td>Total</td>
-                  <td>—</td>
-                  <td>{formatCurrency(synthese.ca)}</td>
-                  <td>{formatCurrency(synthese.coutAchat)}</td>
-                  <td
+                  <TdCol id="produit" show={visible}>Total</TdCol>
+                  <TdCol id="quantite" show={visible}>—</TdCol>
+                  <TdCol id="ca" show={visible}>{formatCurrency(synthese.ca)}</TdCol>
+                  <TdCol id="cout" show={visible}>{formatCurrency(synthese.coutAchat)}</TdCol>
+                  <TdCol
+                    id="benefice"
+                    show={visible}
                     className={
                       synthese.benefice >= 0 ? "text-success" : "text-danger"
                     }
                   >
                     {formatCurrency(synthese.benefice)}
-                  </td>
-                  <td className="text-xs font-normal text-muted">
+                  </TdCol>
+                  <TdCol id="part" show={visible} className="text-xs font-normal text-muted">
                     Net : {formatCurrency(synthese.beneficeNet)}
-                  </td>
+                  </TdCol>
                 </tr>
               </>
             )}

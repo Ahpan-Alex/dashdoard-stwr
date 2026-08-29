@@ -22,6 +22,8 @@ import {
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import {
   BL_STATUTS,
   appliqueTVA,
@@ -36,6 +38,7 @@ import { filterByPos } from "@/lib/calculations";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import {
   avancementLivraisonCommande,
   clonerLignesDocument,
@@ -123,6 +126,7 @@ export default function ListeBonsDeLivraisonPage() {
     libererVerrousExpires();
   }, [libererVerrousExpires]);
 
+  const { visible, colSpan } = useAffichageTable("bons_de_livraison");
   const modele = useModelePourType("bon_de_livraison");
   const modeleFacture = useModelePourType("facture");
   const assujettiTVA = appliqueTVA(parametres);
@@ -148,6 +152,20 @@ export default function ListeBonsDeLivraisonPage() {
     commandes,
     pointDeVenteActifId,
   ]);
+
+  const lignesExport = useMemo(
+    () =>
+      lignes.map(({ bl, t, client, cmd }) => ({
+        numero: bl.numero,
+        date: formatDate(bl.date),
+        client: client?.nom ?? "",
+        commande: cmd?.numero ?? "",
+        totalTTC: formatCurrency(t.totalTTC),
+        avancement: "",
+        statut: BL_STATUTS[bl.statut] ?? bl.statut,
+      })),
+    [lignes],
+  );
 
   const resume = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -482,48 +500,55 @@ export default function ListeBonsDeLivraisonPage() {
         </div>
       )}
 
+      <TableAffichageBarre
+        tableId="bons_de_livraison"
+        lignes={lignesExport}
+        fichier="bons-de-livraison"
+        titre="Liste des bons de livraison"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>Commande</th>
-              <th>Total TTC</th>
-              <th>Avancement</th>
-              <th>Statut</th>
+              <ThCol id="numero" show={visible}>N°</ThCol>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="client" show={visible}>Client</ThCol>
+              <ThCol id="commande" show={visible}>Commande</ThCol>
+              <ThCol id="totalTTC" show={visible}>Total TTC</ThCol>
+              <ThCol id="avancement" show={visible}>Avancement</ThCol>
+              <ThCol id="statut" show={visible}>Statut</ThCol>
               <th />
             </tr>
           </thead>
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={colSpan()} className="text-muted">
                   Aucun BL pour ce filtre.
                 </td>
               </tr>
             ) : (
               lignes.map(({ bl, t, client, cmd }) => (
                 <tr key={bl.id}>
-                  <td className="font-medium">{bl.numero}</td>
-                  <td>
+                  <TdCol id="numero" show={visible} className="font-medium">{bl.numero}</TdCol>
+                  <TdCol id="date" show={visible}>
                     {formatDate(bl.date)}
                     {bl.dateLivraison && (
                       <span className="mt-0.5 block text-xs text-muted">
                         Livr. {formatDate(bl.dateLivraison)}
                       </span>
                     )}
-                  </td>
-                  <td>{client?.nom ?? "—"}</td>
-                  <td>{cmd?.numero ?? "—"}</td>
-                  <td className="font-semibold">
+                  </TdCol>
+                  <TdCol id="client" show={visible}>{client?.nom ?? "—"}</TdCol>
+                  <TdCol id="commande" show={visible}>{cmd?.numero ?? "—"}</TdCol>
+                  <TdCol id="totalTTC" show={visible} className="font-semibold">
                     {formatCurrency(t.totalTTC)}
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="avancement" show={visible}>
                     <BadgeAvancementBl bl={bl} />
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="statut" show={visible}>
                     <select
                       className="select max-w-[140px]"
                       value={bl.statut}
@@ -540,7 +565,7 @@ export default function ListeBonsDeLivraisonPage() {
                         </option>
                       ))}
                     </select>
-                  </td>
+                  </TdCol>
                   <td>
                     <div className="flex flex-wrap gap-1">
                       <IconButton

@@ -64,6 +64,7 @@ export default function StockInitialPage() {
   const firstProduit = produits[0];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
+  const [form, setForm] = useState({
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
     produitId: firstProduit?.id ?? "",
     quantite: "",
@@ -71,6 +72,7 @@ export default function StockInitialPage() {
     prixVenteUnitaire: firstProduit ? String(firstProduit.prixVenteHT) : "",
     date: `${new Date().getFullYear()}-01-01`,
     note: "",
+    datePeremption: "",
   });
 
   function selectPdv(id: string) {
@@ -92,6 +94,7 @@ export default function StockInitialPage() {
       produitId,
       prixAchatUnitaire: p ? String(p.prixAchat) : f.prixAchatUnitaire,
       prixVenteUnitaire: p ? String(p.prixVenteHT) : f.prixVenteUnitaire,
+      datePeremption: p?.gerePeremption ? f.datePeremption : "",
     }));
   }
 
@@ -110,6 +113,10 @@ export default function StockInitialPage() {
       return;
     }
 
+    const produitGerePeremption = produits.find(
+      (p) => p.id === form.produitId,
+    )?.gerePeremption;
+
     addEntree({
       pointDeVenteId: form.pointDeVenteId,
       produitId: form.produitId,
@@ -120,6 +127,9 @@ export default function StockInitialPage() {
       date: new Date(form.date).toISOString(),
       note: form.note.trim() || "Ouverture d'inventaire",
       origine: "stock_initial",
+      datePeremption: produitGerePeremption && form.datePeremption
+        ? new Date(form.datePeremption).toISOString()
+        : undefined,
     });
 
     const nouvelleValeur = valeurTotale + quantite * prixAchat;
@@ -130,6 +140,7 @@ export default function StockInitialPage() {
       ...f,
       quantite: "",
       note: "",
+      datePeremption: "",
     }));
     setOpen(false);
   }
@@ -319,6 +330,19 @@ export default function StockInitialPage() {
                 required
               />
             </label>
+            {produits.find((p) => p.id === form.produitId)?.gerePeremption && (
+              <label className="block text-xs font-semibold text-muted">
+                Date de péremption (DLC)
+                <input
+                  type="date"
+                  className="input mt-1"
+                  value={form.datePeremption}
+                  onChange={(e) =>
+                    setForm({ ...form, datePeremption: e.target.value })
+                  }
+                />
+              </label>
+            )}
             <label className="block text-xs font-semibold text-muted">
               Quantité
               <input

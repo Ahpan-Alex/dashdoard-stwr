@@ -14,6 +14,8 @@ import {
   YAxis,
 } from "recharts";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import { chiffreAffaires } from "@/lib/calculations";
 import {
@@ -22,6 +24,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 
 type Horizon = "mois" | "annee";
 
@@ -30,6 +33,7 @@ export default function CaObjectifsPage() {
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const [horizon, setHorizon] = useState<Horizon>("mois");
+  const { visible, colSpan } = useAffichageTable("ca_objectifs");
 
   const pdvVisibles = useMemo(
     () =>
@@ -176,36 +180,51 @@ export default function CaObjectifsPage() {
         </div>
       </div>
 
+      <TableAffichageBarre
+        tableId="ca_objectifs"
+        lignes={lignes.map((l) => ({
+          pdv: l.nom,
+          realise: formatCurrency(l.realise),
+          objectif: formatCurrency(l.objectif),
+          ecart: formatCurrency(l.ecart),
+          atteinte: l.objectif > 0 ? formatPercent(l.taux) : "—",
+        }))}
+        fichier="ca-objectifs"
+        titre="CA objectif par point de vente"
+      />
+
       <div className="mt-6 table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Point de vente</th>
-              <th>CA réalisé</th>
-              <th>Objectif {horizonLabel}</th>
-              <th>Écart</th>
-              <th>Atteinte</th>
+              <ThCol id="pdv" show={visible}>Point de vente</ThCol>
+              <ThCol id="realise" show={visible}>CA réalisé</ThCol>
+              <ThCol id="objectif" show={visible}>Objectif {horizonLabel}</ThCol>
+              <ThCol id="ecart" show={visible}>Écart</ThCol>
+              <ThCol id="atteinte" show={visible}>Atteinte</ThCol>
             </tr>
           </thead>
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-muted">
+                <td colSpan={colSpan(false)} className="text-muted">
                   Aucun point de vente pour ce filtre.
                 </td>
               </tr>
             ) : (
               lignes.map((l) => (
               <tr key={l.id}>
-                <td className="font-medium">
+                <TdCol id="pdv" show={visible} className="font-medium">
                   {l.nom}
                   {!l.actif && (
                     <span className="ml-2 badge badge-sand">Inactif</span>
                   )}
-                </td>
-                <td className="font-semibold">{formatCurrency(l.realise)}</td>
-                <td>{formatCurrency(l.objectif)}</td>
-                <td
+                </TdCol>
+                <TdCol id="realise" show={visible} className="font-semibold">{formatCurrency(l.realise)}</TdCol>
+                <TdCol id="objectif" show={visible}>{formatCurrency(l.objectif)}</TdCol>
+                <TdCol
+                  id="ecart"
+                  show={visible}
                   className={
                     l.ecart >= 0
                       ? "font-semibold text-success"
@@ -214,8 +233,8 @@ export default function CaObjectifsPage() {
                 >
                   {l.ecart >= 0 ? "+" : ""}
                   {formatCurrency(l.ecart)}
-                </td>
-                <td>
+                </TdCol>
+                <TdCol id="atteinte" show={visible}>
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-24 overflow-hidden rounded-full bg-sea-100">
                       <div
@@ -231,7 +250,7 @@ export default function CaObjectifsPage() {
                       {l.objectif > 0 ? formatPercent(l.taux) : "—"}
                     </span>
                   </div>
-                </td>
+                </TdCol>
               </tr>
               ))
             )}

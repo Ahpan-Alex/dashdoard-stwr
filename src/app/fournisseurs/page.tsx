@@ -10,10 +10,13 @@ import {
 } from "@/components/fournisseur-fiche-form";
 import { FicheApercuModal, LigneInfo } from "@/components/fiche-apercu-modal";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import { motifLienFournisseur } from "@/lib/commercial";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { Fournisseur } from "@/lib/types";
 
 export default function FournisseursPage() {
@@ -25,6 +28,7 @@ export default function FournisseursPage() {
     updateFournisseur,
     deleteFournisseur,
   } = useStore();
+  const { visible } = useAffichageTable("fournisseurs");
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [apercuId, setApercuId] = useState<string | null>(null);
@@ -99,16 +103,41 @@ export default function FournisseursPage() {
         />
       )}
 
+      <TableAffichageBarre
+        tableId="fournisseurs"
+        lignes={fournisseurs.map((f) => {
+          const lignes = entrees.filter(
+            (e) =>
+              e.fournisseurId === f.id ||
+              e.fournisseur.toLowerCase() === f.nom.toLowerCase(),
+          );
+          const achatsCumules = lignes.reduce(
+            (s, e) => s + e.quantite * e.prixAchatUnitaire,
+            0,
+          );
+          return {
+            nom: f.nom,
+            specialite: f.specialite || "",
+            contact: [f.telephone, f.email].filter(Boolean).join(" · "),
+            entrees: String(lignes.length),
+            achats: formatCurrency(achatsCumules),
+            statut: f.actif ? "Actif" : "Inactif",
+          };
+        })}
+        fichier="fournisseurs"
+        titre="Fournisseurs"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Fournisseur</th>
-              <th>Spécialité</th>
-              <th>Contact</th>
-              <th>Entrées</th>
-              <th>Achats cumulés</th>
-              <th>Statut</th>
+              <ThCol id="nom" show={visible}>Fournisseur</ThCol>
+              <ThCol id="specialite" show={visible}>Spécialité</ThCol>
+              <ThCol id="contact" show={visible}>Contact</ThCol>
+              <ThCol id="entrees" show={visible}>Entrées</ThCol>
+              <ThCol id="achats" show={visible}>Achats cumulés</ThCol>
+              <ThCol id="statut" show={visible}>Statut</ThCol>
               <th>Actions</th>
             </tr>
           </thead>
@@ -126,26 +155,26 @@ export default function FournisseursPage() {
               const motif = motifLienFournisseur(f.id, f.nom, entrees, achats);
               return (
                 <tr key={f.id}>
-                  <td className="font-medium">
+                  <TdCol id="nom" show={visible} className="font-medium">
                     {f.nom}
                     {f.ville && (
                       <span className="mt-0.5 block text-xs font-normal text-muted">
                         {f.ville}
                       </span>
                     )}
-                  </td>
-                  <td>{f.specialite || "—"}</td>
-                  <td className="text-sm">
+                  </TdCol>
+                  <TdCol id="specialite" show={visible}>{f.specialite || "—"}</TdCol>
+                  <TdCol id="contact" show={visible} className="text-sm">
                     {f.telephone || "—"}
                     {f.email && (
                       <span className="mt-0.5 block text-xs text-muted">
                         {f.email}
                       </span>
                     )}
-                  </td>
-                  <td>{formatNumber(lignes.length, 0)}</td>
-                  <td className="font-semibold">{formatCurrency(achatsCumules)}</td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="entrees" show={visible}>{formatNumber(lignes.length, 0)}</TdCol>
+                  <TdCol id="achats" show={visible} className="font-semibold">{formatCurrency(achatsCumules)}</TdCol>
+                  <TdCol id="statut" show={visible}>
                     <button
                       className={`badge ${f.actif ? "badge-success" : "badge-sand"}`}
                       onClick={() =>
@@ -154,7 +183,7 @@ export default function FournisseursPage() {
                     >
                       {f.actif ? "Actif" : "Inactif"}
                     </button>
-                  </td>
+                  </TdCol>
                   <td>
                     <RowCrudActions
                       onView={() => {

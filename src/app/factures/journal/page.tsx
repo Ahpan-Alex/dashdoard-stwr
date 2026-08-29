@@ -3,9 +3,12 @@
 import { useMemo } from "react";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { FACTURE_STATUTS_MG } from "@/lib/facturation-mg";
 import { formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { JournalAuditAction } from "@/lib/types";
 
 const ACTIONS: Record<JournalAuditAction, string> = {
@@ -23,6 +26,7 @@ const ACTIONS: Record<JournalAuditAction, string> = {
 
 export default function JournalFacturationPage() {
   const { journalAudit, factures, pointDeVenteActifId } = useStore();
+  const { visible, colSpan } = useAffichageTable("journal_factures");
 
   const entrees = useMemo(() => {
     if (pointDeVenteActifId === "tous") return journalAudit;
@@ -42,34 +46,46 @@ export default function JournalFacturationPage() {
       />
       <FacturesSubnav />
 
+      <TableAffichageBarre
+        tableId="journal_factures"
+        lignes={entrees.map((e) => ({
+          date: formatDate(e.date),
+          action: ACTIONS[e.action] ?? e.action,
+          numero: e.numero ?? "",
+          detail: e.detail ?? "",
+        }))}
+        fichier="journal-facturation"
+        titre="Journal d'audit facturation"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Action</th>
-              <th>N°</th>
-              <th>Détail</th>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="action" show={visible}>Action</ThCol>
+              <ThCol id="numero" show={visible}>N°</ThCol>
+              <ThCol id="detail" show={visible}>Détail</ThCol>
             </tr>
           </thead>
           <tbody>
             {entrees.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-muted">
+                <td colSpan={colSpan(false)} className="text-muted">
                   Aucune entrée pour le moment.
                 </td>
               </tr>
             ) : (
               entrees.map((e) => (
                 <tr key={e.id}>
-                  <td>{formatDate(e.date)}</td>
-                  <td>
+                  <TdCol id="date" show={visible}>{formatDate(e.date)}</TdCol>
+                  <TdCol id="action" show={visible}>
                     <span className="badge badge-sea">
                       {ACTIONS[e.action] ?? e.action}
                     </span>
-                  </td>
-                  <td className="font-medium">{e.numero ?? "—"}</td>
-                  <td className="text-sm text-muted">{e.detail ?? "—"}</td>
+                  </TdCol>
+                  <TdCol id="numero" show={visible} className="font-medium">{e.numero ?? "—"}</TdCol>
+                  <TdCol id="detail" show={visible} className="text-sm text-muted">{e.detail ?? "—"}</TdCol>
                 </tr>
               ))
             )}

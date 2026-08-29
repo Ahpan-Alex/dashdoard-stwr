@@ -17,6 +17,8 @@ import {
 } from "@/components/export-documents-pdf";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import {
   ETATS_PAIEMENT_FACTURE,
   etatPaiementFacture,
@@ -44,6 +46,7 @@ import { presentationPourFacture } from "@/lib/document-presentation";
 import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import { useModelePourType } from "@/lib/use-modele";
 import type { Facture, FactureStatut, FactureType, LigneDocument, ModeRemise } from "@/lib/types";
 
@@ -167,7 +170,13 @@ export default function ListeFacturesPage() {
     setFiltreType(filtreTypeDepuisQuery(searchParams.get("type")));
   }, [searchParams]);
 
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(
+    () => searchParams.get("facture"),
+  );
+  useEffect(() => {
+    const factureId = searchParams.get("facture");
+    if (factureId) setPreviewId(factureId);
+  }, [searchParams]);
   const previewSheetRef = useRef<HTMLDivElement>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [wizardKey, setWizardKey] = useState(0);
@@ -188,6 +197,7 @@ export default function ListeFacturesPage() {
   const [montantAvoirTTC, setMontantAvoirTTC] = useState("");
   const [motifAvoir, setMotifAvoir] = useState("");
 
+  const { visible, colSpan } = useAffichageTable("factures");
   const modele = useModelePourType("facture");
   const assujetti = appliqueTVA(parametres);
   const editDoc = factures.find((f) => f.id === editId);
@@ -237,6 +247,24 @@ export default function ListeFacturesPage() {
         return row.f.statut === filtre || row.statutAffiche === filtre;
       });
   }, [factures, parametres, acomptes, filtre, filtreType, pointDeVenteActifId]);
+
+  const lignesExport = useMemo(
+    () =>
+      lignes.map(({ f, t, reste, paye, etat, avoirs, statutAffiche }) => ({
+        numero: f.numero,
+        type: FACTURE_TYPES[f.type] ?? f.type,
+        date: formatDate(f.date),
+        echeance: formatDate(f.echeance),
+        client: clients.find((c) => c.id === f.clientId)?.nom ?? "",
+        totalTTC: formatCurrency(t.totalTTC),
+        avoirs: avoirs > 0 ? `-${formatCurrency(avoirs)}` : "",
+        paye: formatCurrency(paye),
+        reste: formatCurrency(reste),
+        etat: ETATS_PAIEMENT_FACTURE[etat] ?? etat,
+        statut: FACTURE_STATUTS[statutAffiche] ?? statutAffiche,
+      })),
+    [lignes, clients],
+  );
 
   const resume = useMemo(() => {
     const base = filterByPos(factures, pointDeVenteActifId).filter(
@@ -762,26 +790,35 @@ export default function ListeFacturesPage() {
         </div>
       </div>
 
+      <TableAffichageBarre
+        tableId="factures"
+        lignes={lignesExport}
+        fichier="factures"
+        titre="Liste des factures"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>Total TTC</th>
-              <th>Avoirs</th>
-              <th>Payé</th>
-              <th>Reste à payer</th>
-              <th>État</th>
-              <th>Statut doc.</th>
+              <ThCol id="numero" show={visible}>N°</ThCol>
+              <ThCol id="type" show={visible}>Type</ThCol>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="echeance" show={visible}>Échéance</ThCol>
+              <ThCol id="client" show={visible}>Client</ThCol>
+              <ThCol id="totalTTC" show={visible}>Total TTC</ThCol>
+              <ThCol id="avoirs" show={visible}>Avoirs</ThCol>
+              <ThCol id="paye" show={visible}>Payé</ThCol>
+              <ThCol id="reste" show={visible}>Reste à payer</ThCol>
+              <ThCol id="etat" show={visible}>État</ThCol>
+              <ThCol id="statut" show={visible}>Statut doc.</ThCol>
               <th />
             </tr>
           </thead>
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-muted">
+                <td colSpan={colSpan()} className="text-muted">
                   Aucune facture pour ce filtre.
                 </td>
               </tr>
@@ -796,23 +833,25 @@ export default function ListeFacturesPage() {
                   montantAvoirRestantTTC(f, factures, parametres, acomptes) > 0;
                 return (
                   <tr key={f.id}>
-                    <td>
+                    <TdCol id="numero" show={visible}>
                       <p className="font-medium">{f.numero}</p>
-                      <span className="badge badge-sea mt-1">
+                    </TdCol>
+                    <TdCol id="type" show={visible}>
+                      <span className="badge badge-sea">
                         {FACTURE_TYPES[f.type] ?? f.type}
                       </span>
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="date" show={visible}>
                       {formatDate(f.date)}
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Éch. {formatDate(f.echeance)}
-                      </span>
-                    </td>
-                    <td>{client?.nom ?? "—"}</td>
-                    <td className="font-semibold">
+                    </TdCol>
+                    <TdCol id="echeance" show={visible}>
+                      {formatDate(f.echeance)}
+                    </TdCol>
+                    <TdCol id="client" show={visible}>{client?.nom ?? "—"}</TdCol>
+                    <TdCol id="totalTTC" show={visible} className="font-semibold">
                       {formatCurrency(t.totalTTC)}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="avoirs" show={visible}>
                       {avoirs > 0 ? (
                         <span className="text-coral">
                           −{formatCurrency(avoirs)}
@@ -820,25 +859,21 @@ export default function ListeFacturesPage() {
                       ) : (
                         "—"
                       )}
-                    </td>
-                    <td>{formatCurrency(paye)}</td>
-                    <td
-                      className={
-                        reste > 0 ? "font-semibold text-coral" : "text-success"
-                      }
-                    >
+                    </TdCol>
+                    <TdCol id="paye" show={visible}>{formatCurrency(paye)}</TdCol>
+                    <TdCol id="reste" show={visible} className={reste > 0 ? "font-semibold text-coral" : "text-success"}>
                       {formatCurrency(reste)}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="etat" show={visible}>
                       <span className={badgeEtat(etat)}>
                         {ETATS_PAIEMENT_FACTURE[etat]}
                       </span>
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="statut" show={visible}>
                       <span className={badgeStatut(statutAffiche)}>
                         {FACTURE_STATUTS[statutAffiche] ?? statutAffiche}
                       </span>
-                    </td>
+                    </TdCol>
                     <td>
                       <div className="flex flex-wrap gap-1">
                         <IconButton

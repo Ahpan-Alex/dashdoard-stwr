@@ -21,12 +21,14 @@ import {
   ArrowLeftRight,
   Briefcase,
   Settings,
+  SlidersHorizontal,
   Waves,
   ChevronDown,
   Shield,
   ClipboardCheck,
   LogOut,
   UserRound,
+  Bell,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuthStore } from "@/lib/auth-store";
@@ -41,7 +43,10 @@ import {
   couleurStatutDocument,
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
+import { useAuthStore } from "@/lib/auth-store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
+import { AlertesCloche } from "./alertes-cloche";
+import { useAlertes } from "@/lib/use-alertes";
 
 type NavChild = {
   href: string;
@@ -103,6 +108,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         ],
       },
       { href: "/bilan", label: "Bilan & résultat", icon: FileSpreadsheet },
+      { href: "/alertes", label: "Alertes", icon: Bell },
     ],
   },
   {
@@ -208,6 +214,20 @@ const sections: { title: string; links: NavLink[] }[] = [
         icon: ArrowLeftRight,
       },
       { href: "/points-de-vente", label: "Points de vente", icon: MapPin },
+      {
+        href: "/reglages",
+        label: "Réglages",
+        icon: SlidersHorizontal,
+        matchPrefixes: ["/reglages"],
+        children: [
+          { href: "/reglages/affichage", label: "Types d'affichage" },
+          {
+            href: "/reglages/alertes",
+            label: "Alertes",
+            permission: "parametres.gerer",
+          },
+        ],
+      },
       {
         href: "/parametres",
         label: "Paramétrage",
@@ -403,6 +423,16 @@ function StatusPastilles({
   );
 }
 
+function AlertesNavCount() {
+  const { compteur } = useAlertes();
+  if (compteur <= 0) return null;
+  return (
+    <span className="ml-auto shrink-0 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-4 text-white">
+      {compteur > 99 ? "99+" : compteur}
+    </span>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -459,6 +489,7 @@ export function Sidebar() {
           listeHref="/factures/liste"
         />
       ),
+      "/alertes": <AlertesNavCount />,
     } as Record<string, ReactNode>;
   }, [devis, commandes, bonsDeLivraison, acomptes, factures]);
 
@@ -506,7 +537,7 @@ export function Sidebar() {
               <Fish className="h-5 w-5" />
             </div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p
               className="truncate font-display text-lg font-semibold leading-tight text-white"
               title={nomAfficheMenu(identiteNavigation)}
@@ -517,6 +548,7 @@ export function Sidebar() {
               Navigation
             </p>
           </div>
+          <AlertesCloche />
         </div>
       </div>
 

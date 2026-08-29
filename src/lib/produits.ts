@@ -279,6 +279,13 @@ export function migrateProduitLegacy(
     seuilGros: raw.seuilGros != null ? Number(raw.seuilGros) : undefined,
     tauxTVA: Number(raw.tauxTVA ?? tauxTVADefaut),
     actif: raw.actif !== false,
+    seuilReappro:
+      raw.seuilReappro != null ? Number(raw.seuilReappro) : undefined,
+    seuilRupture:
+      raw.seuilRupture != null ? Number(raw.seuilRupture) : undefined,
+    seuilSurstock:
+      raw.seuilSurstock != null ? Number(raw.seuilSurstock) : undefined,
+    gerePeremption: raw.gerePeremption === true,
   };
 }
 

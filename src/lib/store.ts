@@ -2,6 +2,22 @@
 
 import { create } from "zustand";
 import {
+  prefsTableEffectives,
+  tableAffichage,
+  type PreferencesAffichage,
+  type PrefsTableAffichage,
+  type TableAffichageId,
+} from "./affichage-tableaux";
+import {
+  fusionnerAlertesSuivi,
+  normaliserParametresAlertes,
+  normaliserSuiviUser,
+  suiviVide,
+  type AlertesSuivi,
+  type ParametresAlertes,
+  type SuiviAlertesUser,
+} from "./alertes";
+import {
   modelePourType,
   type ModeleDocument,
   type PreferencesModeles,
@@ -38,6 +54,9 @@ import {
   splitTTC,
 } from "./commercial";
 import {
+  putAlertesSuivi,
+  putParametresAlertes,
+  putPreferencesAffichage,
   resetBusinessState,
   scheduleBusinessSave,
   setBusinessSyncEnabled,
@@ -124,6 +143,9 @@ type Store = {
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
   identiteNavigation: IdentiteNavigation;
+  preferencesAffichage: PreferencesAffichage;
+  parametresAlertes: ParametresAlertes;
+  alertesSuivi: AlertesSuivi;
   pointDeVenteActifId: string | "tous";
 
   setPointDeVenteActif: (id: string | "tous") => void;
@@ -141,6 +163,17 @@ type Store = {
     userId: string,
     type: TypeDocumentCommercial,
     modeleId: string | null,
+  ) => void;
+
+  enregistrerTypesAffichage: (
+    tableId: TableAffichageId,
+    prefs: PrefsTableAffichage,
+  ) => void;
+  setTypeAffichageActif: (tableId: TableAffichageId, typeId: string) => void;
+  updateParametresAlertes: (data: Partial<ParametresAlertes>) => void;
+  marquerAlerte: (
+    alerteId: string,
+    action: "lue" | "nonlue" | "traitee" | "rouvrir",
   ) => void;
 
   addPointDeVente: (pdv: Omit<PointDeVente, "id">) => void;
@@ -175,6 +208,7 @@ type Store = {
       lignes: LivraisonAchatLigne[];
       note?: string;
       confirmer?: boolean;
+      datePeremption?: string;
     },
   ) => { ok: boolean; reason?: string; id?: string };
   confirmerLivraisonAchat: (
@@ -348,6 +382,59 @@ type Store = {
 
 function uid(prefix: string) {
   return createId(prefix);
+}
+
+function ecrirePrefsTable(
+  all: PreferencesAffichage,
+  userId: string,
+  tableId: TableAffichageId,
+  prefs: PrefsTableAffichage,
+): PreferencesAffichage {
+  return {
+    ...all,
+    [userId]: {
+      ...(all[userId] ?? {}),
+      [tableId]: prefs,
+    },
+  };
+}
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function persisterPrefsAffichage(
+  prefs: import("./affichage-tableaux").PrefsUserAffichage,
+) {
+  if (typeof window === "undefined") return;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void putPreferencesAffichage(prefs).catch((err) => {
+      console.error("[affichage] sync failed", err);
+    });
+  }, 300);
+}
+
+let alertesParamsTimer: ReturnType<typeof setTimeout> | null = null;
+function persisterParametresAlertes(params: ParametresAlertes) {
+  if (typeof window === "undefined") return;
+  if (alertesParamsTimer) clearTimeout(alertesParamsTimer);
+  alertesParamsTimer = setTimeout(() => {
+    alertesParamsTimer = null;
+    void putParametresAlertes(params).catch((err) => {
+      console.error("[alertes] config sync failed", err);
+    });
+  }, 300);
+}
+
+let alertesSuiviTimer: ReturnType<typeof setTimeout> | null = null;
+function persisterAlertesSuivi(suivi: SuiviAlertesUser) {
+  if (typeof window === "undefined") return;
+  if (alertesSuiviTimer) clearTimeout(alertesSuiviTimer);
+  alertesSuiviTimer = setTimeout(() => {
+    alertesSuiviTimer = null;
+    void putAlertesSuivi(suivi).catch((err) => {
+      console.error("[alertes] suivi sync failed", err);
+    });
+  }, 300);
 }
 
 function nomFournisseur(state: { fournisseurs: Fournisseur[] }, id: string) {
@@ -600,6 +687,87 @@ export const useStore = create<Store>()((set, get) => ({
             },
           };
         }),
+
+      enregistrerTypesAffichage: (tableId, prefs) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return;
+        const table = tableAffichage(tableId);
+        const normalisees = prefsTableEffectives(table, prefs);
+        set((state) => ({
+          preferencesAffichage: ecrirePrefsTable(
+            state.preferencesAffichage,
+            userId,
+            tableId,
+            normalisees,
+          ),
+        }));
+        persisterPrefsAffichage(get().preferencesAffichage[userId] ?? {});
+      },
+      setTypeAffichageActif: (tableId, typeId) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return;
+        const table = tableAffichage(tableId);
+        set((state) => {
+          const actuelles = prefsTableEffectives(
+            table,
+            state.preferencesAffichage[userId]?.[tableId],
+          );
+          const next: PrefsTableAffichage = {
+            ...actuelles,
+            actifId: actuelles.types.some((t) => t.id === typeId)
+              ? typeId
+              : actuelles.actifId,
+          };
+          return {
+            preferencesAffichage: ecrirePrefsTable(
+              state.preferencesAffichage,
+              userId,
+              tableId,
+              next,
+            ),
+          };
+        });
+        persisterPrefsAffichage(get().preferencesAffichage[userId] ?? {});
+      },
+
+      updateParametresAlertes: (data) => {
+        set((state) => ({
+          parametresAlertes: normaliserParametresAlertes({
+            ...state.parametresAlertes,
+            ...data,
+          }),
+        }));
+        persisterParametresAlertes(get().parametresAlertes);
+      },
+      marquerAlerte: (alerteId, action) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return;
+        set((state) => {
+          const actuel = normaliserSuiviUser(state.alertesSuivi[userId]);
+          const lues = new Set(actuel.lues);
+          const traitees = new Set(actuel.traitees);
+          if (action === "lue") lues.add(alerteId);
+          if (action === "nonlue") lues.delete(alerteId);
+          if (action === "traitee") {
+            traitees.add(alerteId);
+            lues.add(alerteId);
+          }
+          if (action === "rouvrir") {
+            traitees.delete(alerteId);
+            lues.delete(alerteId);
+          }
+          return {
+            alertesSuivi: fusionnerAlertesSuivi(
+              state.alertesSuivi,
+              { [userId]: { lues: [...lues], traitees: [...traitees] } },
+              userId,
+            ),
+          };
+        });
+        persisterAlertesSuivi(
+          normaliserSuiviUser(get().alertesSuivi[userId] ?? suiviVide()),
+        );
+      },
 
       addPointDeVente: (pdv) =>
         set((state) => {
@@ -895,6 +1063,7 @@ export const useStore = create<Store>()((set, get) => ({
           statut: "en_attente" as const,
           lignes: data.lignes,
           note: data.note,
+          datePeremption: data.datePeremption,
         };
         const confirmer = data.confirmer !== false;
         const liv = {

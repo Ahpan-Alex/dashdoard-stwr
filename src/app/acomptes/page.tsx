@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { ACOMPTE_STATUTS, MODES_PAIEMENT, filterAcomptesByPos, libelleClient } from "@/lib/commercial";
 import { filterByPos, pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { ModePaiement } from "@/lib/types";
 
 type FiltreAcompte = "tous" | "enregistre" | "impute" | "annule";
@@ -41,6 +44,7 @@ export default function AcomptesPage() {
     encaisserAcompte,
   } = useStore();
 
+  const { visible, colSpan } = useAffichageTable("acomptes");
   const [filtre, setFiltre] = useState<FiltreAcompte>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
   );
@@ -76,6 +80,29 @@ export default function AcomptesPage() {
       .sort((a, b) => b.date.localeCompare(a.date))
       .filter((a) => (filtre === "tous" ? true : a.statut === filtre));
   }, [acomptesDuPos, filtre]);
+
+  const lignesExport = useMemo(
+    () =>
+      acomptesFiltres.map((a) => {
+        const fac = factures.find(
+          (f) => f.id === a.factureAcompteId || f.id === a.factureId,
+        );
+        const lien =
+          commandes.find((c) => c.id === a.commandeId)?.numero ||
+          devis.find((d) => d.id === a.devisId)?.numero ||
+          "";
+        return {
+          numero: a.numero,
+          date: formatDate(a.date),
+          client: clients.find((c) => c.id === a.clientId)?.nom ?? "",
+          montantTTC: formatCurrency(a.montantTTC),
+          mode: MODES_PAIEMENT[a.modePaiement] ?? a.modePaiement,
+          liens: [lien, fac?.numero].filter(Boolean).join(" · "),
+          statut: ACOMPTE_STATUTS[a.statut] ?? a.statut,
+        };
+      }),
+    [acomptesFiltres, factures, commandes, devis, clients],
+  );
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -290,24 +317,31 @@ export default function AcomptesPage() {
         ))}
       </div>
 
+      <TableAffichageBarre
+        tableId="acomptes"
+        lignes={lignesExport}
+        fichier="acomptes"
+        titre="Acomptes"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>N°</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>Montant TTC</th>
-              <th>Mode</th>
-              <th>Liens</th>
-              <th>Statut</th>
+              <ThCol id="numero" show={visible}>N°</ThCol>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="client" show={visible}>Client</ThCol>
+              <ThCol id="montantTTC" show={visible}>Montant TTC</ThCol>
+              <ThCol id="mode" show={visible}>Mode</ThCol>
+              <ThCol id="liens" show={visible}>Liens</ThCol>
+              <ThCol id="statut" show={visible}>Statut</ThCol>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {acomptesFiltres.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={colSpan()} className="text-muted">
                   Aucun acompte pour ce filtre.
                 </td>
               </tr>
@@ -319,14 +353,14 @@ export default function AcomptesPage() {
                 );
                 return (
                   <tr key={a.id}>
-                    <td className="font-medium">{a.numero}</td>
-                    <td>{formatDate(a.date)}</td>
-                    <td>{client?.nom}</td>
-                    <td className="font-semibold">
+                    <TdCol id="numero" show={visible} className="font-medium">{a.numero}</TdCol>
+                    <TdCol id="date" show={visible}>{formatDate(a.date)}</TdCol>
+                    <TdCol id="client" show={visible}>{client?.nom}</TdCol>
+                    <TdCol id="montantTTC" show={visible} className="font-semibold">
                       {formatCurrency(a.montantTTC)}
-                    </td>
-                    <td>{MODES_PAIEMENT[a.modePaiement]}</td>
-                    <td className="text-xs">
+                    </TdCol>
+                    <TdCol id="mode" show={visible}>{MODES_PAIEMENT[a.modePaiement]}</TdCol>
+                    <TdCol id="liens" show={visible} className="text-xs">
                       {commandes.find((c) => c.id === a.commandeId)?.numero ||
                         devis.find((d) => d.id === a.devisId)?.numero ||
                         "—"}
@@ -335,8 +369,8 @@ export default function AcomptesPage() {
                           {fac.numero}
                         </span>
                       )}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="statut" show={visible}>
                       <select
                         className="select max-w-[130px]"
                         value={a.statut}
@@ -352,7 +386,7 @@ export default function AcomptesPage() {
                           </option>
                         ))}
                       </select>
-                    </td>
+                    </TdCol>
                     <td>
                       <button
                         className="btn btn-ghost"

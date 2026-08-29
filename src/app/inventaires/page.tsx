@@ -13,6 +13,8 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { useAuthStore } from "@/lib/auth-store";
@@ -37,6 +39,7 @@ import {
 } from "@/lib/inventaire";
 import { libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type {
   CategorieEcartInventaire,
   Inventaire,
@@ -64,6 +67,7 @@ function InventairesContent() {
     addInventaire,
     deleteInventaire,
   } = useStore();
+  const { visible } = useAffichageTable("inventaires");
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const peutGerer = hasPermission("produits.gerer");
 
@@ -192,16 +196,33 @@ function InventairesContent() {
           description="Lancez un inventaire par point de vente pour comparer le stock physique au stock théorique et justifier les écarts."
         />
       ) : (
+        <>
+        <TableAffichageBarre
+          tableId="inventaires"
+          lignes={inventairesVisibles.map((inv) => {
+            const s = syntheseInventaire(inv);
+            return {
+              numero: inv.numero,
+              pointDeVente: nomPdv(inv.pointDeVenteId),
+              date: formatDate(inv.date),
+              statut: inv.statut === "valide" ? "Validé" : "Brouillon",
+              ecarts: String(s.nbEcarts),
+              valeurNette: formatCurrency(s.valeurNette),
+            };
+          })}
+          fichier="inventaires"
+          titre="Inventaires"
+        />
         <div className="table-shell">
           <table className="data">
             <thead>
               <tr>
-                <th>Numéro</th>
-                <th>Point de vente</th>
-                <th>Date</th>
-                <th>Statut</th>
-                <th>Écarts</th>
-                <th>Valeur nette</th>
+                <ThCol id="numero" show={visible}>Numéro</ThCol>
+                <ThCol id="pointDeVente" show={visible}>Point de vente</ThCol>
+                <ThCol id="date" show={visible}>Date</ThCol>
+                <ThCol id="statut" show={visible}>Statut</ThCol>
+                <ThCol id="ecarts" show={visible}>Écarts</ThCol>
+                <ThCol id="valeurNette" show={visible}>Valeur nette</ThCol>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -210,10 +231,10 @@ function InventairesContent() {
                 const s = syntheseInventaire(inv);
                 return (
                   <tr key={inv.id}>
-                    <td className="font-medium">{inv.numero}</td>
-                    <td>{nomPdv(inv.pointDeVenteId)}</td>
-                    <td>{formatDate(inv.date)}</td>
-                    <td>
+                    <TdCol id="numero" show={visible} className="font-medium">{inv.numero}</TdCol>
+                    <TdCol id="pointDeVente" show={visible}>{nomPdv(inv.pointDeVenteId)}</TdCol>
+                    <TdCol id="date" show={visible}>{formatDate(inv.date)}</TdCol>
+                    <TdCol id="statut" show={visible}>
                       <span
                         className={`badge ${
                           inv.statut === "valide"
@@ -223,8 +244,8 @@ function InventairesContent() {
                       >
                         {inv.statut === "valide" ? "Validé" : "Brouillon"}
                       </span>
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="ecarts" show={visible}>
                       {s.nbEcarts === 0 ? (
                         <span className="text-muted">Aucun</span>
                       ) : (
@@ -246,8 +267,10 @@ function InventairesContent() {
                           )}
                         </span>
                       )}
-                    </td>
-                    <td
+                    </TdCol>
+                    <TdCol
+                      id="valeurNette"
+                      show={visible}
                       className={`font-semibold ${
                         s.valeurNette < 0
                           ? "text-danger"
@@ -257,7 +280,7 @@ function InventairesContent() {
                       }`}
                     >
                       {formatCurrency(s.valeurNette)}
-                    </td>
+                    </TdCol>
                     <td>
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -293,6 +316,7 @@ function InventairesContent() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

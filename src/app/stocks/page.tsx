@@ -1,15 +1,33 @@
 "use client";
 
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Boxes, Scale } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { calculerStocks } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { categorieLabel, libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 
-export default function StocksPage() {
+function ligneAlerteStock(ligne: {
+  produit: { seuilReappro?: number; seuilRupture?: number };
+  quantiteRestante: number;
+}) {
+  const { produit, quantiteRestante: qty } = ligne;
+  if (produit.seuilRupture != null && qty <= produit.seuilRupture) return true;
+  if (produit.seuilReappro != null && qty <= produit.seuilReappro) return true;
+  return false;
+}
+
+function StocksContent() {
+  const searchParams = useSearchParams();
+  const highlightProduit = searchParams.get("produit");
+  const highlightPdv = searchParams.get("pdv");
   const {
     produits,
     categoriesProduits,
@@ -19,6 +37,7 @@ export default function StocksPage() {
     pointDeVenteActifId,
     inventaires,
   } = useStore();
+  const { visible, colSpan } = useAffichageTable("stocks");
 
   const stocks = calculerStocks(
     produits,
@@ -32,7 +51,15 @@ export default function StocksPage() {
 
   const valeurAchat = stocks.reduce((s, l) => s + l.valeurAchat, 0);
   const valeurVente = stocks.reduce((s, l) => s + l.valeurVente, 0);
-  const alertes = stocks.filter((l) => l.quantiteRestante < 5);
+  const alertes = stocks.filter(ligneAlerteStock);
+
+  useEffect(() => {
+    if (!highlightProduit) return;
+    const el = document.getElementById(
+      `stock-${highlightPdv ?? ""}-${highlightProduit}`,
+    );
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightProduit, highlightPdv, stocks.length]);
 
   return (
     <div>
@@ -142,10 +169,10 @@ export default function StocksPage() {
         <div className="mb-4 flex items-start gap-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-semibold">Stock bas</p>
+            <p className="font-semibold">Seuils produit atteints</p>
             <p className="text-amber-800/80">
-              {alertes.length} ligne{alertes.length > 1 ? "s" : ""} sous le seuil
-              de 5 unités :{" "}
+              {alertes.length} ligne{alertes.length > 1 ? "s" : ""} au seuil de
+              réappro ou de rupture :{" "}
               {alertes
                 .slice(0, 3)
                 .map((a) => a.produit.libelleCourt)
@@ -163,49 +190,84 @@ export default function StocksPage() {
           description="Enregistrez des entrées de marchandises pour alimenter le stock."
         />
       ) : (
+        <>
+        <TableAffichageBarre
+          tableId="stocks"
+          lignes={stocks.map((ligne) => ({
+            produit: `${ligne.produit.code} — ${libelleProduit(ligne.produit)}`,
+            categorie: categorieLabel(
+              ligne.produit.categorieId,
+              categoriesProduits,
+            ),
+            pointDeVente:
+              pointsDeVente.find((p) => p.id === ligne.pointDeVenteId)?.nom ??
+              "",
+            entrees: `${formatNumber(ligne.quantiteEntree)} ${ligne.produit.unite}`,
+            vendues: `${formatNumber(ligne.quantiteVendue)} ${ligne.produit.unite}`,
+            restant: `${formatNumber(ligne.quantiteRestante)} ${ligne.produit.unite}`,
+            valeurAchat: formatCurrency(ligne.valeurAchat),
+            valeurVente: formatCurrency(ligne.valeurVente),
+          }))}
+          fichier="stocks"
+          titre="Stocks"
+        />
         <div className="table-shell">
           <table className="data">
             <thead>
               <tr>
-                <th>Produit</th>
-                <th>Catégorie</th>
-                <th>Point de vente</th>
-                <th>Entrées</th>
-                <th>Vendues</th>
-                <th>Restant</th>
-                <th>Valeur achat</th>
-                <th>Valeur vente</th>
+                <ThCol id="produit" show={visible}>Produit</ThCol>
+                <ThCol id="categorie" show={visible}>Catégorie</ThCol>
+                <ThCol id="pointDeVente" show={visible}>Point de vente</ThCol>
+                <ThCol id="entrees" show={visible}>Entrées</ThCol>
+                <ThCol id="vendues" show={visible}>Vendues</ThCol>
+                <ThCol id="restant" show={visible}>Restant</ThCol>
+                <ThCol id="valeurAchat" show={visible}>Valeur achat</ThCol>
+                <ThCol id="valeurVente" show={visible}>Valeur vente</ThCol>
               </tr>
             </thead>
             <tbody>
-              {stocks.map((ligne) => {
+              {stocks.length === 0 ? (
+                <tr>
+                  <td colSpan={colSpan(false)} className="text-muted">
+                    Aucun stock.
+                  </td>
+                </tr>
+              ) : (
+              stocks.map((ligne) => {
                 const pdv = pointsDeVente.find(
                   (p) => p.id === ligne.pointDeVenteId,
                 );
-                const bas = ligne.quantiteRestante < 5;
+                const bas = ligneAlerteStock(ligne);
+                const cible =
+                  highlightProduit === ligne.produit.id &&
+                  (!highlightPdv || highlightPdv === ligne.pointDeVenteId);
                 return (
-                  <tr key={`${ligne.pointDeVenteId}-${ligne.produit.id}`}>
-                    <td className="font-medium">
+                  <tr
+                    key={`${ligne.pointDeVenteId}-${ligne.produit.id}`}
+                    id={`stock-${ligne.pointDeVenteId}-${ligne.produit.id}`}
+                    className={cible ? "bg-amber-50 ring-2 ring-amber-300" : undefined}
+                  >
+                    <TdCol id="produit" show={visible} className="font-medium">
                       {ligne.produit.code} — {libelleProduit(ligne.produit)}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="categorie" show={visible}>
                       <span className="badge badge-sea">
                         {categorieLabel(
                           ligne.produit.categorieId,
                           categoriesProduits,
                         )}
                       </span>
-                    </td>
-                    <td>{pdv?.nom}</td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="pointDeVente" show={visible}>{pdv?.nom}</TdCol>
+                    <TdCol id="entrees" show={visible}>
                       {formatNumber(ligne.quantiteEntree)}{" "}
                       {ligne.produit.unite}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="vendues" show={visible}>
                       {formatNumber(ligne.quantiteVendue)}{" "}
                       {ligne.produit.unite}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="restant" show={visible}>
                       <span
                         className={
                           bas
@@ -216,16 +278,26 @@ export default function StocksPage() {
                         {formatNumber(ligne.quantiteRestante)}{" "}
                         {ligne.produit.unite}
                       </span>
-                    </td>
-                    <td>{formatCurrency(ligne.valeurAchat)}</td>
-                    <td>{formatCurrency(ligne.valeurVente)}</td>
+                    </TdCol>
+                    <TdCol id="valeurAchat" show={visible}>{formatCurrency(ligne.valeurAchat)}</TdCol>
+                    <TdCol id="valeurVente" show={visible}>{formatCurrency(ligne.valeurVente)}</TdCol>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
+  );
+}
+
+export default function StocksPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <StocksContent />
+    </Suspense>
   );
 }

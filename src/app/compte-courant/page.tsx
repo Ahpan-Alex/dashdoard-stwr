@@ -7,6 +7,8 @@ import { AlerteCompteCourant } from "@/components/alerte-compte-courant";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import {
   SEUIL_ALERTE_COMPTE_COURANT,
@@ -18,6 +20,7 @@ import {
 } from "@/lib/compte-courant";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { TypeMouvementCompteCourant } from "@/lib/types";
 
 const AUJOURD_HUI = new Date().toISOString().slice(0, 10);
@@ -30,6 +33,7 @@ export default function CompteCourantPage() {
     deleteMouvementCompteCourant,
     parametres,
   } = useStore();
+  const { visible } = useAffichageTable("compte_courant");
 
   const ouverture = bilanInitial.compteCourantAssocie ?? 0;
   const solde = soldeCompteCourant(ouverture, mouvementsCompteCourant);
@@ -240,24 +244,38 @@ export default function CompteCourantPage() {
           description="Enregistrez un apport ou un retrait pour alimenter le compte courant d'associé. Le solde d'ouverture se paramètre dans le bilan initial."
         />
       ) : (
+        <>
+        <TableAffichageBarre
+          tableId="compte_courant"
+          lignes={historique.map((m) => ({
+            date: formatDate(m.date),
+            type: m.type === "apport" ? "Apport" : "Retrait",
+            libelle: m.libelle,
+            montant: `${m.type === "retrait" ? "− " : "+ "}${formatCurrency(m.montant)}`,
+            solde: formatCurrency(m.soldeApres),
+            saisiPar: m.userNom ?? "",
+          }))}
+          fichier="compte-courant"
+          titre="Compte courant d'associé"
+        />
         <div className="table-shell">
           <table className="data">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Libellé</th>
-                <th>Montant</th>
-                <th>Solde après</th>
-                <th>Saisi par</th>
+                <ThCol id="date" show={visible}>Date</ThCol>
+                <ThCol id="type" show={visible}>Type</ThCol>
+                <ThCol id="libelle" show={visible}>Libellé</ThCol>
+                <ThCol id="montant" show={visible}>Montant</ThCol>
+                <ThCol id="solde" show={visible}>Solde après</ThCol>
+                <ThCol id="saisiPar" show={visible}>Saisi par</ThCol>
                 <th className="text-right"> </th>
               </tr>
             </thead>
             <tbody>
               {historique.map((m) => (
                 <tr key={m.id}>
-                  <td className="whitespace-nowrap">{formatDate(m.date)}</td>
-                  <td>
+                  <TdCol id="date" show={visible} className="whitespace-nowrap">{formatDate(m.date)}</TdCol>
+                  <TdCol id="type" show={visible}>
                     <span
                       className={`badge ${
                         m.type === "apport" ? "badge-success" : "badge-sand"
@@ -265,18 +283,20 @@ export default function CompteCourantPage() {
                     >
                       {m.type === "apport" ? "Apport" : "Retrait"}
                     </span>
-                  </td>
-                  <td className="font-medium">{m.libelle}</td>
-                  <td
+                  </TdCol>
+                  <TdCol id="libelle" show={visible} className="font-medium">{m.libelle}</TdCol>
+                  <TdCol
+                    id="montant"
+                    show={visible}
                     className={
                       m.type === "retrait" ? "text-danger" : "text-success"
                     }
                   >
                     {m.type === "retrait" ? "− " : "+ "}
                     {formatCurrency(m.montant)}
-                  </td>
-                  <td className="font-semibold">{formatCurrency(m.soldeApres)}</td>
-                  <td className="text-muted">{m.userNom ?? "—"}</td>
+                  </TdCol>
+                  <TdCol id="solde" show={visible} className="font-semibold">{formatCurrency(m.soldeApres)}</TdCol>
+                  <TdCol id="saisiPar" show={visible} className="text-muted">{m.userNom ?? "—"}</TdCol>
                   <td>
                     <div className="flex justify-end">
                       <button
@@ -297,22 +317,23 @@ export default function CompteCourantPage() {
               ))}
               {ouverture !== 0 && (
                 <tr>
-                  <td className="text-muted">
+                  <TdCol id="date" show={visible} className="text-muted">
                     {formatDate(bilanInitial.date)}
-                  </td>
-                  <td>
+                  </TdCol>
+                  <TdCol id="type" show={visible}>
                     <span className="badge badge-muted">Ouverture</span>
-                  </td>
-                  <td className="text-muted">Solde d&apos;ouverture (bilan initial)</td>
-                  <td>{formatCurrency(ouverture)}</td>
-                  <td className="font-semibold">{formatCurrency(ouverture)}</td>
-                  <td className="text-muted">—</td>
+                  </TdCol>
+                  <TdCol id="libelle" show={visible} className="text-muted">Solde d&apos;ouverture (bilan initial)</TdCol>
+                  <TdCol id="montant" show={visible}>{formatCurrency(ouverture)}</TdCol>
+                  <TdCol id="solde" show={visible} className="font-semibold">{formatCurrency(ouverture)}</TdCol>
+                  <TdCol id="saisiPar" show={visible} className="text-muted">—</TdCol>
                   <td />
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

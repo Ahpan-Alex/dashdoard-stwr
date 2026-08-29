@@ -35,7 +35,17 @@ type ProduitFormState = {
   prixVenteGrosHT: string;
   seuilGros: string;
   tauxTVA: string;
+  seuilReappro: string;
+  seuilRupture: string;
+  seuilSurstock: string;
+  gerePeremption: boolean;
 };
+
+function parseSeuilOptionnel(raw: string): number | undefined {
+  if (!raw.trim()) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
 
 function formDepuisProduit(p: Produit): ProduitFormState {
   return {
@@ -50,6 +60,10 @@ function formDepuisProduit(p: Produit): ProduitFormState {
       p.prixVenteGrosHT != null ? String(p.prixVenteGrosHT) : "",
     seuilGros: p.seuilGros != null ? String(p.seuilGros) : "",
     tauxTVA: String(p.tauxTVA),
+    seuilReappro: p.seuilReappro != null ? String(p.seuilReappro) : "",
+    seuilRupture: p.seuilRupture != null ? String(p.seuilRupture) : "",
+    seuilSurstock: p.seuilSurstock != null ? String(p.seuilSurstock) : "",
+    gerePeremption: Boolean(p.gerePeremption),
   };
 }
 
@@ -112,6 +126,10 @@ export default function ParametresProduitsPage() {
       prixVenteGrosHT: "",
       seuilGros: "",
       tauxTVA: String(parametres.tauxTVA),
+      seuilReappro: "",
+      seuilRupture: "",
+      seuilSurstock: "",
+      gerePeremption: false,
     };
   }
 
@@ -322,6 +340,10 @@ export default function ParametresProduitsPage() {
         : undefined,
       seuilGros: form.seuilGros ? Number(form.seuilGros) : undefined,
       tauxTVA: avecTVA ? Number(form.tauxTVA) || 0 : 0,
+      seuilReappro: parseSeuilOptionnel(form.seuilReappro),
+      seuilRupture: parseSeuilOptionnel(form.seuilRupture),
+      seuilSurstock: parseSeuilOptionnel(form.seuilSurstock),
+      gerePeremption: form.gerePeremption,
     };
 
     if (editingId) {
@@ -739,6 +761,58 @@ export default function ParametresProduitsPage() {
                 value={form.seuilGros}
                 onChange={(e) => setForm({ ...form, seuilGros: e.target.value })}
               />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Seuil réappro (qté)
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={form.seuilReappro}
+                onChange={(e) =>
+                  setForm({ ...form, seuilReappro: e.target.value })
+                }
+                placeholder="Vide = pas d'alerte"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Seuil rupture (qté)
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={form.seuilRupture}
+                onChange={(e) =>
+                  setForm({ ...form, seuilRupture: e.target.value })
+                }
+                placeholder="0 = rupture à zéro"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Seuil surstock (qté)
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={form.seuilSurstock}
+                onChange={(e) =>
+                  setForm({ ...form, seuilSurstock: e.target.value })
+                }
+                placeholder="Vide = pas d'alerte"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.gerePeremption}
+                onChange={(e) =>
+                  setForm({ ...form, gerePeremption: e.target.checked })
+                }
+              />
+              Gérer une date de péremption (DLC sur les lots)
             </label>
           </div>
           {alertDoublons && (

@@ -272,6 +272,7 @@ export function entreesDepuisAchat(
         achatId: achat.id,
         livraisonId: liv.id,
         note: liv.note,
+        datePeremption: liv.datePeremption,
       });
     }
   }

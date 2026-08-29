@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
@@ -16,6 +17,8 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import {
   MODES_PAIEMENT_ACHAT,
@@ -42,6 +45,7 @@ import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { createId } from "@/lib/id";
 import { libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type {
   Achat,
   AchatLigne,
@@ -68,6 +72,15 @@ function badgePaiement(statut: string) {
 }
 
 export default function AchatsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <AchatsListe />
+    </Suspense>
+  );
+}
+
+function AchatsListe() {
+  const searchParams = useSearchParams();
   const {
     achats,
     fournisseurs,
@@ -78,7 +91,10 @@ export default function AchatsPage() {
     addAchat,
   } = useStore();
 
-  const [selectionId, setSelectionId] = useState<string | null>(null);
+  const { visible } = useAffichageTable("achats");
+  const [selectionId, setSelectionId] = useState<string | null>(
+    () => searchParams.get("id"),
+  );
   const [creer, setCreer] = useState(false);
   const [filtreFrn, setFiltreFrn] = useState("");
   const [filtreProduit, setFiltreProduit] = useState("");
@@ -88,6 +104,11 @@ export default function AchatsPage() {
     date: AUJOURD_HUI,
     echeance: "",
   });
+
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id) setSelectionId(id);
+  }, [searchParams]);
 
   const achatSelectionne = achats.find((a) => a.id === selectionId);
 
@@ -110,6 +131,21 @@ export default function AchatsPage() {
       )
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [achats, pointDeVenteActifId, filtreFrn, filtreProduit]);
+
+  const lignesExport = useMemo(
+    () =>
+      visibles.map((a) => ({
+        numero: a.numero,
+        date: formatDate(a.date),
+        fournisseur: nomFrn(a.fournisseurId),
+        pointDeVente: nomPdv(a.pointDeVenteId),
+        ht: formatCurrency(totauxAchat(a).ht),
+        livraison: STATUT_LIVRAISON_LABELS[statutLivraisonAchat(a)],
+        paiement: STATUT_PAIEMENT_LABELS[statutPaiementAchat(a)],
+        solde: formatCurrency(soldeAchat(a)),
+      })),
+    [visibles, fournisseurs, pointsDeVente],
+  );
 
   const stats = useMemo(() => {
     const valides = visibles.filter((a) => a.statut === "valide");
@@ -336,18 +372,25 @@ export default function AchatsPage() {
           description="Créez une commande fournisseur, puis enregistrez les livraisons, paiements et retours."
         />
       ) : (
+        <>
+        <TableAffichageBarre
+          tableId="achats"
+          lignes={lignesExport}
+          fichier="achats"
+          titre="Liste des achats"
+        />
         <div className="table-shell">
           <table className="data">
             <thead>
               <tr>
-                <th>Numéro</th>
-                <th>Date</th>
-                <th>Fournisseur</th>
-                <th>Point de vente</th>
-                <th>HT</th>
-                <th>Livraison</th>
-                <th>Paiement</th>
-                <th>Solde</th>
+                <ThCol id="numero" show={visible}>Numéro</ThCol>
+                <ThCol id="date" show={visible}>Date</ThCol>
+                <ThCol id="fournisseur" show={visible}>Fournisseur</ThCol>
+                <ThCol id="pointDeVente" show={visible}>Point de vente</ThCol>
+                <ThCol id="ht" show={visible}>HT</ThCol>
+                <ThCol id="livraison" show={visible}>Livraison</ThCol>
+                <ThCol id="paiement" show={visible}>Paiement</ThCol>
+                <ThCol id="solde" show={visible}>Solde</ThCol>
                 <th />
               </tr>
             </thead>
@@ -358,24 +401,24 @@ export default function AchatsPage() {
                 const pay = statutPaiementAchat(a);
                 return (
                   <tr key={a.id}>
-                    <td className="font-medium">{a.numero}</td>
-                    <td>{formatDate(a.date)}</td>
-                    <td>{nomFrn(a.fournisseurId)}</td>
-                    <td>{nomPdv(a.pointDeVenteId)}</td>
-                    <td>{formatCurrency(tot.ht)}</td>
-                    <td>
+                    <TdCol id="numero" show={visible} className="font-medium">{a.numero}</TdCol>
+                    <TdCol id="date" show={visible}>{formatDate(a.date)}</TdCol>
+                    <TdCol id="fournisseur" show={visible}>{nomFrn(a.fournisseurId)}</TdCol>
+                    <TdCol id="pointDeVente" show={visible}>{nomPdv(a.pointDeVenteId)}</TdCol>
+                    <TdCol id="ht" show={visible}>{formatCurrency(tot.ht)}</TdCol>
+                    <TdCol id="livraison" show={visible}>
                       <span className={`badge ${badgeLivraison(liv)}`}>
                         {STATUT_LIVRAISON_LABELS[liv]}
                       </span>
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="paiement" show={visible}>
                       <span className={`badge ${badgePaiement(pay)}`}>
                         {STATUT_PAIEMENT_LABELS[pay]}
                       </span>
-                    </td>
-                    <td className="font-semibold">
+                    </TdCol>
+                    <TdCol id="solde" show={visible} className="font-semibold">
                       {formatCurrency(soldeAchat(a))}
-                    </td>
+                    </TdCol>
                     <td className="text-right">
                       <button
                         type="button"
@@ -391,6 +434,7 @@ export default function AchatsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
@@ -874,12 +918,18 @@ function LivraisonsPanel({
     lignes: LivraisonAchatLigne[];
     note?: string;
     confirmer?: boolean;
+    datePeremption?: string;
   }) => void;
   onConfirmer: (id: string, lignes: LivraisonAchatLigne[]) => void;
   onAnnuler: (id: string) => void;
 }) {
+  const produits = useStore((s) => s.produits);
   const [date, setDate] = useState(AUJOURD_HUI);
   const [confirmer, setConfirmer] = useState(true);
+  const [datePeremption, setDatePeremption] = useState("");
+  const gerePeremption = achat.lignes.some((l) =>
+    produits.find((p) => p.id === l.produitId)?.gerePeremption,
+  );
   const [qtys, setQtys] = useState<Record<string, string>>({});
 
   const lignesForm: LivraisonAchatLigne[] = achat.lignes
@@ -927,6 +977,17 @@ function LivraisonsPanel({
               />
               Réceptionner maintenant (entrée de stock)
             </label>
+            {gerePeremption && (
+              <label className="text-xs font-semibold text-muted sm:col-span-2">
+                Date de péremption du lot (DLC)
+                <input
+                  type="date"
+                  className="input mt-1"
+                  value={datePeremption}
+                  onChange={(e) => setDatePeremption(e.target.value)}
+                />
+              </label>
+            )}
           </div>
           <div className="table-shell">
             <table className="data">
@@ -979,6 +1040,9 @@ function LivraisonsPanel({
                 date: isoMidiDepuisJour(date),
                 lignes: lignesForm,
                 confirmer,
+                datePeremption: datePeremption
+                  ? isoMidiDepuisJour(datePeremption)
+                  : undefined,
               });
               setQtys({});
             }}

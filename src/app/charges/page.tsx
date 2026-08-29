@@ -5,6 +5,8 @@ import Link from "next/link";
 import { FileSpreadsheet, Plus, Trash2 } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
+import { TableAffichageBarre } from "@/components/table-affichage-barre";
+import { TdCol, ThCol } from "@/components/table-col";
 import {
   CHARGE_CATEGORIES,
   CATEGORIE_LABELS,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/rentabilite";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { ChargeCategorie, ChargeNatureEconomique } from "@/lib/types";
 
 export default function ChargesPage() {
@@ -27,6 +30,7 @@ export default function ChargesPage() {
     addCharge,
     deleteCharge,
   } = useStore();
+  const { visible, colSpan } = useAffichageTable("charges");
 
   const [open, setOpen] = useState(false);
   const [filtreCategorie, setFiltreCategorie] = useState<string>("toutes");
@@ -347,24 +351,45 @@ export default function ChargesPage() {
         </div>
       )}
 
+      <TableAffichageBarre
+        tableId="charges"
+        lignes={filtered.map((c) => {
+          const pdv =
+            c.pointDeVenteId === "tous"
+              ? "Tous / siège"
+              : (pointsDeVente.find((p) => p.id === c.pointDeVenteId)?.nom ?? "");
+          return {
+            date: formatDate(c.date),
+            libelle: c.libelle,
+            categorie: CATEGORIE_LABELS[c.categorie] ?? c.categorie,
+            nature: NATURE_ECONOMIQUE_LABELS[natureEffective(c)].split(" (")[0],
+            pointDeVente: pdv,
+            type: c.recurrent ? "Récurrente" : "Ponctuelle",
+            montant: formatCurrency(c.montant),
+          };
+        })}
+        fichier="charges"
+        titre="Charges"
+      />
+
       <div className="table-shell">
         <table className="data">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Libellé</th>
-              <th>Catégorie</th>
-              <th>Nature</th>
-              <th>Point de vente</th>
-              <th>Type</th>
-              <th>Montant</th>
+              <ThCol id="date" show={visible}>Date</ThCol>
+              <ThCol id="libelle" show={visible}>Libellé</ThCol>
+              <ThCol id="categorie" show={visible}>Catégorie</ThCol>
+              <ThCol id="nature" show={visible}>Nature</ThCol>
+              <ThCol id="pointDeVente" show={visible}>Point de vente</ThCol>
+              <ThCol id="type" show={visible}>Type</ThCol>
+              <ThCol id="montant" show={visible}>Montant</ThCol>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={colSpan()} className="text-muted">
                   Aucune charge. Ajoutez loyer, salaires, emballage…
                 </td>
               </tr>
@@ -378,34 +403,34 @@ export default function ChargesPage() {
                 const nature = natureEffective(c);
                 return (
                   <tr key={c.id}>
-                    <td>{formatDate(c.date)}</td>
-                    <td className="font-medium">
+                    <TdCol id="date" show={visible}>{formatDate(c.date)}</TdCol>
+                    <TdCol id="libelle" show={visible} className="font-medium">
                       {c.libelle}
                       {c.note && (
                         <span className="mt-0.5 block text-xs font-normal text-muted">
                           {c.note}
                         </span>
                       )}
-                    </td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="categorie" show={visible}>
                       <span className="badge badge-sea">
                         {CATEGORIE_LABELS[c.categorie] ?? c.categorie}
                       </span>
-                    </td>
-                    <td className="text-xs text-muted">
+                    </TdCol>
+                    <TdCol id="nature" show={visible} className="text-xs text-muted">
                       {NATURE_ECONOMIQUE_LABELS[nature].split(" (")[0]}
-                    </td>
-                    <td>{pdv}</td>
-                    <td>
+                    </TdCol>
+                    <TdCol id="pointDeVente" show={visible}>{pdv}</TdCol>
+                    <TdCol id="type" show={visible}>
                       {c.recurrent ? (
                         <span className="badge badge-sand">Récurrente</span>
                       ) : (
                         <span className="badge badge-coral">Ponctuelle</span>
                       )}
-                    </td>
-                    <td className="font-semibold">
+                    </TdCol>
+                    <TdCol id="montant" show={visible} className="font-semibold">
                       {formatCurrency(c.montant)}
-                    </td>
+                    </TdCol>
                     <td>
                       <IconButton
                         label="Supprimer cette charge"

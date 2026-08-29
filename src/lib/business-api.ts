@@ -1,4 +1,6 @@
 import { apiFetch, ApiError } from "./api";
+import type { PrefsUserAffichage } from "./affichage-tableaux";
+import type { ParametresAlertes, SuiviAlertesUser } from "./alertes";
 import type { AppState } from "./types";
 
 export type BusinessResponse = {
@@ -60,6 +62,39 @@ export async function putBusinessState(
     }
     throw err;
   }
+}
+
+export async function putPreferencesAffichage(
+  prefs: PrefsUserAffichage,
+): Promise<BusinessResponse> {
+  const res = await apiFetch<BusinessResponse>("/business/preferences-affichage", {
+    method: "PUT",
+    body: JSON.stringify({ prefs }),
+  });
+  revision = res.revision;
+  return res;
+}
+
+export async function putParametresAlertes(
+  parametresAlertes: ParametresAlertes,
+): Promise<BusinessResponse> {
+  const res = await apiFetch<BusinessResponse>("/business/parametres-alertes", {
+    method: "PUT",
+    body: JSON.stringify({ parametresAlertes }),
+  });
+  revision = res.revision;
+  return res;
+}
+
+export async function putAlertesSuivi(
+  suivi: SuiviAlertesUser,
+): Promise<BusinessResponse> {
+  const res = await apiFetch<BusinessResponse>("/business/alertes-suivi", {
+    method: "PUT",
+    body: JSON.stringify({ suivi }),
+  });
+  revision = res.revision;
+  return res;
 }
 
 export async function resetBusinessState(
