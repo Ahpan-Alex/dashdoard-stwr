@@ -43,7 +43,6 @@ import {
   couleurStatutDocument,
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
-import { useAuthStore } from "@/lib/auth-store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { AlertesCloche } from "./alertes-cloche";
 import { useAlertes } from "@/lib/use-alertes";

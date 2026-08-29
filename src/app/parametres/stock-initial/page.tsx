@@ -64,7 +64,6 @@ export default function StockInitialPage() {
   const firstProduit = produits[0];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
-  const [form, setForm] = useState({
     pointDeVenteId: pointsDeVente[0]?.id ?? "",
     produitId: firstProduit?.id ?? "",
     quantite: "",
