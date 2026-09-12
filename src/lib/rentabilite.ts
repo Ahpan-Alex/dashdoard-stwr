@@ -1,6 +1,6 @@
 import {
+  htNetsLignesProduit,
   isLigneProduit,
-  montantLigneHT,
   totauxFacture,
 } from "./commercial";
 import {
@@ -349,13 +349,18 @@ export function margeParProduitFactures(
     }
     if (!inDateRange(f.date, range)) continue;
     const signe = f.type === "avoir" ? -1 : 1;
-    for (const l of f.lignes) {
-      if (!isLigneProduit(l) || !l.produitId) continue;
-      const prev = map.get(l.produitId) ?? { quantite: 0, ca: 0, cmv: 0 };
+    const lignes = f.lignes.filter((l) => isLigneProduit(l) && l.produitId);
+    const htsNets = htNetsLignesProduit(
+      lignes,
+      f.remiseGlobale ?? 0,
+      f.remiseGlobaleMode,
+    );
+    lignes.forEach((l, i) => {
+      const prev = map.get(l.produitId!) ?? { quantite: 0, ca: 0, cmv: 0 };
       prev.quantite += signe * l.quantite;
-      prev.ca += signe * montantLigneHT(l);
-      map.set(l.produitId, prev);
-    }
+      prev.ca += signe * (htsNets[i] ?? 0);
+      map.set(l.produitId!, prev);
+    });
   }
 
   for (const [produitId, prev] of map) {

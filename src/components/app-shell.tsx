@@ -3,6 +3,8 @@
 import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
+import { rebuildVentesDepuisFactures } from "@/lib/commercial";
+import { useStore } from "@/lib/store";
 import { HydrationGate } from "./hydration-gate";
 import { Sidebar } from "./sidebar";
 
@@ -88,6 +90,25 @@ function AuthSessionGuard({ children }: { children: ReactNode }) {
   return children;
 }
 
+/** Recalcule les ventes dérivées (CA net après remises) depuis les factures. */
+function VentesDeriveesSync() {
+  const factures = useStore((s) => s.factures);
+  useEffect(() => {
+    const rebuilt = rebuildVentesDepuisFactures(factures);
+    const current = useStore.getState().ventes;
+    const changed =
+      rebuilt.length !== current.length ||
+      rebuilt.some(
+        (v, i) =>
+          v.id !== current[i]?.id ||
+          v.prixUnitaire !== current[i]?.prixUnitaire ||
+          v.quantite !== current[i]?.quantite,
+      );
+    if (changed) useStore.setState({ ventes: rebuilt });
+  }, [factures]);
+  return null;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const publicAuth = isPublicAuthPath(pathname);
@@ -95,6 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <HydrationGate>
       <AuthSessionGuard>
+        {!publicAuth && <VentesDeriveesSync />}
         {publicAuth ? (
           <div className="min-h-screen w-full">{children}</div>
         ) : (

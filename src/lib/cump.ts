@@ -224,7 +224,11 @@ export function etatCumpProduit(
   return parcourirCump(evenementsCumpProduit(opts), catalogue);
 }
 
-/** CUMP du stock restant (après tous les mouvements, y compris inventaires validés). */
+/**
+ * CUMP du stock restant (après tous les mouvements, y compris inventaires validés).
+ * `"tous"` n’est pas un CUMP d’entreprise : moyenne des stocks restants par site,
+ * utilisée seulement pour certains totaux d’affichage.
+ */
 export function cumpStockRestant(
   produitId: string,
   pointDeVenteId: string | "tous",

@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { useStore } from "@/lib/store";
@@ -68,10 +67,6 @@ export default function ParametresBilanInitialPage() {
             <Link href="/compte-courant" className="btn btn-secondary">
               Compte courant
             </Link>
-            <Link href="/bilan" className="btn btn-secondary">
-              <FileSpreadsheet className="h-4 w-4" />
-              Voir le bilan
-            </Link>
           </div>
         }
       />
@@ -82,8 +77,8 @@ export default function ParametresBilanInitialPage() {
           Soldes d&apos;ouverture
         </h2>
         <p className="mb-4 text-xs text-muted">
-          Base du bilan instantané. Le détail des stocks se paramètre aussi
-          dans Stock initial.
+          Soldes d&apos;ouverture (immobilisations, stocks, créances, dettes).
+          Le détail des stocks se paramètre aussi dans Stock initial.
         </p>
         <form
           onSubmit={saveOuverture}

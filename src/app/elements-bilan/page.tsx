@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Plus, Settings, Trash2 } from "lucide-react";
+import { Plus, Settings, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import {
   totalImmobilisations,
@@ -79,10 +79,6 @@ export default function ElementsBilanPage() {
             >
               <Settings className="h-4 w-4" />
               Bilan initial
-            </Link>
-            <Link href="/bilan" className="btn btn-secondary">
-              <FileSpreadsheet className="h-4 w-4" />
-              Voir le bilan
             </Link>
             <Link href="/compte-courant" className="btn btn-secondary">
               Compte courant

@@ -2,6 +2,9 @@ import type { PreferencesAffichage } from "./affichage-tableaux";
 import type { AlertesSuivi, ParametresAlertes } from "./alertes";
 import type { ModeleDocument, PreferencesModeles } from "./document-templates";
 
+/** Rôle opérationnel d’un site. Un site peut cumuler les deux. */
+export type RoleSite = "entrepot" | "point_de_vente";
+
 export type PointDeVente = {
   id: string;
   nom: string;
@@ -9,6 +12,11 @@ export type PointDeVente = {
   ville: string;
   telephone: string;
   actif: boolean;
+  /**
+   * Entrepôt, point de vente, ou les deux.
+   * Absent / vide = point de vente (données historiques).
+   */
+  rolesSite?: RoleSite[];
   /** Objectif de CA mensuel (Ar) */
   objectifCAMensuel: number;
   /** Objectif de CA annuel (Ar) */
@@ -55,6 +63,13 @@ export type Produit = {
   seuilSurstock?: number;
   /** Si vrai, les lots d'entrée peuvent porter une date de péremption. */
   gerePeremption?: boolean;
+  /** Compte du plan associé (plusieurs produits peuvent partager le même). */
+  compteComptableId?: string;
+  /**
+   * TVA applicable sur ce produit.
+   * Absent : déduit du taux TVA catalogue (rétrocompatibilité).
+   */
+  taxable?: boolean;
 };
 
 export type TarifClient = {
@@ -97,11 +112,19 @@ export type EntreeStock = {
   date: string;
   note?: string;
   /** Ouverture d'inventaire (hors achats de la période). */
-  origine?: "achat" | "stock_initial" | "livraison_achat" | "retour_fournisseur";
+  origine?:
+    | "achat"
+    | "stock_initial"
+    | "livraison_achat"
+    | "retour_fournisseur"
+    | "transfert_sortie"
+    | "transfert_entree";
   /** Achat fournisseur d'origine (livraison ou retour). */
   achatId?: string;
   livraisonId?: string;
   avoirAchatId?: string;
+  /** Transfert inter-sites d'origine. */
+  transfertId?: string;
   /** Date limite de consommation du lot (si le produit gère la péremption). */
   datePeremption?: string;
 };
@@ -121,6 +144,10 @@ export type Vente = {
   pointDeVenteId: string;
   produitId: string;
   quantite: number;
+  /**
+   * PU HT. Pour une vente dérivée d'une facture : net après remises
+   * de ligne et quote-part de remise globale.
+   */
   prixUnitaire: number;
   date: string;
   clientId?: string;
@@ -194,6 +221,11 @@ export type Parametres = {
   assujettiTVA: boolean;
   regimeFiscal: RegimeFiscal;
   conditionsPaiementDefaut: string;
+  /**
+   * Bornes de la balance âgée (jours), entreprise entière.
+   * Ex. [30, 60, 90] → 0-30, 31-60, 61-90, plus de 90.
+   */
+  tranchesBalanceAgeeJours?: number[];
   /** Logo entreprise (data URL) affiché sur devis / commandes / factures */
   logoDataUrl?: string;
   /** Signature électronique (image data URL) pour les documents */
@@ -204,6 +236,11 @@ export type Parametres = {
   seuilMargePalier1Percent?: number;
   /** Seuil d'alerte taux marge Palier 2 / résultat net (%) */
   seuilMargePalier2Percent?: number;
+  /**
+   * Longueur unique des numéros de compte (6 à 9 chiffres).
+   * Fixée pour toute l'entreprise ; ne peut qu'augmenter ensuite.
+   */
+  longueurNumeroCompte?: number;
 };
 
 /**
@@ -299,10 +336,17 @@ export type Client = {
   adresse?: string;
   ville?: string;
   nif?: string;
+  stat?: string;
   type: "particulier" | "restaurant" | "hotel" | "grossiste" | "autre";
   actif: boolean;
   /** Interlocuteurs rattachés au client (fiche contacts). */
   contacts?: ClientContact[];
+  /** Délai de règlement négocié (jours). */
+  delaiPaiementJours?: number;
+  /** Remise habituelle (%). */
+  remiseHabituellePercent?: number;
+  /** Encours / plafond de crédit autorisé (Ar). 0 ou absent = pas de plafond. */
+  plafondCredit?: number;
 };
 
 export type Fournisseur = {
@@ -314,7 +358,35 @@ export type Fournisseur = {
   ville?: string;
   specialite?: string;
   nif?: string;
+  stat?: string;
   actif: boolean;
+  delaiPaiementJours?: number;
+  remiseHabituellePercent?: number;
+};
+
+export type RoleTiers = "client" | "fournisseur";
+
+/** Fiche unique : identité partagée, rôles Client et/ou Fournisseur. */
+export type Tiers = {
+  id: string;
+  code?: string;
+  nom: string;
+  telephone?: string;
+  email?: string;
+  adresse?: string;
+  ville?: string;
+  nif?: string;
+  stat?: string;
+  type?: Client["type"];
+  specialite?: string;
+  actif: boolean;
+  contacts?: ClientContact[];
+  roles: RoleTiers[];
+  delaiPaiementClientJours?: number;
+  remiseHabituelleClientPercent?: number;
+  plafondCredit?: number;
+  delaiPaiementFournisseurJours?: number;
+  remiseHabituelleFournisseurPercent?: number;
 };
 
 export type AchatStatut = "brouillon" | "valide" | "annule";
@@ -325,12 +397,23 @@ export type LivraisonAchatStatut =
   | "annulee";
 export type PaiementAchatStatut = "non_paye" | "partiel" | "paye";
 
+/** Sous-quantité d’une ligne d’achat affectée à un site. */
+export type AchatLigneRepartition = {
+  pointDeVenteId: string;
+  quantite: number;
+};
+
 export type AchatLigne = {
   id: string;
   produitId: string;
   quantite: number;
   /** Prix d'achat unitaire HT (Ar) */
   prixAchatUnitaire: number;
+  /**
+   * Répartition de la quantité sur un ou plusieurs sites.
+   * Absente = toute la quantité va sur `Achat.pointDeVenteId`.
+   */
+  repartitions?: AchatLigneRepartition[];
 };
 
 export type LivraisonAchatLigne = {
@@ -380,6 +463,7 @@ export type Achat = {
   id: string;
   numero: string;
   fournisseurId: string;
+  /** Site principal / défaut de répartition (rétrocompatibilité). */
   pointDeVenteId: string;
   /** Date de commande */
   date: string;
@@ -393,6 +477,35 @@ export type Achat = {
   avoirs: AvoirAchat[];
   note?: string;
   dateValidation?: string;
+};
+
+export type TransfertStockStatut =
+  | "demande"
+  | "expedie"
+  | "recu"
+  | "annule";
+
+export type TransfertStockLigne = {
+  produitId: string;
+  quantite: number;
+  /** CUMP du site source figé à l'expédition (achat interne). */
+  cumpSource?: number;
+};
+
+/** Mouvement de stock entre sites, après réception initiale. */
+export type TransfertStock = {
+  id: string;
+  numero: string;
+  siteSourceId: string;
+  siteDestinataireId: string;
+  dateDemande: string;
+  dateExpedition?: string;
+  dateReception?: string;
+  statut: TransfertStockStatut;
+  lignes: TransfertStockLigne[];
+  demandeParUserId?: string;
+  demandeParNom?: string;
+  note?: string;
 };
 
 export type TypeLigneDocument =
@@ -638,6 +751,8 @@ export type Facture = {
    * courants ; les factures validées ne sont plus impactées.
    */
   presentation?: SnapshotPresentationDocument;
+  /** Vente émise malgré un dépassement de plafond (rôle habilité). */
+  derogationCredit?: boolean;
 };
 
 export type JournalAuditAction =
@@ -765,8 +880,10 @@ export type ActiviteEntite =
   | "facture"
   | "acompte"
   | "inventaire"
+  | "transfert"
+  | "tiers"
   | "parametres"
-  | "bilan"
+  | "compte_comptable"
   | "compte_courant"
   | "autre";
 
@@ -777,6 +894,8 @@ export type ActiviteAction =
   | "suppression"
   | "annulation"
   | "validation"
+  | "expedition"
+  | "reception"
   | "activation"
   | "desactivation"
   | "autre";
@@ -796,6 +915,43 @@ export type JournalActivite = {
   detail?: string;
 };
 
+export type RoleCompteComptable =
+  | "general"
+  | "tva_deductible"
+  | "tva_collectee";
+
+export type CompteComptable = {
+  id: string;
+  numero: string;
+  libelle: string;
+  roleCompte?: RoleCompteComptable;
+};
+
+export type JournalEcriture = "vente" | "achat";
+
+export type SourceEcriture = "facture" | "achat" | "avoir_achat";
+
+export type LigneEcritureComptable = {
+  id: string;
+  compteId?: string;
+  numero: string;
+  libelle: string;
+  debit: number;
+  credit: number;
+};
+
+/** Écriture générée à la validation d'une facture d'achat ou de vente. */
+export type EcritureComptable = {
+  id: string;
+  date: string;
+  libelle: string;
+  piece: string;
+  journal: JournalEcriture;
+  sourceType: SourceEcriture;
+  sourceId: string;
+  lignes: LigneEcritureComptable[];
+};
+
 export type AppState = {
   parametres: Parametres;
   identiteNavigation: IdentiteNavigation;
@@ -813,6 +969,7 @@ export type AppState = {
   mouvementsCompteCourant: MouvementCompteCourant[];
   clients: Client[];
   fournisseurs: Fournisseur[];
+  tiers: Tiers[];
   devis: Devis[];
   commandes: Commande[];
   bonsDeLivraison: BonDeLivraison[];
@@ -820,6 +977,7 @@ export type AppState = {
   acomptes: Acompte[];
   transformations: TransformationCommerciale[];
   achats: Achat[];
+  transfertsStock: TransfertStock[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];
@@ -832,5 +990,7 @@ export type AppState = {
   rapportsFinJournee: RapportFinJournee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
+  comptesComptables: CompteComptable[];
+  ecrituresComptables: EcritureComptable[];
   pointDeVenteActifId: string | "tous";
 };

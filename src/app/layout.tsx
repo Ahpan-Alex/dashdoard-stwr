@@ -16,7 +16,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "STWR — Gestion Poissonnerie",
   description:
-    "Dashboard de gestion pour poissonnerie : achats, stocks, chiffre d'affaires et bilans multi-points de vente.",
+    "Dashboard de gestion pour poissonnerie : achats, stocks, chiffre d'affaires et écritures comptables multi-points de vente.",
 };
 
 export default function RootLayout({

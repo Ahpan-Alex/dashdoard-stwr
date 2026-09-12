@@ -452,9 +452,9 @@ export default function ChargesPage() {
       </div>
 
       <p className="mt-4 text-xs text-muted">
-        Salaires et charges sociales → charges de personnel du compte de
-        résultat. Les autres catégories → charges externes. La période du
-        compte de résultat filtre selon la date de chaque ligne.
+        Salaires et charges sociales sont classés en charges de personnel ;
+        les autres catégories en charges externes. La période affichée filtre
+        selon la date de chaque ligne.
       </p>
     </div>
   );

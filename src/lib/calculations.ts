@@ -23,27 +23,15 @@ import {
   subYears,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import { creancesClientsFactures, totalFacture } from "./commercial";
-import {
-  montantAchatsMarchandisesHT,
-  totalPaiementsFournisseurs,
-  dettesFournisseursAchats,
-} from "./achats";
-import {
-  fluxTresorerieCompteCourant,
-  soldeCompteCourant,
-} from "./compte-courant";
+import { montantAchatsMarchandisesHT } from "./achats";
 import { libelleProduit, prixVenteCatalogue } from "./produits";
 import { cumpStockRestant, etatCumpProduit, cmvSortiesPeriode, quantiteStockChronologique } from "./cump";
 import type {
   Achat,
-  BilanInitial,
   Charge,
   EntreeStock,
-  Facture,
   Immobilisation,
   Inventaire,
-  MouvementCompteCourant,
   PointDeVente,
   Produit,
   Vente,
@@ -51,7 +39,7 @@ import type {
 
 export type Periode = "semaine" | "mois" | "annee";
 
-/** Fourchette de dates libre pour bilan / compte de résultat. */
+/** Fourchette de dates libre (tableaux de bord, stocks, etc.). */
 export type DateRange = {
   debut: Date;
   fin: Date;
@@ -116,8 +104,9 @@ export function pointDeVenteSaisieDefaut(
   return pointsDeVente[0]?.id ?? "";
 }
 
+/** Montant HT net de la ligne de vente (après remises), en Ar. */
 export function montantVente(v: Vente) {
-  return v.quantite * v.prixUnitaire;
+  return Math.round(v.quantite * v.prixUnitaire);
 }
 
 export function montantAchat(e: EntreeStock) {
@@ -674,150 +663,6 @@ export function totalCharges(
     .reduce((s, c) => s + c.montant, 0);
 }
 
-export type LigneChargeCR = {
-  categorie: string;
-  label: string;
-  montant: number;
-  type: "personnel" | "externe";
-};
-
-export type CompteResultat = {
-  produitsExploitation: number;
-  achatsMarchandises: number;
-  variationStocks: number;
-  margeCommerciale: number;
-  chargesExternes: number;
-  chargesPersonnel: number;
-  detailCharges: LigneChargeCR[];
-  resultatExploitation: number;
-  resultatNet: number;
-};
-
-export const CATEGORIES_PERSONNEL = ["salaires", "charges_sociales"] as const;
-
-export function compteDeResultat(
-  ventes: Vente[],
-  entrees: EntreeStock[],
-  charges: Charge[],
-  produits: Produit[],
-  pointsDeVente: PointDeVente[],
-  pointDeVenteId: string | "tous",
-  periodeOrRange: Periode | DateRange = "annee",
-  inventaires: Inventaire[] = [],
-  achats: Achat[] = [],
-): CompteResultat {
-  const range =
-    typeof periodeOrRange === "string"
-      ? periodToRange(periodeOrRange)
-      : periodeOrRange;
-
-  const produitsExploitation = chiffreAffaires(
-    ventes,
-    pointDeVenteId,
-    range,
-  );
-  const achatsMarchandises = totalAchats(
-    entrees,
-    pointDeVenteId,
-    range,
-    new Date(),
-    achats,
-  );
-
-  const stocks = calculerStocks(
-    produits,
-    entrees,
-    ventes,
-    pointDeVenteId,
-    pointsDeVente,
-    range.fin,
-    inventaires,
-  );
-  const stockActuel = stocks.reduce((s, l) => s + l.valeurAchat, 0);
-
-  // Approximation : variation = stock actuel - achats hors période (simplifié)
-  // Pour un bilan instantané : stock final = valeur stock actuel
-  const variationStocks = stockActuel;
-
-  const margeCommerciale =
-    produitsExploitation - achatsMarchandises + variationStocks;
-
-  const chargesFiltrees = charges.filter((c) => {
-    if (pointDeVenteId === "tous") return true;
-    return c.pointDeVenteId === pointDeVenteId || c.pointDeVenteId === "tous";
-  }).filter((c) => inDateRange(c.date, range));
-
-  const isPersonnel = (categorie: string) =>
-    (CATEGORIES_PERSONNEL as readonly string[]).includes(categorie);
-
-  const chargesPersonnel = chargesFiltrees
-    .filter((c) => isPersonnel(c.categorie))
-    .reduce((s, c) => s + c.montant, 0);
-
-  const chargesExternes = chargesFiltrees
-    .filter((c) => !isPersonnel(c.categorie))
-    .reduce((s, c) => s + c.montant, 0);
-
-  const parCategorie = new Map<string, number>();
-  for (const c of chargesFiltrees) {
-    parCategorie.set(
-      c.categorie,
-      (parCategorie.get(c.categorie) ?? 0) + c.montant,
-    );
-  }
-
-  const detailCharges: LigneChargeCR[] = [...parCategorie.entries()]
-    .map(([categorie, montant]) => ({
-      categorie,
-      label: CATEGORIE_LABELS[categorie] ?? categorie,
-      montant,
-      type: isPersonnel(categorie) ? ("personnel" as const) : ("externe" as const),
-    }))
-    .sort((a, b) => b.montant - a.montant);
-
-  const resultatExploitation =
-    margeCommerciale - chargesExternes - chargesPersonnel;
-
-  return {
-    produitsExploitation,
-    achatsMarchandises,
-    variationStocks,
-    margeCommerciale,
-    chargesExternes,
-    chargesPersonnel,
-    detailCharges,
-    resultatExploitation,
-    resultatNet: resultatExploitation,
-  };
-}
-
-export type Bilan = {
-  actif: {
-    immobilisationsBrutes: number;
-    amortissements: number;
-    immobilisationsNettes: number;
-    stocks: number;
-    creancesClients: number;
-    disponibilites: number;
-    /** Solde débiteur du CCA (l'associé doit à l'entreprise). */
-    compteCourantDebiteur: number;
-    total: number;
-  };
-  passif: {
-    capital: number;
-    resultatReporte: number;
-    resultat: number;
-    emprunts: number;
-    dettesFournisseurs: number;
-    dettesSociales: number;
-    /** Solde créditeur du CCA (l'entreprise doit à l'associé). */
-    compteCourantCrediteur: number;
-    total: number;
-  };
-  /** Solde net du compte courant (positif = crédit, négatif = débit). */
-  compteCourantSolde: number;
-};
-
 /** Valeur nette d'une immobilisation (amortissement linéaire). */
 export function valeurNetteImmobilisation(
   immo: Immobilisation,
@@ -853,188 +698,6 @@ export function totalImmobilisations(
     },
     { brut: 0, amortissement: 0, net: 0 },
   );
-}
-
-export function bilanInstantane(
-  ventes: Vente[],
-  entrees: EntreeStock[],
-  charges: Charge[],
-  produits: Produit[],
-  pointsDeVente: PointDeVente[],
-  pointDeVenteId: string | "tous",
-  bilanInitial: BilanInitial,
-  immobilisations: Immobilisation[],
-  factures: Facture[] = [],
-  periodeOrRange: Periode | DateRange = "annee",
-  mouvementsCompteCourant: MouvementCompteCourant[] = [],
-  inventaires: Inventaire[] = [],
-  achats: Achat[] = [],
-): Bilan {
-  const range =
-    typeof periodeOrRange === "string"
-      ? periodToRange(periodeOrRange)
-      : periodeOrRange;
-
-  const stocks = calculerStocks(
-    produits,
-    entrees,
-    ventes,
-    pointDeVenteId,
-    pointsDeVente,
-    range.fin,
-    inventaires,
-  );
-  const valeurStocksCourants = stocks.reduce((s, l) => s + l.valeurAchat, 0);
-  // Stocks = max(stock courant calculé, ouverture) — on privilégie le stock réel courant
-  const valeurStocks = valeurStocksCourants;
-
-  const immosArretees = immobilisations.filter((i) =>
-    onOrBefore(i.dateAcquisition, range.fin),
-  );
-  const immos = totalImmobilisations(immosArretees, range.fin);
-  // Si aucune immo saisie, conserver le solde d'ouverture
-  const immobilisationsBrutes =
-    immosArretees.length > 0
-      ? immos.brut
-      : bilanInitial.immobilisations;
-  const amortissements = immosArretees.length > 0 ? immos.amortissement : 0;
-  const immobilisationsNettes =
-    immosArretees.length > 0 ? immos.net : bilanInitial.immobilisations;
-
-  const caVentes = chiffreAffaires(ventes, pointDeVenteId, range);
-  const caFacturesPeriode = factures
-    .filter((f) => f.statut !== "annulee" && f.statut !== "brouillon")
-    .filter(
-      (f) =>
-        pointDeVenteId === "tous" || f.pointDeVenteId === pointDeVenteId,
-    )
-    .filter((f) => inDateRange(f.date, range))
-    .reduce((s, f) => s + totalFacture(f), 0);
-
-  const caPeriode = caVentes + caFacturesPeriode;
-  const achatsPeriode = totalAchats(
-    entrees,
-    pointDeVenteId,
-    range,
-    new Date(),
-    achats,
-  );
-  const paiementsFournisseursPeriode = totalPaiementsFournisseurs(
-    achats,
-    pointDeVenteId,
-    range,
-  );
-  const achatsLegacyCash = filterByPos(entrees, pointDeVenteId)
-    .filter((e) => !e.achatId)
-    .filter((e) => e.origine !== "stock_initial")
-    .filter((e) => inDateRange(e.date, range))
-    .reduce((s, e) => s + montantAchat(e), 0);
-  const chargesPeriode = totalCharges(charges, pointDeVenteId, range);
-  const acquisitionsPeriode = immobilisations
-    .filter((i) => inDateRange(i.dateAcquisition, range))
-    .reduce((s, i) => s + i.valeurAcquisition, 0);
-
-  const facturesArretees = factures.filter((f) =>
-    onOrBefore(f.date, range.fin),
-  );
-  const encaissementsFactures = facturesArretees
-    .filter((f) => f.statut !== "annulee")
-    .filter(
-      (f) =>
-        pointDeVenteId === "tous" || f.pointDeVenteId === pointDeVenteId,
-    )
-    .reduce((s, f) => s + f.montantPaye, 0);
-
-  const fluxCca = fluxTresorerieCompteCourant(
-    mouvementsCompteCourant,
-    range.fin,
-  );
-  const soldeCca = soldeCompteCourant(
-    bilanInitial.compteCourantAssocie ?? 0,
-    mouvementsCompteCourant,
-    range.fin,
-  );
-  const compteCourantCrediteur = Math.max(0, soldeCca);
-  const compteCourantDebiteur = Math.max(0, -soldeCca);
-
-  const disponibilites = Math.max(
-    0,
-    bilanInitial.disponibilites +
-      caVentes +
-      encaissementsFactures -
-      paiementsFournisseursPeriode -
-      achatsLegacyCash -
-      chargesPeriode -
-      acquisitionsPeriode +
-      fluxCca,
-  );
-
-  const creancesClients =
-    bilanInitial.creancesClients +
-    creancesClientsFactures(facturesArretees);
-
-  const resultatExercice =
-    caPeriode - achatsPeriode - chargesPeriode - amortissements;
-
-  const dettesFournisseurs =
-    bilanInitial.dettesFournisseurs +
-    dettesFournisseursAchats(achats, pointDeVenteId, range.fin);
-  const dettesSociales =
-    bilanInitial.dettesSociales +
-    charges
-      .filter((c) => c.categorie === "charges_sociales")
-      .filter((c) => {
-        if (pointDeVenteId === "tous") return true;
-        return (
-          c.pointDeVenteId === pointDeVenteId || c.pointDeVenteId === "tous"
-        );
-      })
-      .filter((c) => inDateRange(c.date, range))
-      .reduce((s, c) => s + c.montant, 0);
-
-  const capital = bilanInitial.capital;
-  const resultatReporte = bilanInitial.resultatReporte;
-  const emprunts = bilanInitial.emprunts;
-
-  const actifTotal =
-    immobilisationsNettes +
-    valeurStocks +
-    creancesClients +
-    disponibilites +
-    compteCourantDebiteur;
-  const passifHorsEquilibre =
-    capital +
-    resultatReporte +
-    resultatExercice +
-    emprunts +
-    dettesFournisseurs +
-    dettesSociales +
-    compteCourantCrediteur;
-  const ajustement = actifTotal - passifHorsEquilibre;
-
-  return {
-    actif: {
-      immobilisationsBrutes,
-      amortissements,
-      immobilisationsNettes,
-      stocks: valeurStocks,
-      creancesClients,
-      disponibilites,
-      compteCourantDebiteur,
-      total: actifTotal,
-    },
-    passif: {
-      capital,
-      resultatReporte,
-      resultat: resultatExercice + ajustement,
-      emprunts,
-      dettesFournisseurs,
-      dettesSociales,
-      compteCourantCrediteur,
-      total: actifTotal,
-    },
-    compteCourantSolde: soldeCca,
-  };
 }
 
 export function caParJour(

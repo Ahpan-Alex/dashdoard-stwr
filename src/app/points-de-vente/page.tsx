@@ -5,16 +5,19 @@ import { MapPin, Settings } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { chiffreAffaires, calculerStocks } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import { libelleRolesSite } from "@/lib/sites";
 import { useStore } from "@/lib/store";
+import { useSitesVisibles } from "@/lib/use-sites-visibles";
 
 export default function PointsDeVentePage() {
   const { pointsDeVente, ventes, entrees, produits, inventaires } = useStore();
+  const { visibles } = useSitesVisibles();
 
   return (
     <div>
       <PageHeader
-        title="Points de vente"
-        description="Vue opérationnelle des emplacements. La création et le paramétrage se font dans Paramétrage."
+        title="Sites"
+        description="Entrepôts et points de vente. Stock et CUMP sont propres à chaque site. La création se fait dans Paramétrage."
         showPosSelector={false}
         actions={
           <Link
@@ -22,13 +25,13 @@ export default function PointsDeVentePage() {
             className="btn btn-primary"
           >
             <Settings className="h-4 w-4" />
-            Paramétrer les points de vente
+            Paramétrer les sites
           </Link>
         }
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {pointsDeVente.map((pdv) => {
+        {visibles.map((pdv) => {
           const caMois = chiffreAffaires(ventes, pdv.id, "mois");
           const caAnnee = chiffreAffaires(ventes, pdv.id, "annee");
           const stocks = calculerStocks(
@@ -57,8 +60,10 @@ export default function PointsDeVentePage() {
                       {pdv.nom}
                     </h3>
                     <p className="text-xs text-muted">
-                      {pdv.adresse}
-                      {pdv.ville ? `, ${pdv.ville}` : ""}
+                      {libelleRolesSite(pdv)}
+                      {pdv.adresse || pdv.ville
+                        ? ` · ${[pdv.adresse, pdv.ville].filter(Boolean).join(", ")}`
+                        : ""}
                     </p>
                   </div>
                 </div>

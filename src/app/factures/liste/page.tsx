@@ -46,6 +46,7 @@ import { presentationPourFacture } from "@/lib/document-presentation";
 import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { resoudreCreationFacture } from "@/lib/vente-credit";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { useModelePourType } from "@/lib/use-modele";
 import type { Facture, FactureStatut, FactureType, LigneDocument, ModeRemise } from "@/lib/types";
@@ -399,7 +400,7 @@ export default function ListeFacturesPage() {
       existing: factures.map((f) => f.numero),
     });
 
-    addFacture(
+    const resAvoir = addFacture(
       {
         numero,
         type: "avoir",
@@ -434,6 +435,10 @@ export default function ListeFacturesPage() {
         detail: `Avoir sur ${factureAvoir.numero}`,
       },
     );
+    if (!resAvoir.ok) {
+      alert(resAvoir.reason);
+      return;
+    }
 
     const fictifAvoir: Facture = {
       ...factureAvoir,
@@ -558,33 +563,36 @@ export default function ListeFacturesPage() {
       return;
     }
 
-    addFacture(
-      {
-        numero,
-        type: "standard",
-        clientId: f.clientId,
-        pointDeVenteId: f.pointDeVenteId,
-        date: f.date,
-        echeance: f.echeance,
-        statut: "validee",
-        montantPaye: 0,
-        tauxTVA: f.tauxTVA,
-        conditionsPaiement: f.conditionsPaiement,
-        note: f.note,
-        remiseGlobale: f.remiseGlobale,
-        remiseGlobaleMode: f.remiseGlobaleMode,
-        commandeId: f.commandeId,
-        devisId: f.devisId,
-        factureParenteId: f.id,
-        dateValidation: new Date().toISOString(),
-        acomptesDocument: [],
-        lignes: f.lignes.map((l, i) => ({ ...l, id: `conv-${i}` })),
-      },
-      {
-        action: "facture_validee",
-        detail: `Proforma ${f.numero} → ${numero}`,
-      },
+    const payloadConv = {
+      numero,
+      type: "standard" as const,
+      clientId: f.clientId,
+      pointDeVenteId: f.pointDeVenteId,
+      date: f.date,
+      echeance: f.echeance,
+      statut: "validee" as const,
+      montantPaye: 0,
+      tauxTVA: f.tauxTVA,
+      conditionsPaiement: f.conditionsPaiement,
+      note: f.note,
+      remiseGlobale: f.remiseGlobale,
+      remiseGlobaleMode: f.remiseGlobaleMode,
+      commandeId: f.commandeId,
+      devisId: f.devisId,
+      factureParenteId: f.id,
+      dateValidation: new Date().toISOString(),
+      acomptesDocument: [] as [],
+      lignes: f.lignes.map((l, i) => ({ ...l, id: `conv-${i}` })),
+    };
+    const auditConv = {
+      action: "facture_validee" as const,
+      detail: `Proforma ${f.numero} → ${numero}`,
+    };
+    const convId = resoudreCreationFacture(
+      addFacture(payloadConv, auditConv),
+      () => addFacture({ ...payloadConv, derogationCredit: true }, auditConv),
     );
+    if (!convId) return;
     alert(`Facture fiscale ${numero} créée depuis la proforma.`);
   }
 

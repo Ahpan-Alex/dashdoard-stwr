@@ -497,3 +497,34 @@ table.ca-report tbody tr.ca-report-row-active td {
   pointer-events: none;
 }
 
+/* Logo Négoo — wordmark et signature s'adaptent au fond (clair / sombre). */
+.negoo-logo {
+  --logo-wordmark: #1e5c4e;
+  --logo-tagline: #585858;
+}
+
+.negoo-logo[data-tone="onDark"] {
+  --logo-wordmark: #ffffff;
+  --logo-tagline: #c5d4cf;
+}
+
+@media (prefers-color-scheme: dark) {
+  .negoo-logo[data-tone="auto"] {
+    --logo-wordmark: #ffffff;
+    --logo-tagline: var(--sea-200);
+  }
+}
+
+:is(html.dark, [data-theme="dark"]) .negoo-logo[data-tone="auto"] {
+  --logo-wordmark: #ffffff;
+  --logo-tagline: var(--sea-200);
+}
+
+.negoo-logo-wordmark {
+  color: var(--logo-wordmark);
+}
+
+.negoo-logo-tagline {
+  color: var(--logo-tagline);
+}
+

@@ -9,7 +9,8 @@ import { RowCrudActions } from "@/components/row-crud-actions";
 import { motifLienPointDeVente } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
-import type { PointDeVente } from "@/lib/types";
+import type { PointDeVente, RoleSite } from "@/lib/types";
+import { libelleRolesSite, rolesSiteDuSite } from "@/lib/sites";
 
 const FORM_VIDE = {
   nom: "",
@@ -20,6 +21,7 @@ const FORM_VIDE = {
   objectifCAAnnuel: "",
   objectifMargeMensuel: "",
   objectifMargeAnnuel: "",
+  rolesSite: ["point_de_vente"] as RoleSite[],
 };
 
 function pdvVersForm(pdv: PointDeVente) {
@@ -32,6 +34,7 @@ function pdvVersForm(pdv: PointDeVente) {
     objectifCAAnnuel: String(pdv.objectifCAAnnuel || ""),
     objectifMargeMensuel: String(pdv.objectifMargeMensuel || ""),
     objectifMargeAnnuel: String(pdv.objectifMargeAnnuel || ""),
+    rolesSite: rolesSiteDuSite(pdv),
   };
 }
 
@@ -48,6 +51,7 @@ export default function ParametresPointsDeVentePage() {
     immobilisations,
     rapportsFinJournee,
     achats,
+    transfertsStock,
     addPointDeVente,
     updatePointDeVente,
     deletePointDeVente,
@@ -73,6 +77,7 @@ export default function ParametresPointsDeVentePage() {
       immobilisations,
       rapportsFinJournee,
       achats,
+      transfertsStock,
     };
   }
 
@@ -102,6 +107,10 @@ export default function ParametresPointsDeVentePage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.nom.trim()) return;
+    if (form.rolesSite.length === 0) {
+      setError("Choisissez au moins un rôle : entrepôt et/ou point de vente.");
+      return;
+    }
     setError(null);
     const payload = {
       nom: form.nom.trim(),
@@ -112,6 +121,7 @@ export default function ParametresPointsDeVentePage() {
       objectifCAAnnuel: Math.max(0, Number(form.objectifCAAnnuel) || 0),
       objectifMargeMensuel: Math.max(0, Number(form.objectifMargeMensuel) || 0),
       objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
+      rolesSite: form.rolesSite.length ? form.rolesSite : (["point_de_vente"] as RoleSite[]),
     };
     try {
       if (editingId) {
@@ -142,13 +152,13 @@ export default function ParametresPointsDeVentePage() {
   return (
     <div>
       <PageHeader
-        title="Points de vente"
-        description="Création, consultation, modification et suppression des étals, boutiques et emplacements."
+        title="Sites"
+        description="Entrepôts, points de vente, ou les deux. Chaque site a son propre stock et son propre CUMP — sans limite de nombre."
         showPosSelector={false}
         actions={
           <button className="btn btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
-            Ajouter un point de vente
+            Ajouter un site
           </button>
         }
       />
@@ -158,7 +168,7 @@ export default function ParametresPointsDeVentePage() {
       {open && (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
           <h2 className="mb-4 font-display text-lg font-semibold">
-            {editingId ? "Modifier le point de vente" : "Nouveau point de vente"}
+            {editingId ? "Modifier le site" : "Nouveau site"}
           </h2>
           <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
             <label className="block text-xs font-semibold text-muted">
@@ -168,9 +178,31 @@ export default function ParametresPointsDeVentePage() {
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
                 required
-                placeholder="Ex. Étal Halles Centrales"
+                placeholder="Ex. Entrepôt Tana / Boutique Analakely"
               />
             </label>
+            <div className="block text-xs font-semibold text-muted">
+              Rôle du site
+              <div className="mt-2 flex flex-wrap gap-4 text-sm font-normal text-ink">
+                {(["entrepot", "point_de_vente"] as const).map((role) => (
+                  <label key={role} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={form.rolesSite.includes(role)}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          rolesSite: e.target.checked
+                            ? [...form.rolesSite, role]
+                            : form.rolesSite.filter((r) => r !== role),
+                        })
+                      }
+                    />
+                    {role === "entrepot" ? "Entrepôt de stockage" : "Point de vente"}
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="block text-xs font-semibold text-muted">
               Téléphone
               <input
@@ -281,7 +313,8 @@ export default function ParametresPointsDeVentePage() {
         <table className="data">
           <thead>
             <tr>
-              <th>Point de vente</th>
+              <th>Site</th>
+              <th>Type</th>
               <th>Contact</th>
               <th>CA mois / année</th>
               <th>Marge mois / année</th>
@@ -305,6 +338,9 @@ export default function ParametresPointsDeVentePage() {
                         </p>
                       </div>
                     </div>
+                  </td>
+                  <td>
+                    <span className="badge badge-sea">{libelleRolesSite(pdv)}</span>
                   </td>
                   <td>{pdv.telephone || "—"}</td>
                   <td>
@@ -351,7 +387,7 @@ export default function ParametresPointsDeVentePage() {
       <FicheApercuModal
         open={Boolean(apercu)}
         title={apercu?.nom ?? ""}
-        subtitle="Fiche point de vente"
+        subtitle="Fiche site"
         onClose={() => setApercuId(null)}
         onEdit={
           apercu
@@ -361,6 +397,10 @@ export default function ParametresPointsDeVentePage() {
             : undefined
         }
       >
+        <LigneInfo
+          label="Type"
+          value={apercu ? libelleRolesSite(apercu) : "—"}
+        />
         <LigneInfo label="Adresse" value={apercu?.adresse} />
         <LigneInfo label="Ville" value={apercu?.ville} />
         <LigneInfo label="Téléphone" value={apercu?.telephone} />

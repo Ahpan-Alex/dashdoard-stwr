@@ -31,6 +31,7 @@ export function emptyAppState(): AppState {
       seuilMargePalier2Percent: 5,
       conditionsPaiementDefaut:
         "Paiement à 30 jours. Acompte de 30 % à la commande. Espèces, virement ou Mobile Money.",
+      tranchesBalanceAgeeJours: [30, 60, 90],
     },
     identiteNavigation: { nom: "" },
     modelesDocuments: createDefaultModeles(),
@@ -55,6 +56,7 @@ export function emptyAppState(): AppState {
     mouvementsCompteCourant: [],
     clients: [],
     fournisseurs: [],
+    tiers: [],
     devis: [],
     commandes: [],
     bonsDeLivraison: [],
@@ -62,6 +64,7 @@ export function emptyAppState(): AppState {
     acomptes: [],
     transformations: [],
     achats: [],
+    transfertsStock: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
     produits: [],
@@ -74,6 +77,8 @@ export function emptyAppState(): AppState {
     rapportsFinJournee: [],
     inventaires: [],
     journalActivites: [],
+    comptesComptables: [],
+    ecrituresComptables: [],
   };
 }
 
@@ -91,6 +96,7 @@ export function pickAppState(state: AppState): AppState {
     mouvementsCompteCourant: state.mouvementsCompteCourant ?? [],
     clients: state.clients,
     fournisseurs: state.fournisseurs,
+    tiers: state.tiers ?? [],
     devis: state.devis,
     commandes: state.commandes,
     bonsDeLivraison: state.bonsDeLivraison,
@@ -98,6 +104,7 @@ export function pickAppState(state: AppState): AppState {
     acomptes: state.acomptes,
     transformations: state.transformations ?? [],
     achats: state.achats ?? [],
+    transfertsStock: state.transfertsStock ?? [],
     pointsDeVente: state.pointsDeVente,
     categoriesProduits: state.categoriesProduits,
     produits: state.produits,
@@ -110,6 +117,8 @@ export function pickAppState(state: AppState): AppState {
     rapportsFinJournee: state.rapportsFinJournee ?? [],
     inventaires: state.inventaires ?? [],
     journalActivites: state.journalActivites ?? [],
+    comptesComptables: state.comptesComptables ?? [],
+    ecrituresComptables: state.ecrituresComptables ?? [],
     pointDeVenteActifId: state.pointDeVenteActifId,
   };
 }

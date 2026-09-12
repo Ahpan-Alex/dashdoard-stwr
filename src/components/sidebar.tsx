@@ -12,7 +12,6 @@ import {
   FileSpreadsheet,
   Landmark,
   Users,
-  Truck,
   FileText,
   ClipboardList,
   Package,
@@ -106,7 +105,6 @@ const sections: { title: string; links: NavLink[] }[] = [
           },
         ],
       },
-      { href: "/bilan", label: "Bilan & résultat", icon: FileSpreadsheet },
       { href: "/alertes", label: "Alertes", icon: Bell },
     ],
   },
@@ -115,6 +113,11 @@ const sections: { title: string; links: NavLink[] }[] = [
     links: [
       { href: "/achats", label: "Achats", icon: ShoppingCart },
       { href: "/stocks", label: "Stocks", icon: Boxes },
+      {
+        href: "/transferts",
+        label: "Transferts de stock",
+        icon: ArrowLeftRight,
+      },
       {
         href: "/inventaires",
         label: "Inventaires",
@@ -139,16 +142,15 @@ const sections: { title: string; links: NavLink[] }[] = [
         permission: "commercial.lire",
       },
       {
-        href: "/clients",
-        label: "Clients",
+        href: "/tiers",
+        label: "Tiers",
         icon: Users,
         permission: "clients.lire",
-      },
-      {
-        href: "/fournisseurs",
-        label: "Fournisseurs",
-        icon: Truck,
-        permission: "commercial.lire",
+        children: [
+          { href: "/tiers", label: "Tous les tiers", exact: true },
+          { href: "/clients", label: "Clients" },
+          { href: "/fournisseurs", label: "Fournisseurs" },
+        ],
       },
       {
         href: "/devis",
@@ -204,6 +206,29 @@ const sections: { title: string; links: NavLink[] }[] = [
     ],
   },
   {
+    title: "Comptabilité",
+    links: [
+      {
+        href: "/comptabilite/plan",
+        label: "Plan comptable",
+        icon: FileSpreadsheet,
+        permission: "comptabilite.lire",
+        matchPrefixes: ["/comptabilite"],
+        children: [
+          {
+            href: "/comptabilite/plan",
+            label: "Plan comptable",
+            exact: true,
+          },
+          {
+            href: "/comptabilite/ecritures",
+            label: "Écritures",
+          },
+        ],
+      },
+    ],
+  },
+  {
     title: "Patrimoine",
     links: [
       { href: "/elements-bilan", label: "Éléments du bilan", icon: Landmark },
@@ -212,7 +237,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         label: "Compte courant d'associé",
         icon: ArrowLeftRight,
       },
-      { href: "/points-de-vente", label: "Points de vente", icon: MapPin },
+      { href: "/points-de-vente", label: "Sites", icon: MapPin },
       {
         href: "/reglages",
         label: "Réglages",
@@ -249,7 +274,7 @@ const sections: { title: string; links: NavLink[] }[] = [
           },
           {
             href: "/parametres/points-de-vente",
-            label: "Points de vente",
+            label: "Sites",
           },
           {
             href: "/parametres/clients",

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, FileSpreadsheet, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plus, Trash2 } from "lucide-react";
 import { AlerteCompteCourant } from "@/components/alerte-compte-courant";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
@@ -106,10 +106,6 @@ export default function CompteCourantPage() {
                 <strong>pas bloqué</strong>.
               </p>
             </InfoButton>
-            <Link href="/bilan" className="btn btn-secondary">
-              <FileSpreadsheet className="h-4 w-4" />
-              Voir le bilan
-            </Link>
             <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4" />
               Mouvement

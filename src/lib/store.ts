@@ -52,6 +52,7 @@ import {
   nextNumero,
   rebuildVentesDepuisFactures,
   splitTTC,
+  totauxFacture,
 } from "./commercial";
 import {
   putAlertesSuivi,
@@ -67,6 +68,33 @@ import {
   creerSnapshotPresentation,
 } from "./document-presentation";
 import { emptyAppState, pickAppState } from "./empty-state";
+import { motifRepartitionInvalide, sitesAchat, utilisateurRattacheAuSite } from "./sites";
+import {
+  appliquerRoleUnique,
+  completerNumeroCompte,
+  compteParNumero,
+  longueurNumeroCompteEffective,
+  LONGUEUR_COMPTE_MAX,
+  LONGUEUR_COMPTE_MIN,
+  motifNumeroCompteInvalide,
+  parserCsvPlanComptable,
+  regenererEcrituresComptables,
+} from "./comptabilite";
+import {
+  assurerTiers,
+  controlerPlafondCredit,
+  factureImpacteEncours,
+  synchroniserApresTiers,
+  tiersDepuisClient,
+  tiersDepuisFournisseur,
+  upsertTiersDansListe,
+} from "./tiers";
+import {
+  figerCumpLignesTransfert,
+  nextNumeroTransfert,
+  regenererEntreesTransfert,
+  stockSuffisantPourTransfert,
+} from "./transferts";
 import { createId } from "./id";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
@@ -88,6 +116,8 @@ import type {
   Charge,
   CibleTransformation,
   Client,
+  CompteComptable,
+  EcritureComptable,
   Commande,
   CommandeStatut,
   Devis,
@@ -107,9 +137,13 @@ import type {
   Parametres,
   PointDeVente,
   Produit,
+  RoleCompteComptable,
   RapportFinJournee,
   SourceTransformation,
   TarifClient,
+  Tiers,
+  TransfertStock,
+  TransfertStockLigne,
   TransformationCommerciale,
   Vente,
 } from "./types";
@@ -123,6 +157,7 @@ type Store = {
   mouvementsCompteCourant: MouvementCompteCourant[];
   clients: Client[];
   fournisseurs: Fournisseur[];
+  tiers: Tiers[];
   devis: Devis[];
   commandes: Commande[];
   bonsDeLivraison: BonDeLivraison[];
@@ -130,6 +165,7 @@ type Store = {
   acomptes: Acompte[];
   transformations: TransformationCommerciale[];
   achats: Achat[];
+  transfertsStock: TransfertStock[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];
@@ -142,6 +178,8 @@ type Store = {
   rapportsFinJournee: RapportFinJournee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
+  comptesComptables: CompteComptable[];
+  ecrituresComptables: EcritureComptable[];
   identiteNavigation: IdentiteNavigation;
   preferencesAffichage: PreferencesAffichage;
   parametresAlertes: ParametresAlertes;
@@ -150,6 +188,28 @@ type Store = {
 
   setPointDeVenteActif: (id: string | "tous") => void;
   updateParametres: (data: Partial<Parametres>) => void;
+  definirLongueurNumeroCompte: (
+    longueur: number,
+  ) => { ok: true } | { ok: false; reason: string };
+  addCompteComptable: (data: {
+    numero: string;
+    libelle: string;
+    roleCompte?: RoleCompteComptable;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateCompteComptable: (
+    id: string,
+    data: {
+      numero?: string;
+      libelle?: string;
+      roleCompte?: RoleCompteComptable;
+    },
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteCompteComptable: (
+    id: string,
+  ) => { ok: true } | { ok: false; reason: string };
+  importerComptesComptablesCsv: (
+    texte: string,
+  ) => { ok: true; imported: number; skipped: number; errors: string[] } | { ok: false; reason: string };
   updateIdentiteNavigation: (
     data: Partial<IdentiteNavigation>,
   ) => { ok: true } | { ok: false; reason: string };
@@ -241,6 +301,23 @@ type Store = {
     reason?: string;
   };
 
+  demanderTransfert: (data: {
+    siteSourceId: string;
+    siteDestinataireId: string;
+    dateDemande: string;
+    lignes: TransfertStockLigne[];
+    note?: string;
+  }) => { ok: boolean; reason?: string; id?: string };
+  expedierTransfert: (
+    id: string,
+    dateExpedition?: string,
+  ) => { ok: boolean; reason?: string };
+  receptionnerTransfert: (
+    id: string,
+    dateReception?: string,
+  ) => { ok: boolean; reason?: string };
+  annulerTransfert: (id: string) => { ok: boolean; reason?: string };
+
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
 
@@ -293,6 +370,17 @@ type Store = {
   updateFournisseur: (id: string, data: Partial<Fournisseur>) => void;
   deleteFournisseur: (id: string) => { ok: boolean; reason?: string };
 
+  addTiers: (data: Omit<Tiers, "id">) => { ok: true; id: string } | { ok: false; reason: string };
+  updateTiers: (id: string, data: Partial<Tiers>) => { ok: boolean; reason?: string };
+  deleteTiers: (id: string) => { ok: boolean; reason?: string };
+  /** Accessible à tout utilisateur connecté (pas réservé à l'admin). */
+  updatePlafondCredit: (id: string, plafondCredit: number) => { ok: boolean; reason?: string };
+
+  controlerPlafondCreditClient: (
+    clientId: string,
+    opts?: { montantSupplementaire?: number; derogation?: boolean },
+  ) => ReturnType<typeof controlerPlafondCredit>;
+
   addDevis: (devis: Omit<Devis, "id">) => string;
   updateDevis: (id: string, data: Partial<Devis>) => void;
   deleteDevis: (id: string) => void;
@@ -324,7 +412,7 @@ type Store = {
   addFacture: (
     facture: Omit<Facture, "id">,
     audit?: { action: JournalAudit["action"]; detail?: string },
-  ) => string;
+  ) => { ok: true; id: string } | { ok: false; reason: string };
   updateFacture: (
     id: string,
     data: Partial<Facture>,
@@ -382,6 +470,44 @@ type Store = {
 
 function uid(prefix: string) {
   return createId(prefix);
+}
+
+function journalDepuis(state: {
+  factures: Facture[];
+  achats: Achat[];
+  produits: Produit[];
+  comptesComptables: CompteComptable[];
+  parametres: Parametres;
+  clients: Client[];
+  fournisseurs: Fournisseur[];
+}): EcritureComptable[] {
+  return regenererEcrituresComptables({
+    factures: state.factures,
+    achats: state.achats,
+    produits: state.produits,
+    comptesComptables: state.comptesComptables ?? [],
+    parametres: state.parametres,
+    clients: state.clients,
+    fournisseurs: state.fournisseurs,
+  });
+}
+
+function avecJournal<T extends Record<string, unknown>>(
+  state: {
+    factures: Facture[];
+    achats: Achat[];
+    produits: Produit[];
+    comptesComptables: CompteComptable[];
+    parametres: Parametres;
+    clients: Client[];
+    fournisseurs: Fournisseur[];
+  },
+  patch: T,
+): T & { ecrituresComptables: EcritureComptable[] } {
+  return {
+    ...patch,
+    ecrituresComptables: journalDepuis({ ...state, ...patch }),
+  };
 }
 
 function ecrirePrefsTable(
@@ -451,28 +577,56 @@ function regenererEntreesAchat(
   const gen = entreesDepuisAchat(achat, produits, fournisseurNom).map((e) => ({
     ...e,
     id: e.livraisonId
-      ? `ent-liv-${e.livraisonId}-${e.produitId}`
-      : `ent-avr-${e.avoirAchatId}-${e.produitId}`,
+      ? `ent-liv-${e.livraisonId}-${e.produitId}-${e.pointDeVenteId}`
+      : `ent-avr-${e.avoirAchatId}-${e.produitId}-${e.pointDeVenteId}`,
   }));
   return [...gen, ...hors];
+}
+
+function syncTiersState(state: {
+  clients: Client[];
+  fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
+}) {
+  const tiers = assurerTiers({
+    clients: state.clients,
+    fournisseurs: state.fournisseurs,
+    tiers: state.tiers ?? [],
+  });
+  return { tiers, ...synchroniserApresTiers(tiers) };
+}
+
+function utilisateurCourantPeutAgirSurSite(siteId: string) {
+  const auth = useAuthStore.getState();
+  const user = auth.currentUser();
+  return utilisateurRattacheAuSite(
+    siteId,
+    user?.pointDeVenteIds,
+    auth.hasPermission("sites.vue_globale"),
+  );
 }
 
 function stockDevientNegatif(
   entrees: EntreeStock[],
   ventes: Vente[],
   inventaires: Inventaire[],
-  pointDeVenteId: string,
+  pointDeVenteIds: string | string[],
   produitIds: string[],
 ) {
-  for (const produitId of produitIds) {
-    const q = quantiteStockChronologique({
-      produitId,
-      pointDeVenteId,
-      entrees,
-      ventes,
-      inventaires,
-    });
-    if (q < -1e-9) return true;
+  const sites = Array.isArray(pointDeVenteIds)
+    ? pointDeVenteIds
+    : [pointDeVenteIds];
+  for (const pointDeVenteId of sites) {
+    for (const produitId of produitIds) {
+      const q = quantiteStockChronologique({
+        produitId,
+        pointDeVenteId,
+        entrees,
+        ventes,
+        inventaires,
+      });
+      if (q < -1e-9) return true;
+    }
   }
   return false;
 }
@@ -591,14 +745,15 @@ export const useStore = create<Store>()((set, get) => ({
       setPointDeVenteActif: (id) => set({ pointDeVenteActifId: id }),
       updateParametres: (data) =>
         set((state) => {
+          const { longueurNumeroCompte: _longueur, ...reste } = data;
           const modele = modeleCourant(state, "facture");
           // Avant d'appliquer les nouveaux params : figer les factures fiscales
           // encore sans snapshot (état précédent = non impactées par la modif).
           const factures = state.factures.map((f) =>
             avecPresentationSiBesoin(f, state.parametres, modele),
           );
-          return {
-            parametres: { ...state.parametres, ...data },
+          return avecJournal(state, {
+            parametres: { ...state.parametres, ...reste },
             factures,
             journalActivites: [
               entreeActivite("modification", "parametres", {
@@ -606,8 +761,238 @@ export const useStore = create<Store>()((set, get) => ({
               }),
               ...state.journalActivites,
             ],
-          };
+          });
         }),
+      definirLongueurNumeroCompte: (longueur) => {
+        const n = Math.round(longueur);
+        if (n < LONGUEUR_COMPTE_MIN || n > LONGUEUR_COMPTE_MAX) {
+          return {
+            ok: false as const,
+            reason: `La longueur doit être entre ${LONGUEUR_COMPTE_MIN} et ${LONGUEUR_COMPTE_MAX} chiffres.`,
+          };
+        }
+        const current = longueurNumeroCompteEffective(get().parametres);
+        if (current != null && n < current) {
+          return {
+            ok: false as const,
+            reason:
+              "La longueur des numéros de compte ne peut qu'augmenter, jamais diminuer.",
+          };
+        }
+        if (current === n) return { ok: true as const };
+        set((state) => {
+          const comptes =
+            current == null
+              ? state.comptesComptables
+              : state.comptesComptables.map((c) => ({
+                  ...c,
+                  numero: completerNumeroCompte(c.numero, n),
+                }));
+          return avecJournal(state, {
+            parametres: { ...state.parametres, longueurNumeroCompte: n },
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("modification", "compte_comptable", {
+                libelle: `Longueur des numéros : ${n} chiffres`,
+              }),
+              ...state.journalActivites,
+            ],
+          });
+        });
+        return { ok: true as const };
+      },
+      addCompteComptable: (data) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Seul un administrateur ou un comptable peut créer un compte.",
+          };
+        }
+        const longueur = longueurNumeroCompteEffective(get().parametres);
+        const motif = motifNumeroCompteInvalide(data.numero, longueur);
+        if (motif || longueur == null) {
+          return { ok: false as const, reason: motif ?? "Longueur non définie." };
+        }
+        const libelle = data.libelle.trim();
+        if (!libelle) {
+          return { ok: false as const, reason: "Le libellé est obligatoire." };
+        }
+        if (compteParNumero(get().comptesComptables, data.numero)) {
+          return {
+            ok: false as const,
+            reason: "Un compte porte déjà ce numéro.",
+          };
+        }
+        const id = uid("cpt");
+        const numero = completerNumeroCompte(data.numero, longueur);
+        set((state) => {
+          const nouveau: CompteComptable = {
+            id,
+            numero,
+            libelle,
+            roleCompte:
+              data.roleCompte && data.roleCompte !== "general"
+                ? data.roleCompte
+                : undefined,
+          };
+          const comptes = appliquerRoleUnique(
+            [nouveau, ...state.comptesComptables],
+            id,
+            nouveau.roleCompte,
+          );
+          return avecJournal(state, {
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("creation", "compte_comptable", {
+                entiteId: id,
+                libelle: `${numero} ${libelle}`,
+              }),
+              ...state.journalActivites,
+            ],
+          });
+        });
+        return { ok: true as const, id };
+      },
+      updateCompteComptable: (id, data) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Modification du plan réservée à l'administrateur ou au comptable.",
+          };
+        }
+        const prev = get().comptesComptables.find((c) => c.id === id);
+        if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        const longueur = longueurNumeroCompteEffective(get().parametres);
+        const numeroRaw = data.numero ?? prev.numero;
+        const motif = motifNumeroCompteInvalide(numeroRaw, longueur);
+        if (motif || longueur == null) {
+          return { ok: false as const, reason: motif ?? "Longueur non définie." };
+        }
+        if (compteParNumero(get().comptesComptables, numeroRaw, id)) {
+          return {
+            ok: false as const,
+            reason: "Un compte porte déjà ce numéro.",
+          };
+        }
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        if (!libelle) {
+          return { ok: false as const, reason: "Le libellé est obligatoire." };
+        }
+        const numero = completerNumeroCompte(numeroRaw, longueur);
+        set((state) => {
+          const role =
+            data.roleCompte !== undefined ? data.roleCompte : prev.roleCompte;
+          const comptes = appliquerRoleUnique(
+            state.comptesComptables.map((c) =>
+              c.id === id ? { ...c, numero, libelle, roleCompte: role } : c,
+            ),
+            id,
+            role,
+          );
+          return avecJournal(state, {
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("modification", "compte_comptable", {
+                entiteId: id,
+                libelle: `${numero} ${libelle}`,
+              }),
+              ...state.journalActivites,
+            ],
+          });
+        });
+        return { ok: true as const };
+      },
+      deleteCompteComptable: (id) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Suppression du plan réservée à l'administrateur ou au comptable.",
+          };
+        }
+        const prev = get().comptesComptables.find((c) => c.id === id);
+        if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        set((state) =>
+          avecJournal(state, {
+            comptesComptables: state.comptesComptables.filter((c) => c.id !== id),
+            produits: state.produits.map((p) =>
+              p.compteComptableId === id
+                ? { ...p, compteComptableId: undefined }
+                : p,
+            ),
+            journalActivites: [
+              entreeActivite("suppression", "compte_comptable", {
+                entiteId: id,
+                libelle: `${prev.numero} ${prev.libelle}`,
+              }),
+              ...state.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true as const };
+      },
+      importerComptesComptablesCsv: (texte) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "L'import du plan est réservé à l'administrateur ou au comptable.",
+          };
+        }
+        const longueur = longueurNumeroCompteEffective(get().parametres);
+        if (longueur == null) {
+          return {
+            ok: false as const,
+            reason: "Fixez d'abord la longueur des numéros de compte.",
+          };
+        }
+        const { lignes, erreurs } = parserCsvPlanComptable(texte);
+        if (lignes.length === 0 && erreurs.length > 0) {
+          return { ok: false as const, reason: erreurs[0] ?? "CSV invalide." };
+        }
+        let imported = 0;
+        let skipped = 0;
+        const errors = [...erreurs];
+        set((state) => {
+          let comptes = [...state.comptesComptables];
+          for (const row of lignes) {
+            const motif = motifNumeroCompteInvalide(row.numero, longueur);
+            if (motif) {
+              errors.push(`${row.numero} : ${motif}`);
+              skipped += 1;
+              continue;
+            }
+            const numero = completerNumeroCompte(row.numero, longueur);
+            if (compteParNumero(comptes, numero)) {
+              errors.push(`${numero} : numéro déjà existant.`);
+              skipped += 1;
+              continue;
+            }
+            comptes = [
+              {
+                id: uid("cpt"),
+                numero,
+                libelle: row.libelle,
+              },
+              ...comptes,
+            ];
+            imported += 1;
+          }
+          if (imported === 0) return state;
+          return avecJournal(state, {
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("creation", "compte_comptable", {
+                libelle: `Import CSV : ${imported} compte(s)`,
+              }),
+              ...state.journalActivites,
+            ],
+          });
+        });
+        return { ok: true as const, imported, skipped, errors };
+      },
       updateIdentiteNavigation: (data) => {
         const auth = useAuthStore.getState();
         if (!auth.hasPermission("navigation.identite")) {
@@ -814,6 +1199,7 @@ export const useStore = create<Store>()((set, get) => ({
           immobilisations: state.immobilisations,
           rapportsFinJournee: state.rapportsFinJournee,
           achats: state.achats,
+          transfertsStock: state.transfertsStock,
         });
         if (motif) return { ok: false, reason: motif };
         set((s) => ({
@@ -931,6 +1317,10 @@ export const useStore = create<Store>()((set, get) => ({
             reason: "Des livraisons existent déjà : les lignes de commande ne peuvent plus être modifiées.",
           };
         }
+        if (data.lignes) {
+          const motifRep = motifRepartitionInvalide(data.lignes);
+          if (motifRep) return { ok: false, reason: motifRep };
+        }
         set((s) => ({
           achats: s.achats.map((a) => (a.id === id ? { ...a, ...data } : a)),
           journalActivites: [
@@ -952,24 +1342,28 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.lignes.length === 0) {
           return { ok: false, reason: "Ajoutez au moins un article." };
         }
-        set((s) => ({
-          achats: s.achats.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  statut: "valide" as const,
-                  dateValidation: new Date().toISOString(),
-                }
-              : a,
-          ),
-          journalActivites: [
-            entreeActivite("validation", "achat", {
-              entiteId: id,
-              libelle: prev.numero,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        const motifRep = motifRepartitionInvalide(prev.lignes);
+        if (motifRep) return { ok: false, reason: motifRep };
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) =>
+              a.id === id
+                ? {
+                    ...a,
+                    statut: "valide" as const,
+                    dateValidation: new Date().toISOString(),
+                  }
+                : a,
+            ),
+            journalActivites: [
+              entreeActivite("validation", "achat", {
+                entiteId: id,
+                libelle: prev.numero,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       annulerAchat: (id) => {
@@ -994,7 +1388,8 @@ export const useStore = create<Store>()((set, get) => ({
           statut: "annule",
           livraisons: prev.livraisons.map((l) => ({ ...l, statut: "annulee" as const })),
         };
-        set((s) => ({
+        set((s) =>
+          avecJournal(s, {
           achats: s.achats.map((a) => (a.id === id ? next : a)),
           entrees: regenererEntreesAchat(
             s.entrees,
@@ -1025,17 +1420,19 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.livraisons.some((l) => l.statut !== "annulee" && l.lignes.some((x) => x.quantiteLivree > 0))) {
           return { ok: false, reason: "Des réceptions existent encore." };
         }
-        set((s) => ({
-          achats: s.achats.filter((a) => a.id !== id),
-          entrees: s.entrees.filter((e) => e.achatId !== id),
-          journalActivites: [
-            entreeActivite("suppression", "achat", {
-              entiteId: id,
-              libelle: prev.numero,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.filter((a) => a.id !== id),
+            entrees: s.entrees.filter((e) => e.achatId !== id),
+            journalActivites: [
+              entreeActivite("suppression", "achat", {
+                entiteId: id,
+                libelle: prev.numero,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       ajouterLivraisonAchat: (achatId, data) => {
@@ -1166,7 +1563,7 @@ export const useStore = create<Store>()((set, get) => ({
             entrees,
             state.ventes,
             state.inventaires,
-            prev.pointDeVenteId,
+            sitesAchat(prev),
             produitIds,
           )
         ) {
@@ -1311,7 +1708,7 @@ export const useStore = create<Store>()((set, get) => ({
             entrees,
             state.ventes,
             state.inventaires,
-            prev.pointDeVenteId,
+            sitesAchat(prev),
             produitIds,
           )
         ) {
@@ -1320,18 +1717,20 @@ export const useStore = create<Store>()((set, get) => ({
             reason: "Stock insuffisant pour ce retour fournisseur.",
           };
         }
-        set((s) => ({
-          achats: s.achats.map((a) => (a.id === achatId ? next : a)),
-          entrees,
-          journalActivites: [
-            entreeActivite("validation", "achat", {
-              entiteId: achatId,
-              libelle: `${prev.numero} · ${avPrev.numero}`,
-              detail: "Avoir fournisseur validé",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) => (a.id === achatId ? next : a)),
+            entrees,
+            journalActivites: [
+              entreeActivite("validation", "achat", {
+                entiteId: achatId,
+                libelle: `${prev.numero} · ${avPrev.numero}`,
+                detail: "Avoir fournisseur validé",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       supprimerAvoirAchat: (achatId, avoirId) => {
@@ -1358,14 +1757,15 @@ export const useStore = create<Store>()((set, get) => ({
               entrees,
               state.ventes,
               state.inventaires,
-              prev.pointDeVenteId,
+              sitesAchat(prev),
               produitIds,
             )
           ) {
             return { ok: false, reason: "Impossible de supprimer cet avoir." };
           }
         }
-        set((s) => ({
+        set((s) =>
+          avecJournal(s, {
           achats: s.achats.map((a) => (a.id === achatId ? next : a)),
           entrees,
           journalActivites: [
@@ -1373,6 +1773,204 @@ export const useStore = create<Store>()((set, get) => ({
               entiteId: achatId,
               libelle: `${prev.numero} · ${avPrev.numero}`,
               detail: "Avoir fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      demanderTransfert: (data) => {
+        if (data.siteSourceId === data.siteDestinataireId) {
+          return {
+            ok: false,
+            reason: "Le site source et le site destinataire doivent être distincts.",
+          };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(data.siteSourceId)) {
+          return {
+            ok: false,
+            reason: "Vous devez être rattaché au site source pour initier un transfert.",
+          };
+        }
+        const lignes = data.lignes.filter((l) => l.quantite > 0 && l.produitId);
+        if (lignes.length === 0) {
+          return { ok: false, reason: "Ajoutez au moins un article." };
+        }
+        const state = get();
+        const motifStock = stockSuffisantPourTransfert(
+          { siteSourceId: data.siteSourceId, lignes },
+          {
+            entrees: state.entrees,
+            ventes: state.ventes,
+            inventaires: state.inventaires,
+          },
+        );
+        if (motifStock) return { ok: false, reason: motifStock };
+        const actor = getActiviteActor();
+        const nouveau: TransfertStock = {
+          id: uid("trf"),
+          numero: nextNumeroTransfert(state.transfertsStock),
+          siteSourceId: data.siteSourceId,
+          siteDestinataireId: data.siteDestinataireId,
+          dateDemande: data.dateDemande,
+          statut: "demande",
+          lignes,
+          note: data.note,
+          demandeParUserId: actor.id,
+          demandeParNom: actor.nom,
+        };
+        set((s) => ({
+          transfertsStock: [nouveau, ...s.transfertsStock],
+          journalActivites: [
+            entreeActivite("creation", "transfert", {
+              entiteId: nouveau.id,
+              libelle: nouveau.numero,
+              detail: "Demande de transfert",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id: nouveau.id };
+      },
+
+      expedierTransfert: (id, dateExpedition) => {
+        const state = get();
+        const prev = state.transfertsStock.find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut !== "demande") {
+          return { ok: false, reason: "Seule une demande peut être expédiée." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.siteSourceId)) {
+          return {
+            ok: false,
+            reason: "Vous devez être rattaché au site source pour expédier.",
+          };
+        }
+        const motifStock = stockSuffisantPourTransfert(prev, {
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+        });
+        if (motifStock) return { ok: false, reason: motifStock };
+        const lignes = figerCumpLignesTransfert(prev.lignes, prev.siteSourceId, {
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+          produits: state.produits,
+          exclureTransfertId: prev.id,
+        });
+        const next: TransfertStock = {
+          ...prev,
+          statut: "expedie",
+          dateExpedition: dateExpedition ?? new Date().toISOString(),
+          lignes,
+        };
+        const entrees = regenererEntreesTransfert(
+          state.entrees,
+          next,
+          state.produits,
+        );
+        if (
+          stockDevientNegatif(
+            entrees,
+            state.ventes,
+            state.inventaires,
+            prev.siteSourceId,
+            lignes.map((l) => l.produitId),
+          )
+        ) {
+          return { ok: false, reason: "Stock insuffisant sur le site source." };
+        }
+        set((s) => ({
+          transfertsStock: s.transfertsStock.map((t) => (t.id === id ? next : t)),
+          entrees,
+          journalActivites: [
+            entreeActivite("expedition", "transfert", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      receptionnerTransfert: (id, dateReception) => {
+        const state = get();
+        const prev = state.transfertsStock.find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut !== "expedie") {
+          return { ok: false, reason: "Réception possible seulement après expédition." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.siteDestinataireId)) {
+          return {
+            ok: false,
+            reason: "Vous devez être rattaché au site destinataire pour réceptionner.",
+          };
+        }
+        const next: TransfertStock = {
+          ...prev,
+          statut: "recu",
+          dateReception: dateReception ?? new Date().toISOString(),
+        };
+        const entrees = regenererEntreesTransfert(
+          state.entrees,
+          next,
+          state.produits,
+        );
+        set((s) => ({
+          transfertsStock: s.transfertsStock.map((t) => (t.id === id ? next : t)),
+          entrees,
+          journalActivites: [
+            entreeActivite("reception", "transfert", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Entrée au CUMP du site source",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      annulerTransfert: (id) => {
+        const state = get();
+        const prev = state.transfertsStock.find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut === "annule") {
+          return { ok: false, reason: "Ce transfert est déjà annulé." };
+        }
+        const next: TransfertStock = { ...prev, statut: "annule" };
+        const entrees = regenererEntreesTransfert(
+          state.entrees,
+          next,
+          state.produits,
+        );
+        if (prev.statut === "recu") {
+          if (
+            stockDevientNegatif(
+              entrees,
+              state.ventes,
+              state.inventaires,
+              prev.siteDestinataireId,
+              prev.lignes.map((l) => l.produitId),
+            )
+          ) {
+            return {
+              ok: false,
+              reason:
+                "Impossible d'annuler : le stock du site destinataire serait négatif.",
+            };
+          }
+        }
+        set((s) => ({
+          transfertsStock: s.transfertsStock.map((t) => (t.id === id ? next : t)),
+          entrees,
+          journalActivites: [
+            entreeActivite("annulation", "transfert", {
+              entiteId: id,
+              libelle: prev.numero,
             }),
             ...s.journalActivites,
           ],
@@ -1528,7 +2126,7 @@ export const useStore = create<Store>()((set, get) => ({
               next.prixVenteGrosHT ?? 0,
             );
           }
-          return {
+          return avecJournal(state, {
             produits: state.produits.map((p) => (p.id === id ? next : p)),
             historiquesPrix: [...hist, ...state.historiquesPrix],
             journalActivites: [
@@ -1538,7 +2136,7 @@ export const useStore = create<Store>()((set, get) => ({
               }),
               ...state.journalActivites,
             ],
-          };
+          });
         }),
       desactiverProduit: (id) =>
         set((state) => {
@@ -1826,8 +2424,13 @@ export const useStore = create<Store>()((set, get) => ({
                 : nextCodeClient(state.clients),
             id: uid("cli"),
           };
-          return {
+          const sync = syncTiersState({
             clients: [...state.clients, nouveau],
+            fournisseurs: state.fournisseurs,
+            tiers: upsertTiersDansListe(state.tiers ?? [], tiersDepuisClient(nouveau)),
+          });
+          return {
+            ...sync,
             journalActivites: [
               entreeActivite("creation", "client", {
                 entiteId: nouveau.id,
@@ -1846,10 +2449,16 @@ export const useStore = create<Store>()((set, get) => ({
                 ? "Réactivation"
                 : "Désactivation"
               : undefined;
+          const clients = state.clients.map((c) =>
+            c.id === id ? { ...c, ...data } : c,
+          );
+          const sync = syncTiersState({
+            clients,
+            fournisseurs: state.fournisseurs,
+            tiers: state.tiers,
+          });
           return {
-            clients: state.clients.map((c) =>
-              c.id === id ? { ...c, ...data } : c,
-            ),
+            ...sync,
             journalActivites: [
               entreeActivite("modification", "client", {
                 entiteId: id,
@@ -1875,24 +2484,47 @@ export const useStore = create<Store>()((set, get) => ({
         if (motif) {
           return { ok: false, reason: motif };
         }
-        set((s) => ({
-          clients: s.clients.filter((c) => c.id !== id),
-          journalActivites: [
-            entreeActivite("suppression", "client", {
-              entiteId: id,
-              libelle: client.nom,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) => {
+          const clients = s.clients.filter((c) => c.id !== id);
+          const tiers = (s.tiers ?? [])
+            .map((t) =>
+              t.id === id
+                ? { ...t, roles: t.roles.filter((r) => r !== "client") }
+                : t,
+            )
+            .filter((t) => t.roles.length > 0);
+          const sync = syncTiersState({
+            clients,
+            fournisseurs: s.fournisseurs,
+            tiers,
+          });
+          return {
+            ...sync,
+            journalActivites: [
+              entreeActivite("suppression", "client", {
+                entiteId: id,
+                libelle: client.nom,
+              }),
+              ...s.journalActivites,
+            ],
+          };
+        });
         return { ok: true };
       },
 
       addFournisseur: (frn) =>
         set((state) => {
           const nouveau = { ...frn, id: uid("frn") };
-          return {
+          const sync = syncTiersState({
+            clients: state.clients,
             fournisseurs: [...state.fournisseurs, nouveau],
+            tiers: upsertTiersDansListe(
+              state.tiers ?? [],
+              tiersDepuisFournisseur(nouveau),
+            ),
+          });
+          return {
+            ...sync,
             journalActivites: [
               entreeActivite("creation", "fournisseur", {
                 entiteId: nouveau.id,
@@ -1905,10 +2537,16 @@ export const useStore = create<Store>()((set, get) => ({
       updateFournisseur: (id, data) =>
         set((state) => {
           const prev = state.fournisseurs.find((f) => f.id === id);
+          const fournisseurs = state.fournisseurs.map((f) =>
+            f.id === id ? { ...f, ...data } : f,
+          );
+          const sync = syncTiersState({
+            clients: state.clients,
+            fournisseurs,
+            tiers: state.tiers,
+          });
           return {
-            fournisseurs: state.fournisseurs.map((f) =>
-              f.id === id ? { ...f, ...data } : f,
-            ),
+            ...sync,
             journalActivites: [
               entreeActivite("modification", "fournisseur", {
                 entiteId: id,
@@ -1929,17 +2567,191 @@ export const useStore = create<Store>()((set, get) => ({
               "Fournisseur déjà utilisé sur des entrées de stock. Désactivez-le pour préserver l'historique.",
           };
         }
+        set((s) => {
+          const fournisseurs = s.fournisseurs.filter((f) => f.id !== id);
+          const tiers = (s.tiers ?? [])
+            .map((t) =>
+              t.id === id
+                ? { ...t, roles: t.roles.filter((r) => r !== "fournisseur") }
+                : t,
+            )
+            .filter((t) => t.roles.length > 0);
+          const sync = syncTiersState({
+            clients: s.clients,
+            fournisseurs,
+            tiers,
+          });
+          return {
+            ...sync,
+            journalActivites: [
+              entreeActivite("suppression", "fournisseur", {
+                entiteId: id,
+                libelle: frn.nom,
+              }),
+              ...s.journalActivites,
+            ],
+          };
+        });
+        return { ok: true };
+      },
+
+      addTiers: (data) => {
+        const roles = (data.roles ?? []).filter(
+          (r) => r === "client" || r === "fournisseur",
+        );
+        if (roles.length === 0) {
+          return { ok: false, reason: "Cochez au moins un rôle : Client ou Fournisseur." };
+        }
+        if (!data.nom.trim()) {
+          return { ok: false, reason: "Le nom du tiers est obligatoire." };
+        }
+        const state = get();
+        const id = uid(roles.includes("client") ? "cli" : "frn");
+        const nouveau: Tiers = {
+          ...data,
+          id,
+          nom: data.nom.trim(),
+          roles,
+          code:
+            data.code?.trim() ||
+            (roles.includes("client") ? nextCodeClient(state.clients) : undefined),
+          type: data.type ?? "autre",
+        };
+        const sync = syncTiersState({
+          clients: state.clients,
+          fournisseurs: state.fournisseurs,
+          tiers: upsertTiersDansListe(state.tiers ?? [], nouveau),
+        });
         set((s) => ({
-          fournisseurs: s.fournisseurs.filter((f) => f.id !== id),
+          ...sync,
           journalActivites: [
-            entreeActivite("suppression", "fournisseur", {
+            entreeActivite("creation", "tiers", {
               entiteId: id,
-              libelle: frn.nom,
+              libelle: nouveau.nom,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id };
+      },
+
+      updateTiers: (id, data) => {
+        const state = get();
+        const prev = (state.tiers ?? []).find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Tiers introuvable." };
+        const roles = data.roles
+          ? data.roles.filter((r) => r === "client" || r === "fournisseur")
+          : prev.roles;
+        if (roles.length === 0) {
+          return { ok: false, reason: "Cochez au moins un rôle : Client ou Fournisseur." };
+        }
+        if (prev.roles.includes("client") && !roles.includes("client")) {
+          const motif = motifLienClient(id, {
+            factures: state.factures,
+            devis: state.devis,
+            commandes: state.commandes,
+            bonsDeLivraison: state.bonsDeLivraison,
+            acomptes: state.acomptes,
+            tarifsClients: state.tarifsClients,
+          });
+          if (motif) return { ok: false, reason: motif };
+        }
+        if (prev.roles.includes("fournisseur") && !roles.includes("fournisseur")) {
+          if (
+            fournisseurEstReference(
+              id,
+              prev.nom,
+              state.entrees,
+              state.achats,
+            )
+          ) {
+            return {
+              ok: false,
+              reason:
+                "Ce tiers a des achats ou des entrées fournisseur. Conservez le rôle Fournisseur.",
+            };
+          }
+        }
+        const next: Tiers = { ...prev, ...data, id, roles };
+        const sync = syncTiersState({
+          clients: state.clients,
+          fournisseurs: state.fournisseurs,
+          tiers: upsertTiersDansListe(state.tiers ?? [], next),
+        });
+        set((s) => ({
+          ...sync,
+          journalActivites: [
+            entreeActivite("modification", "tiers", {
+              entiteId: id,
+              libelle: next.nom,
             }),
             ...s.journalActivites,
           ],
         }));
         return { ok: true };
+      },
+
+      deleteTiers: (id) => {
+        const state = get();
+        const prev = (state.tiers ?? []).find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Tiers introuvable." };
+        if (prev.roles.includes("client")) {
+          const motif = motifLienClient(id, {
+            factures: state.factures,
+            devis: state.devis,
+            commandes: state.commandes,
+            bonsDeLivraison: state.bonsDeLivraison,
+            acomptes: state.acomptes,
+            tarifsClients: state.tarifsClients,
+          });
+          if (motif) return { ok: false, reason: motif };
+        }
+        if (
+          prev.roles.includes("fournisseur") &&
+          fournisseurEstReference(id, prev.nom, state.entrees, state.achats)
+        ) {
+          return {
+            ok: false,
+            reason:
+              "Tiers déjà utilisé sur des achats. Désactivez-le pour préserver l'historique.",
+          };
+        }
+        const tiers = (state.tiers ?? []).filter((t) => t.id !== id);
+        const sync = syncTiersState({
+          clients: state.clients.filter((c) => c.id !== id),
+          fournisseurs: state.fournisseurs.filter((f) => f.id !== id),
+          tiers,
+        });
+        set((s) => ({
+          ...sync,
+          journalActivites: [
+            entreeActivite("suppression", "tiers", {
+              entiteId: id,
+              libelle: prev.nom,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      updatePlafondCredit: (id, plafondCredit) => {
+        const plafond = Math.max(0, Number(plafondCredit) || 0);
+        const state = get();
+        const prev = (state.tiers ?? []).find((t) => t.id === id);
+        if (!prev) {
+          const client = state.clients.find((c) => c.id === id);
+          if (!client) return { ok: false, reason: "Tiers introuvable." };
+          get().updateClient(id, { plafondCredit: plafond });
+          return { ok: true };
+        }
+        return get().updateTiers(id, { plafondCredit: plafond });
+      },
+
+      controlerPlafondCreditClient: (clientId, opts) => {
+        const state = get();
+        const client = state.clients.find((c) => c.id === clientId);
+        return controlerPlafondCredit(client, state, opts);
       },
 
       addDevis: (devis) => {
@@ -2200,6 +3012,21 @@ export const useStore = create<Store>()((set, get) => ({
       },
 
       addFacture: (facture, audit) => {
+        const state = get();
+        if (factureImpacteEncours(facture) && !facture.derogationCredit) {
+          const client = state.clients.find((c) => c.id === facture.clientId);
+          const montant = totauxFacture(
+            { ...facture, id: "tmp-credit" },
+            state.parametres,
+            state.acomptes,
+          ).totalTTC;
+          const garde = controlerPlafondCredit(client, state, {
+            montantSupplementaire: montant,
+          });
+          if (!garde.ok) {
+            return { ok: false, reason: garde.reason ?? "Plafond de crédit dépassé." };
+          }
+        }
         const id = uid("fac");
         set((state) => {
           const modele = modeleCourant(state, "facture");
@@ -2212,7 +3039,7 @@ export const useStore = create<Store>()((set, get) => ({
             state,
           );
           const factures = [complete, ...state.factures];
-          return {
+          return avecJournal(state, {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
             journalActivites: [
@@ -2241,9 +3068,9 @@ export const useStore = create<Store>()((set, get) => ({
               },
               ...state.journalAudit,
             ],
-          };
+          });
         });
-        return id;
+        return { ok: true, id };
       },
       updateFacture: (id, data, audit) =>
         set((state) => {
@@ -2339,7 +3166,7 @@ export const useStore = create<Store>()((set, get) => ({
               : f,
           );
           const estAnnulation = data.statut === "annulee";
-          return {
+          return avecJournal(state, {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
             journalAudit: journal,
@@ -2355,7 +3182,7 @@ export const useStore = create<Store>()((set, get) => ({
               ),
               ...state.journalActivites,
             ],
-          };
+          });
         }),
       deleteFacture: (id) => {
         const state = get();
@@ -2376,7 +3203,7 @@ export const useStore = create<Store>()((set, get) => ({
                 ? { ...f, factureParenteId: undefined }
                 : f,
             );
-          return {
+          return avecJournal(s, {
             factures,
             ventes: rebuildVentesDepuisFactures(factures),
             journalActivites: [
@@ -2401,7 +3228,7 @@ export const useStore = create<Store>()((set, get) => ({
               },
               ...s.journalAudit,
             ],
-          };
+          });
         });
         return { ok: true };
       },
@@ -2577,7 +3404,7 @@ export const useStore = create<Store>()((set, get) => ({
             existing: state.factures.map((f) => f.numero),
             date: new Date(data.date),
           });
-          factureAcompteId = get().addFacture({
+          const facAco = get().addFacture({
             numero: numeroFac,
             type: "acompte",
             clientId: data.clientId,
@@ -2603,6 +3430,7 @@ export const useStore = create<Store>()((set, get) => ({
               },
             ],
           });
+          if (facAco.ok) factureAcompteId = facAco.id;
         }
         const acompteId = get().addAcompte({
           numero: numeroAco,
@@ -2643,11 +3471,19 @@ export const useStore = create<Store>()((set, get) => ({
             }),
           );
           const merged = pickAppState({ ...data, factures });
-          return {
-            ...merged,
+          const sync = syncTiersState({
             clients: ensureCodesClients(merged.clients),
-            ventes: rebuildVentesDepuisFactures(factures),
-          };
+            fournisseurs: merged.fournisseurs,
+            tiers: merged.tiers,
+          });
+          return avecJournal(
+            { ...merged, ...sync },
+            {
+              ...merged,
+              ...sync,
+              ventes: rebuildVentesDepuisFactures(factures),
+            },
+          );
         });
         get().libererVerrousExpires();
       },

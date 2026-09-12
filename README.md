@@ -33,7 +33,7 @@ Les **données métier** (stocks, factures, etc.) sont chargées depuis l’API 
 - **Stocks** — suivi des quantités et valorisation (achat / vente)
 - **Chiffre d'affaires** — vues hebdomadaire, mensuelle et annuelle
 - **Points de vente** — gestion de plusieurs étals / boutiques
-- **Bilan & compte de résultat** — états financiers instantanés + export impression / PDF
+- **Comptabilité** — plan comptable personnalisé et écritures d'achat/vente (export CSV / Excel)
 - **Administration** — users, rôles, sessions, audit (via API)
 
 ## Démarrage

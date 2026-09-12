@@ -20,8 +20,10 @@ import {
   produitEstReference,
   trouverDoublonsPotentiels,
 } from "@/lib/produits";
+import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
 import { appliqueTVA, libelleClient } from "@/lib/commercial";
+import { produitEstTaxable } from "@/lib/comptabilite";
 import type { CategorieProduit, Produit } from "@/lib/types";
 
 type ProduitFormState = {
@@ -91,7 +93,9 @@ export default function ParametresProduitsPage() {
     deleteCategorieProduit,
     addTarifClient,
     deleteTarifClient,
+    comptesComptables,
   } = useStore();
+  const peutComptaProduit = useAuthStore((s) => s.hasPermission("parametres.gerer"));
 
   const avecTVA = appliqueTVA(parametres);
 
@@ -1003,6 +1007,74 @@ export default function ParametresProduitsPage() {
                     ? ` · Gros ${formatCurrency(selected.prixVenteGrosHT)}`
                     : ""}
                 </p>
+                <div className="mt-4 rounded-[var(--radius)] border border-line/80 bg-sea-50/40 p-3">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+                    Comptabilité
+                  </p>
+                  {peutComptaProduit ? (
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-muted">
+                        Compte associé
+                        <select
+                          className="select mt-1"
+                          value={selected.compteComptableId ?? ""}
+                          onChange={(e) =>
+                            updateProduit(selected.id, {
+                              compteComptableId: e.target.value || undefined,
+                            })
+                          }
+                        >
+                          <option value="">Aucun compte</option>
+                          {[...comptesComptables]
+                            .sort((a, b) => a.numero.localeCompare(b.numero))
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.numero} — {c.libelle}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={produitEstTaxable(selected, avecTVA)}
+                          disabled={!avecTVA}
+                          onChange={(e) =>
+                            updateProduit(selected.id, {
+                              taxable: e.target.checked,
+                            })
+                          }
+                        />
+                        Produit taxable (TVA)
+                      </label>
+                      <p className="text-xs text-muted">
+                        Plusieurs produits peuvent partager le même compte.
+                        {!avecTVA
+                          ? " Entreprise non assujettie : aucune ligne de TVA ne sera générée."
+                          : ""}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted">
+                      {selected.compteComptableId
+                        ? `${
+                            comptesComptables.find(
+                              (c) => c.id === selected.compteComptableId,
+                            )?.numero ?? ""
+                          } — ${
+                            comptesComptables.find(
+                              (c) => c.id === selected.compteComptableId,
+                            )?.libelle ?? "Compte"
+                          }`
+                        : "Aucun compte associé."}{" "}
+                      {produitEstTaxable(selected, avecTVA)
+                        ? "Taxable."
+                        : "Non taxable."}{" "}
+                      Seul l&apos;administrateur peut modifier ces champs.
+                    </p>
+                  )}
+                </div>
+
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"

@@ -157,6 +157,41 @@ export function prixUnitaireNetHT(l: ChampsRemiseLigne & Pick<LigneDocument, "pr
   return montantLigneHT(l) / l.quantite;
 }
 
+/**
+ * Répartit une remise globale au prorata des HT ligne (dernier ligne = solde).
+ * Sert aux écritures, au CA dérivé et aux marges par produit.
+ */
+export function allouerRemiseGlobaleSurHts(
+  hts: number[],
+  remiseGlobale: number,
+  mode: ModeRemise = "montant",
+): number[] {
+  const somme = hts.reduce((s, n) => s + n, 0);
+  const remise = montantRemiseGlobale(somme, remiseGlobale, mode);
+  if (remise <= 0 || somme <= 0) return hts;
+  let deja = 0;
+  return hts.map((ht, i) => {
+    if (i === hts.length - 1) return Math.max(0, ht - (remise - deja));
+    const part = Math.round((ht * remise) / somme);
+    deja += part;
+    return Math.max(0, ht - part);
+  });
+}
+
+/** HT net de chaque ligne produit : remises de ligne + quote-part de remise globale. */
+export function htNetsLignesProduit(
+  lignes: LigneDocument[],
+  remiseGlobale = 0,
+  remiseGlobaleMode?: ModeRemise,
+): number[] {
+  const produits = lignes.filter(isLigneProduit);
+  return allouerRemiseGlobaleSurHts(
+    produits.map((l) => montantLigneHT(l)),
+    remiseGlobale,
+    modeRemiseGlobale(remiseGlobaleMode),
+  );
+}
+
 export function montantRemiseGlobale(
   htApresLignes: number,
   valeur: number,
@@ -832,7 +867,8 @@ export function motifLienPointDeVente(
     charges: Pick<Charge, "pointDeVenteId">[];
     immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
     rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
-    achats?: { pointDeVenteId: string }[];
+    achats?: { pointDeVenteId: string; lignes?: { repartitions?: { pointDeVenteId: string; quantite: number }[] }[] }[];
+    transfertsStock?: { siteSourceId: string; siteDestinataireId: string }[];
   },
 ): string | null {
   if (ctx.factures.some((f) => f.pointDeVenteId === pdvId)) {
@@ -862,8 +898,25 @@ export function motifLienPointDeVente(
   if (ctx.rapportsFinJournee.some((r) => r.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des rapports de clôture. Suppression impossible.";
   }
-  if ((ctx.achats ?? []).some((a) => a.pointDeVenteId === pdvId)) {
-    return "Ce point de vente a des achats fournisseurs. Suppression impossible.";
+  if (
+    (ctx.achats ?? []).some(
+      (a) =>
+        a.pointDeVenteId === pdvId ||
+        (a.lignes ?? []).some((l) =>
+          (l.repartitions ?? []).some(
+            (r) => r.pointDeVenteId === pdvId && r.quantite > 0,
+          ),
+        ),
+    )
+  ) {
+    return "Ce site a des achats fournisseurs. Suppression impossible.";
+  }
+  if (
+    (ctx.transfertsStock ?? []).some(
+      (t) => t.siteSourceId === pdvId || t.siteDestinataireId === pdvId,
+    )
+  ) {
+    return "Ce site a des transferts de stock. Suppression impossible.";
   }
   return null;
 }
@@ -1036,18 +1089,29 @@ export function ventesDepuisFacture(
 ): Omit<Vente, "id">[] {
   if (!factureImpacteExploitation(facture)) return [];
   const signe = facture.type === "avoir" ? -1 : 1;
-  return facture.lignes
-    .filter((l) => isLigneProduit(l) && l.produitId && l.quantite)
-    .map((l) => ({
+  const lignes = facture.lignes.filter(
+    (l) => isLigneProduit(l) && l.produitId && l.quantite,
+  );
+  const htsNets = htNetsLignesProduit(
+    lignes,
+    facture.remiseGlobale ?? 0,
+    facture.remiseGlobaleMode,
+  );
+  return lignes.map((l, i) => {
+    const qty = Math.abs(l.quantite);
+    const htNet = htsNets[i] ?? 0;
+    return {
       pointDeVenteId: facture.pointDeVenteId,
       produitId: l.produitId!,
-      quantite: signe * Math.abs(l.quantite),
-      prixUnitaire: l.prixUnitaire,
+      quantite: signe * qty,
+      /** PU HT net (remises ligne + quote-part de remise globale). */
+      prixUnitaire: qty > 0 ? htNet / qty : 0,
       date: facture.date,
       clientId: facture.clientId,
       factureId: facture.id,
       cumpFigee: l.cumpFigee,
-    }));
+    };
+  });
 }
 
 /** Reconstruit toutes les ventes dérivées des factures (source de vérité). */

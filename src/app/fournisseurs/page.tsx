@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import {
   FournisseurFicheForm,
@@ -220,6 +221,11 @@ export default function FournisseursPage() {
           label="Statut"
           value={apercu?.actif ? "Actif" : "Inactif"}
         />
+        {apercu && (
+          <Link href={`/tiers/${apercu.id}`} className="btn btn-primary mt-3">
+            Ouvrir la fiche tiers
+          </Link>
+        )}
       </FicheApercuModal>
     </div>
   );

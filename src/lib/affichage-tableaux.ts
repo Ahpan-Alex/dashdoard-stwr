@@ -184,8 +184,9 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
     colonnes: [
       col("produit", "Produit", 40, true),
       col("categorie", "Catégorie", 24),
-      col("pointDeVente", "Point de vente", 30),
-      col("entrees", "Entrées", 20),
+  col("pointDeVente", "Site", 30),
+  col("cump", "CUMP", 22),
+  col("entrees", "Entrées", 20),
       col("vendues", "Vendues", 20),
       col("restant", "Restant", 22, true),
       col("valeurAchat", "Valeur achat", 26),

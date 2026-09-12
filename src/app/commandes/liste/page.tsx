@@ -43,6 +43,7 @@ import { filterByPos } from "@/lib/calculations";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { resoudreCreationFacture } from "@/lib/vente-credit";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import {
   avancementLivraisonCommande,
@@ -311,19 +312,18 @@ export default function ListeCommandesPage() {
       pointsDeVente,
       existing: factures.map((f) => f.numero),
     });
-    const factureId = addFacture({
+    const payloadFacture = {
       numero,
-      type: t.acomptesTTC > 0 ? "solde" : "standard",
+      type: (t.acomptesTTC > 0 ? "solde" : "standard") as "solde" | "standard",
       clientId: c.clientId,
       pointDeVenteId: c.pointDeVenteId,
       date: new Date().toISOString(),
       echeance: echeance.toISOString(),
-      statut:
-        t.acomptesTTC >= t.totalTTC - 1
-          ? "payee"
-          : t.acomptesTTC > 0
-            ? "partiellement_payee"
-            : "validee",
+      statut: (t.acomptesTTC >= t.totalTTC - 1
+        ? "payee"
+        : t.acomptesTTC > 0
+          ? "partiellement_payee"
+          : "validee") as "payee" | "partiellement_payee" | "validee",
       montantPaye: t.acomptesTTC,
       devisId: c.devisId,
       commandeId: c.id,
@@ -335,7 +335,12 @@ export default function ListeCommandesPage() {
       remiseGlobale: c.remiseGlobale,
       remiseGlobaleMode: c.remiseGlobaleMode,
       note: c.note,
-    });
+    };
+    const factureId = resoudreCreationFacture(
+      addFacture(payloadFacture),
+      () => addFacture({ ...payloadFacture, derogationCredit: true }),
+    );
+    if (!factureId) return;
     const fin = finaliserTransformation({
       sourceType: "commande",
       sourceId: c.id,

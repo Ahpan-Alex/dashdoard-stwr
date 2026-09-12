@@ -47,6 +47,7 @@ import {
   stockRestantPourSaisie,
 } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
+import { resoudreCreationFacture } from "@/lib/vente-credit";
 import { useModelePourType } from "@/lib/use-modele";
 import { createId } from "@/lib/id";
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/components/remise-saisie";
 import type {
   FactureStatut,
+  FactureType,
   LigneDocument,
   ModePaiement,
   ModeRemise,
@@ -540,15 +542,13 @@ export default function FacturesPage() {
               : detailAcomptesEmission,
           );
 
-    const factureId = addFacture(
-      {
+    const payloadFacture = {
         numero,
-        type:
-          mode === "proforma"
-            ? "proforma"
-            : acomptePayeNum > 0
-              ? "solde"
-              : "standard",
+        type: (mode === "proforma"
+          ? "proforma"
+          : acomptePayeNum > 0
+            ? "solde"
+            : "standard") as FactureType,
         clientId: form.clientId,
         pointDeVenteId: form.pointDeVenteId,
         date: new Date(`${form.date}T12:00:00`).toISOString(),
@@ -582,17 +582,21 @@ export default function FacturesPage() {
             commentaire: l.commentaire,
           };
         }),
-      },
-      {
-        action:
-          mode === "proforma"
-            ? "facture_proforma"
-            : mode === "brouillon"
-              ? "facture_brouillon"
-              : "facture_validee",
-        detail: `Mode ${mode}`,
-      },
+    };
+    const auditFacture = {
+      action:
+        mode === "proforma"
+          ? "facture_proforma"
+          : mode === "brouillon"
+            ? "facture_brouillon"
+            : "facture_validee",
+      detail: `Mode ${mode}`,
+    } as const;
+    const factureId = resoudreCreationFacture(
+      addFacture(payloadFacture, auditFacture),
+      () => addFacture({ ...payloadFacture, derogationCredit: true }, auditFacture),
     );
+    if (!factureId) return;
 
     if (mode !== "brouillon") {
       for (const a of acomptesLies) {
@@ -699,14 +703,26 @@ export default function FacturesPage() {
                   <select
                     className="select mt-1"
                     value={form.clientId}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const client = clients.find((c) => c.id === e.target.value);
+                      const jours = client?.delaiPaiementJours ?? 30;
+                      const d = new Date(`${form.date}T12:00:00`);
+                      d.setDate(d.getDate() + Math.max(0, jours));
                       setForm({
                         ...form,
                         clientId: e.target.value,
                         commandeId: "",
                         devisId: "",
-                      })
-                    }
+                        echeance: d.toISOString().slice(0, 10),
+                        remiseGlobale:
+                          client?.remiseHabituellePercent != null
+                            ? String(client.remiseHabituellePercent)
+                            : form.remiseGlobale,
+                        remiseGlobaleMode: client?.remiseHabituellePercent
+                          ? "percent"
+                          : form.remiseGlobaleMode,
+                      });
+                    }}
                     required
                   >
                     {clients

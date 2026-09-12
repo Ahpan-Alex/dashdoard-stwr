@@ -18,7 +18,7 @@ export const PARAMETRES_MENUS = [
   },
   {
     href: "/parametres/points-de-vente",
-    label: "Points de vente",
+    label: "Sites",
   },
   {
     href: "/parametres/clients",
@@ -27,6 +27,10 @@ export const PARAMETRES_MENUS = [
   {
     href: "/parametres/fournisseurs",
     label: "Fournisseurs",
+  },
+  {
+    href: "/parametres/balance-agee",
+    label: "Balance âgée",
   },
   {
     href: "/parametres/modeles",

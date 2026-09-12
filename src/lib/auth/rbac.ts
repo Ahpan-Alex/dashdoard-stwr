@@ -26,7 +26,11 @@ export type Permission =
   | "navigation.identite"
   | "users.gerer"
   | "audit.lire"
-  | "securite.gerer";
+  | "securite.gerer"
+  | "sites.vue_globale"
+  | "ventes.deroger_credit"
+  | "comptabilite.lire"
+  | "comptabilite.gerer";
 
 export const ROLE_LABELS: Record<RoleId, string> = {
   admin_entreprise: "Administrateur entreprise",
@@ -59,6 +63,10 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "users.gerer",
     "audit.lire",
     "securite.gerer",
+    "sites.vue_globale",
+    "ventes.deroger_credit",
+    "comptabilite.lire",
+    "comptabilite.gerer",
   ],
   comptable: [
     "factures.lire",
@@ -77,6 +85,10 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "rentabilite.lire",
     "parametres.lire",
     "audit.lire",
+    "sites.vue_globale",
+    "ventes.deroger_credit",
+    "comptabilite.lire",
+    "comptabilite.gerer",
   ],
   commercial: [
     "factures.lire",
@@ -107,6 +119,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "rentabilite.lire",
     "parametres.lire",
     "audit.lire",
+    "comptabilite.lire",
   ],
 };
 
@@ -132,6 +145,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "users.gerer": "Utilisateurs — gestion",
   "audit.lire": "Journal d'audit — lecture",
   "securite.gerer": "Sécurité — gestion",
+  "sites.vue_globale": "Sites — vue globale (tous les stocks)",
+  "ventes.deroger_credit": "Ventes — dérogation au plafond de crédit",
+  "comptabilite.lire": "Comptabilité — lecture",
+  "comptabilite.gerer": "Comptabilité — plan et écritures",
 };
 
 export function roleHasPermission(role: RoleId, permission: Permission) {

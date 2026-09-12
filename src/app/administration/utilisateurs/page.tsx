@@ -135,7 +135,8 @@ function UtilisateursContent() {
         </label>
         <div className="sm:col-span-2 lg:col-span-3">
           <p className="mb-2 text-sm font-medium">
-            Points de vente (vide = tous)
+            Sites rattachés (vide = tous les sites ; la vue consolidée est
+            réservée aux rôles administrateur et comptable)
           </p>
           <div className="flex flex-wrap gap-3">
             {pointsDeVente.map((p) => (
@@ -174,6 +175,7 @@ function UtilisateursContent() {
             <tr>
               <th className="px-4 py-3">Utilisateur</th>
               <th className="px-4 py-3">Rôle</th>
+              <th className="px-4 py-3">Sites</th>
               <th className="px-4 py-3">Statut</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
@@ -200,6 +202,30 @@ function UtilisateursContent() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex max-w-xs flex-col gap-1">
+                    {pointsDeVente.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={u.pointDeVenteIds.includes(p.id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...u.pointDeVenteIds, p.id]
+                              : u.pointDeVenteIds.filter((id) => id !== p.id);
+                            void updateUser(u.id, { pointDeVenteIds: next });
+                          }}
+                        />
+                        {p.nom}
+                      </label>
+                    ))}
+                    {u.pointDeVenteIds.length === 0 && (
+                      <span className="text-[11px] text-muted">
+                        Tous les sites (sans vue consolidée)
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <span

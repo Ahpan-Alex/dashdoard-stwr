@@ -12,6 +12,7 @@ import { calculerStocks } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { categorieLabel, libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
+import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 
 function ligneAlerteStock(ligne: {
@@ -34,17 +35,17 @@ function StocksContent() {
     entrees,
     ventes,
     pointsDeVente,
-    pointDeVenteActifId,
     inventaires,
   } = useStore();
+  const { visibles, actif } = useSitesVisibles();
   const { visible, colSpan } = useAffichageTable("stocks");
 
   const stocks = calculerStocks(
     produits,
     entrees,
     ventes,
-    pointDeVenteActifId,
-    pointsDeVente,
+    actif,
+    visibles.length ? visibles : pointsDeVente,
     undefined,
     inventaires,
   );
@@ -65,7 +66,7 @@ function StocksContent() {
     <div>
       <PageHeader
         title="Stocks"
-        description="État des stocks par produit et point de vente, valorisés au coût d'achat."
+        description="État des stocks par produit et par site. Le CUMP est calculé indépendamment pour chaque site — pas de CUMP consolidé entreprise."
       />
 
       <div className="mb-6 flex flex-col gap-3 rounded-[var(--radius)] border border-sea-200 bg-sea-100/40 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -91,10 +92,11 @@ function StocksContent() {
           className="shrink-0"
         >
           <p>
-            Le <strong>CUMP</strong> (Coût Unitaire Moyen Pondéré) valorise le
-            stock à un <strong>coût moyen recalculé à chaque entrée</strong> de
-            marchandise. Il évite d&apos;avoir à suivre chaque lot
-            individuellement et lisse les variations des prix d&apos;achat.
+            Le <strong>CUMP</strong> (Coût Unitaire Moyen Pondéré) est calculé{" "}
+            <strong>indépendamment pour chaque site</strong>. Un même produit
+            peut avoir des CUMP différents selon l&apos;entrepôt ou le point de
+            vente. Il n&apos;existe pas de CUMP consolidé au niveau de
+            l&apos;entreprise.
           </p>
           <div className="rounded-[var(--radius)] border border-line bg-sea-100/50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-sea-700">
@@ -205,6 +207,11 @@ function StocksContent() {
             entrees: `${formatNumber(ligne.quantiteEntree)} ${ligne.produit.unite}`,
             vendues: `${formatNumber(ligne.quantiteVendue)} ${ligne.produit.unite}`,
             restant: `${formatNumber(ligne.quantiteRestante)} ${ligne.produit.unite}`,
+            cump: formatCurrency(
+              ligne.quantiteRestante > 1e-9
+                ? ligne.valeurAchat / ligne.quantiteRestante
+                : 0,
+            ),
             valeurAchat: formatCurrency(ligne.valeurAchat),
             valeurVente: formatCurrency(ligne.valeurVente),
           }))}
@@ -217,7 +224,8 @@ function StocksContent() {
               <tr>
                 <ThCol id="produit" show={visible}>Produit</ThCol>
                 <ThCol id="categorie" show={visible}>Catégorie</ThCol>
-                <ThCol id="pointDeVente" show={visible}>Point de vente</ThCol>
+                <ThCol id="pointDeVente" show={visible}>Site</ThCol>
+                <ThCol id="cump" show={visible}>CUMP</ThCol>
                 <ThCol id="entrees" show={visible}>Entrées</ThCol>
                 <ThCol id="vendues" show={visible}>Vendues</ThCol>
                 <ThCol id="restant" show={visible}>Restant</ThCol>
@@ -259,6 +267,13 @@ function StocksContent() {
                       </span>
                     </TdCol>
                     <TdCol id="pointDeVente" show={visible}>{pdv?.nom}</TdCol>
+                    <TdCol id="cump" show={visible}>
+                      {formatCurrency(
+                        ligne.quantiteRestante > 1e-9
+                          ? ligne.valeurAchat / ligne.quantiteRestante
+                          : 0,
+                      )}
+                    </TdCol>
                     <TdCol id="entrees" show={visible}>
                       {formatNumber(ligne.quantiteEntree)}{" "}
                       {ligne.produit.unite}

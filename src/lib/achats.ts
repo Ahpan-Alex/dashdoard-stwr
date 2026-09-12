@@ -1,5 +1,6 @@
 import { endOfDay, isWithinInterval, parseISO, startOfDay } from "date-fns";
 import { nextNumero } from "./commercial";
+import { achatConcerneSite, htAchatPourSite, repartirQuantiteLivree } from "./sites";
 import type {
   Achat,
   AchatLigne,
@@ -184,11 +185,9 @@ export function montantAchatsMarchandisesHT(
   let total = 0;
   for (const a of achats) {
     if (!achatImpacteCompteResultat(a)) continue;
-    if (pointDeVenteId !== "tous" && a.pointDeVenteId !== pointDeVenteId) {
-      continue;
-    }
+    if (!achatConcerneSite(a, pointDeVenteId)) continue;
     if (!range || dansPlage(a.date, range)) {
-      total += totauxAchat(a).ht;
+      total += htAchatPourSite(a, pointDeVenteId);
     }
     for (const av of avoirsValides(a)) {
       if (!range || dansPlage(av.date, range)) {
@@ -207,9 +206,7 @@ export function totalPaiementsFournisseurs(
   let total = 0;
   for (const a of achats) {
     if (a.statut === "annule") continue;
-    if (pointDeVenteId !== "tous" && a.pointDeVenteId !== pointDeVenteId) {
-      continue;
-    }
+    if (!achatConcerneSite(a, pointDeVenteId)) continue;
     for (const p of a.paiements) {
       if (!range || dansPlage(p.date, range)) total += p.montant;
     }
@@ -229,9 +226,7 @@ export function dettesFournisseursAchats(
   let total = 0;
   for (const a of achats) {
     if (!achatImpacteCompteResultat(a)) continue;
-    if (pointDeVenteId !== "tous" && a.pointDeVenteId !== pointDeVenteId) {
-      continue;
-    }
+    if (!achatConcerneSite(a, pointDeVenteId)) continue;
     if (range && !dansPlage(a.date, range)) continue;
     const ttc = totauxAchat(a).ttc;
     const avoirs = a.avoirs
@@ -259,41 +254,54 @@ export function entreesDepuisAchat(
       if (l.quantiteLivree <= 0) continue;
       const ligneCmd = achat.lignes.find((x) => x.produitId === l.produitId);
       const prod = produits.find((p) => p.id === l.produitId);
-      out.push({
-        pointDeVenteId: achat.pointDeVenteId,
-        produitId: l.produitId,
-        quantite: l.quantiteLivree,
-        prixAchatUnitaire: ligneCmd?.prixAchatUnitaire ?? prod?.prixAchat ?? 0,
-        prixVenteUnitaire: prod?.prixVenteHT ?? 0,
-        fournisseur: frn,
-        fournisseurId: achat.fournisseurId,
-        date: liv.date,
-        origine: "livraison_achat",
-        achatId: achat.id,
-        livraisonId: liv.id,
-        note: liv.note,
-        datePeremption: liv.datePeremption,
-      });
+      const pu = ligneCmd?.prixAchatUnitaire ?? prod?.prixAchat ?? 0;
+      const pv = prod?.prixVenteHT ?? 0;
+      const parts = ligneCmd
+        ? repartirQuantiteLivree(ligneCmd, l.quantiteLivree, achat.pointDeVenteId)
+        : [{ pointDeVenteId: achat.pointDeVenteId, quantite: l.quantiteLivree }];
+      for (const part of parts) {
+        out.push({
+          pointDeVenteId: part.pointDeVenteId,
+          produitId: l.produitId,
+          quantite: part.quantite,
+          prixAchatUnitaire: pu,
+          prixVenteUnitaire: pv,
+          fournisseur: frn,
+          fournisseurId: achat.fournisseurId,
+          date: liv.date,
+          origine: "livraison_achat",
+          achatId: achat.id,
+          livraisonId: liv.id,
+          note: liv.note,
+          datePeremption: liv.datePeremption,
+        });
+      }
     }
   }
   for (const av of avoirsValides(achat)) {
     for (const l of av.lignes) {
       if (l.quantite <= 0) continue;
       const prod = produits.find((p) => p.id === l.produitId);
-      out.push({
-        pointDeVenteId: achat.pointDeVenteId,
-        produitId: l.produitId,
-        quantite: -l.quantite,
-        prixAchatUnitaire: l.prixAchatUnitaire,
-        prixVenteUnitaire: prod?.prixVenteHT ?? 0,
-        fournisseur: frn,
-        fournisseurId: achat.fournisseurId,
-        date: av.date,
-        origine: "retour_fournisseur",
-        achatId: achat.id,
-        avoirAchatId: av.id,
-        note: av.note,
-      });
+      const ligneCmd = achat.lignes.find((x) => x.produitId === l.produitId);
+      const parts = ligneCmd
+        ? repartirQuantiteLivree(ligneCmd, l.quantite, achat.pointDeVenteId)
+        : [{ pointDeVenteId: achat.pointDeVenteId, quantite: l.quantite }];
+      for (const part of parts) {
+        out.push({
+          pointDeVenteId: part.pointDeVenteId,
+          produitId: l.produitId,
+          quantite: -part.quantite,
+          prixAchatUnitaire: l.prixAchatUnitaire,
+          prixVenteUnitaire: prod?.prixVenteHT ?? 0,
+          fournisseur: frn,
+          fournisseurId: achat.fournisseurId,
+          date: av.date,
+          origine: "retour_fournisseur",
+          achatId: achat.id,
+          avoirAchatId: av.id,
+          note: av.note,
+        });
+      }
     }
   }
   return out;

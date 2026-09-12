@@ -42,13 +42,16 @@ import {
 import { MODES_PAIEMENT } from "@/lib/commercial";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
+import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
 import { createId } from "@/lib/id";
 import { libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
+import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import type {
   Achat,
   AchatLigne,
+  AchatLigneRepartition,
   AvoirAchatLigne,
   LivraisonAchatLigne,
   ModePaiement,
@@ -90,6 +93,7 @@ function AchatsListe() {
     parametres,
     addAchat,
   } = useStore();
+  const { visibles: sitesVisibles } = useSitesVisibles();
 
   const { visible } = useAffichageTable("achats");
   const [selectionId, setSelectionId] = useState<string | null>(
@@ -121,8 +125,8 @@ function AchatsListe() {
     return [...achats]
       .filter(
         (a) =>
-          pointDeVenteActifId === "tous" ||
-          a.pointDeVenteId === pointDeVenteActifId,
+          achatConcerneSite(a, pointDeVenteActifId) &&
+          sitesVisibles.some((s) => achatConcerneSite(a, s.id)),
       )
       .filter((a) => !filtreFrn || a.fournisseurId === filtreFrn)
       .filter(
@@ -130,7 +134,7 @@ function AchatsListe() {
           !filtreProduit || a.lignes.some((l) => l.produitId === filtreProduit),
       )
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [achats, pointDeVenteActifId, filtreFrn, filtreProduit]);
+  }, [achats, pointDeVenteActifId, filtreFrn, filtreProduit, sitesVisibles]);
 
   const lignesExport = useMemo(
     () =>
@@ -160,7 +164,7 @@ function AchatsListe() {
       form.pointDeVenteId ||
       (pointDeVenteActifId !== "tous" ? pointDeVenteActifId : "");
     if (!form.fournisseurId || !pdv) {
-      alert("Choisissez un fournisseur et un point de vente.");
+              alert("Choisissez un fournisseur et un site.");
       return;
     }
     const id = addAchat({
@@ -185,7 +189,11 @@ function AchatsListe() {
       <AchatEditor
         key={achatSelectionne.id}
         achat={achatSelectionne}
-        nomPdv={nomPdv(achatSelectionne.pointDeVenteId)}
+        nomPdv={
+          achatSelectionne.lignes.some((l) => (l.repartitions ?? []).length > 1)
+            ? "Multi-sites"
+            : nomPdv(achatSelectionne.pointDeVenteId)
+        }
         nomFrn={nomFrn(achatSelectionne.fournisseurId)}
         onBack={() => setSelectionId(null)}
       />
@@ -196,15 +204,14 @@ function AchatsListe() {
     <div>
       <PageHeader
         title="Achats"
-        description="Commandes fournisseurs, livraisons (entrées de stock), paiements et retours."
+        description="Commandes fournisseurs, livraisons (entrées de stock par site), paiements et retours. Une même commande peut alimenter plusieurs sites."
         actions={
           <div className="flex items-center gap-2">
             <InfoButton title="Cycle achats fournisseurs">
               <p>
-                Les <strong>entrées de stock</strong> ne se saisissent plus
-                séparément : elles sont générées par chaque{" "}
-                <strong>livraison</strong> d&apos;un achat validé, avec
-                recalcul immédiat du CUMP.
+                Chaque ligne peut être <strong>répartie sur plusieurs sites</strong>
+                : chaque sous-quantité entre directement dans le stock et le CUMP
+                du site, sans réception centralisée.
               </p>
               <p>
                 Les ventes déjà <strong>validées / clôturées</strong> conservent
@@ -279,7 +286,7 @@ function AchatsListe() {
               </select>
             </label>
             <label className="block text-xs font-semibold text-muted">
-              Point de vente
+              Site principal
               <select
                 className="select mt-1"
                 value={form.pointDeVenteId}
@@ -288,12 +295,15 @@ function AchatsListe() {
                 }
               >
                 <option value="">— Choisir —</option>
-                {pointsDeVente.map((p) => (
+                {sitesVisibles.filter((p) => p.actif).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nom}
                   </option>
                 ))}
               </select>
+              <span className="mt-1 block font-normal text-[11px]">
+                Défaut de répartition. Chaque ligne pourra être ventilée sur d&apos;autres sites.
+              </span>
             </label>
             <label className="block text-xs font-semibold text-muted">
               Date de commande
@@ -696,6 +706,77 @@ function AchatEditor({
   );
 }
 
+function RepartitionLigne({
+  ligne,
+  siteDefaut,
+  sites,
+  brouillon,
+  onChange,
+}: {
+  ligne: AchatLigne;
+  siteDefaut: string;
+  sites: { id: string; nom: string }[];
+  brouillon: boolean;
+  onChange: (r: AchatLigneRepartition[]) => void;
+}) {
+  const reps =
+    ligne.repartitions && ligne.repartitions.length > 0
+      ? ligne.repartitions
+      : [{ pointDeVenteId: siteDefaut, quantite: ligne.quantite }];
+  const somme = sommeRepartitions({ ...ligne, repartitions: reps });
+  const ecart = Math.abs(somme - ligne.quantite) > 1e-6;
+
+  function maj(siteId: string, quantite: number) {
+    const others = reps.filter((r) => r.pointDeVenteId !== siteId);
+    onChange(
+      [...others, { pointDeVenteId: siteId, quantite }].filter(
+        (r) => r.quantite > 0 || r.pointDeVenteId === siteDefaut,
+      ),
+    );
+  }
+
+  if (!brouillon) {
+    return (
+      <ul className="space-y-0.5 text-xs text-muted">
+        {reps.map((r) => (
+          <li key={r.pointDeVenteId}>
+            {sites.find((s) => s.id === r.pointDeVenteId)?.nom ?? "Site"} :{" "}
+            {formatNumber(r.quantite)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {sites.map((s) => {
+        const q = reps.find((r) => r.pointDeVenteId === s.id)?.quantite ?? 0;
+        return (
+          <label key={s.id} className="flex items-center gap-2 text-xs">
+            <span className="w-28 truncate" title={s.nom}>
+              {s.nom}
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              className="input h-8 w-20 py-1 text-xs"
+              value={q}
+              onChange={(e) => maj(s.id, Number(e.target.value))}
+            />
+          </label>
+        );
+      })}
+      {ecart && (
+        <p className="text-[11px] text-danger">
+          Somme {formatNumber(somme)} ≠ qté {formatNumber(ligne.quantite)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CommandePanel({
   achat,
   lignes,
@@ -724,6 +805,7 @@ function CommandePanel({
   onSave: () => void;
 }) {
   const produits = useStore((s) => s.produits);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
   const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
 
   const ajouterLigne = () => {
@@ -740,8 +822,27 @@ function CommandePanel({
         produitId,
         quantite: 1,
         prixAchatUnitaire: p?.prixAchat ?? 0,
+        repartitions: [{ pointDeVenteId: achat.pointDeVenteId, quantite: 1 }],
       },
     ]);
+  };
+
+  const majQuantite = (id: string, quantite: number) => {
+    setLignes(
+      lignes.map((x) => {
+        if (x.id !== id) return x;
+        const reps = x.repartitions ?? [];
+        if (reps.length <= 1) {
+          const site = reps[0]?.pointDeVenteId ?? achat.pointDeVenteId;
+          return {
+            ...x,
+            quantite,
+            repartitions: [{ pointDeVenteId: site, quantite }],
+          };
+        }
+        return { ...x, quantite };
+      }),
+    );
   };
 
   return (
@@ -796,6 +897,7 @@ function CommandePanel({
               <th>Qté commandée</th>
               <th>PU HT</th>
               <th>Montant HT</th>
+              <th>Répartition sites</th>
               <th>Livré</th>
               <th>Reliquat</th>
               {brouillon && <th />}
@@ -804,7 +906,7 @@ function CommandePanel({
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={8} className="text-muted">
                   Aucun article.
                 </td>
               </tr>
@@ -821,13 +923,7 @@ function CommandePanel({
                         className="input w-24"
                         value={l.quantite}
                         onChange={(e) =>
-                          setLignes(
-                            lignes.map((x) =>
-                              x.id === l.id
-                                ? { ...x, quantite: Number(e.target.value) }
-                                : x,
-                            ),
-                          )
+                          majQuantite(l.id, Number(e.target.value))
                         }
                       />
                     ) : (
@@ -857,6 +953,21 @@ function CommandePanel({
                     )}
                   </td>
                   <td>{formatCurrency(l.quantite * l.prixAchatUnitaire)}</td>
+                  <td className="min-w-[14rem] align-top">
+                    <RepartitionLigne
+                      ligne={l}
+                      siteDefaut={achat.pointDeVenteId}
+                      sites={pointsDeVente.filter((p) => p.actif)}
+                      brouillon={brouillon}
+                      onChange={(repartitions) =>
+                        setLignes(
+                          lignes.map((x) =>
+                            x.id === l.id ? { ...x, repartitions } : x,
+                          ),
+                        )
+                      }
+                    />
+                  </td>
                   <td>{formatNumber(quantiteLivreeProduit(achat, l.produitId))}</td>
                   <td>{formatNumber(reliquatProduit({ ...achat, lignes }, l.produitId))}</td>
                   {brouillon && (

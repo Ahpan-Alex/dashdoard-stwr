@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fish } from "lucide-react";
+import { LogoNegoo } from "@/components/logo-negoo";
 import { PasswordInput } from "@/components/password-input";
 import { useAuthStore } from "@/lib/auth-store";
 
@@ -28,7 +28,7 @@ export default function LoginClient() {
     setError(null);
     setLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email.trim(), password);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -49,73 +49,70 @@ export default function LoginClient() {
         }}
       />
       <div className="relative w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sea-600 text-white shadow-xl shadow-black/30">
-            <Fish className="h-7 w-7" />
-          </div>
-          <h1 className="font-display text-3xl font-semibold text-white">
-            STWR
-          </h1>
-          <p className="mt-1 text-sm text-sea-200">
-            Connexion à la gestion poissonnerie
-          </p>
-        </div>
+        <h1 className="sr-only">Connexion à Négoo</h1>
+        <div className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow-2xl shadow-black/20 backdrop-blur sm:p-8">
+          <LogoNegoo
+            tone="onLight"
+            className="mx-auto mb-8 block w-[clamp(200px,78vw,280px)]"
+          />
 
-        <form
-          onSubmit={onSubmit}
-          className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow-2xl shadow-black/20 backdrop-blur"
-        >
-          {reason === "idle" && (
-            <p className="mb-4 rounded-lg bg-sand px-3 py-2 text-sm text-ink">
-              Session expirée pour inactivité. Reconnectez-vous.
-            </p>
-          )}
+          <form onSubmit={onSubmit}>
+            {reason === "idle" && (
+              <p className="mb-4 rounded-lg bg-sand px-3 py-2 text-sm text-ink">
+                Session expirée pour inactivité. Reconnectez-vous.
+              </p>
+            )}
 
-          <label className="mb-3 block text-sm font-medium text-ink">
-            E-mail
-            <input
-              className="input mt-1"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label className="mb-4 block text-sm font-medium text-ink">
-            Mot de passe
-            <PasswordInput
-              className="mt-1"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
+            <label className="mb-3 block text-sm font-medium text-ink">
+              Identifiant
+              <input
+                className="input mt-1"
+                type="text"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <label className="mb-4 block text-sm font-medium text-ink">
+              Mot de passe
+              <PasswordInput
+                className="mt-1"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
 
-          {error && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
-              {error}
-            </p>
-          )}
+            {error && (
+              <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
+                {error}
+              </p>
+            )}
 
-          <button
-            type="submit"
-            className="btn btn-primary w-full"
-            disabled={loading}
-          >
-            {loading ? "Connexion…" : "Se connecter"}
-          </button>
-
-          <p className="mt-4 text-center text-sm">
-            <Link
-              href="/mot-de-passe-oublie"
-              className="text-sea-700 hover:underline"
+            <button
+              type="submit"
+              className="btn btn-primary w-full"
+              disabled={loading}
             >
-              Mot de passe oublié ?
-            </Link>
-          </p>
-        </form>
+              {loading ? "Connexion…" : "Se connecter"}
+            </button>
+
+            <p className="mt-4 text-center text-sm">
+              <Link
+                href="/mot-de-passe-oublie"
+                className="text-sea-700 hover:underline"
+              >
+                Mot de passe oublié ?
+              </Link>
+            </p>
+          </form>
+        </div>
       </div>
     </div>
   );

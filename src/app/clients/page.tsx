@@ -211,7 +211,7 @@ export default function ClientsPage() {
                   </TdCol>
                   <TdCol id="nom" show={visible} className="font-medium">
                     <Link
-                      href={`/clients/${c.id}`}
+                      href={`/tiers/${c.id}`}
                       className="text-sea-700 hover:underline"
                     >
                       {c.nom}
@@ -322,7 +322,7 @@ export default function ClientsPage() {
         />
         {apercu && (
           <div className="sm:col-span-2">
-            <Link href={`/clients/${apercu.id}`} className="btn btn-primary">
+            <Link href={`/tiers/${apercu.id}`} className="btn btn-primary">
               Ouvrir la fiche complète
             </Link>
           </div>
