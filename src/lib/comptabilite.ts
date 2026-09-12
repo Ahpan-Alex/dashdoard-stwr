@@ -689,6 +689,109 @@ export function lignesExportEcritures(ecritures: EcritureComptable[]) {
 
 export type LigneCsvPlan = { numero: string; libelle: string };
 
+export function validerImportPlanComptable(
+  lignes: LigneCsvPlan[],
+  existants: CompteComptable[],
+  longueur: number,
+):
+  | { ok: true; comptes: LigneCsvPlan[] }
+  | { ok: false; reason: string } {
+  if (lignes.length === 0) {
+    return { ok: false, reason: "Import annulé : aucun compte à importer." };
+  }
+  const prepares: LigneCsvPlan[] = [];
+  const vus = new Map<string, string>();
+  const conflits: string[] = [];
+  const internes: string[] = [];
+  const invalides: string[] = [];
+
+  for (const row of lignes) {
+    const numero = completerNumeroCompte(row.numero, longueur);
+    const motif = motifNumeroCompteInvalide(numero, longueur);
+    if (motif) {
+      invalides.push(`${row.numero} : ${motif}`);
+      continue;
+    }
+    if (vus.has(numero)) {
+      internes.push(numero);
+      continue;
+    }
+    vus.set(numero, row.libelle);
+    if (compteParNumero(existants, numero)) {
+      conflits.push(numero);
+    }
+    prepares.push({ numero, libelle: row.libelle });
+  }
+
+  if (invalides.length === 0 && internes.length === 0 && conflits.length === 0) {
+    return { ok: true, comptes: prepares };
+  }
+
+  const parts: string[] = [
+    "Import annulé : aucun compte n'a été créé.",
+  ];
+  if (conflits.length) {
+    const apercu = conflits.slice(0, 25).join(", ");
+    const reste =
+      conflits.length > 25 ? ` et ${conflits.length - 25} autre(s)` : "";
+    parts.push(
+      `Numéro(s) déjà présent(s) dans le plan : ${apercu}${reste}.`,
+    );
+  }
+  if (internes.length) {
+    parts.push(
+      `Doublon(s) dans le fichier : ${[...new Set(internes)].join(", ")}.`,
+    );
+  }
+  if (invalides.length) {
+    parts.push(invalides.slice(0, 8).join(" "));
+    if (invalides.length > 8) {
+      parts.push(`(+ ${invalides.length - 8} autre(s) ligne(s) invalide(s).)`);
+    }
+  }
+  return { ok: false, reason: parts.join(" ") };
+}
+
+export function migrerProduitComptes(
+  produit: Produit,
+  comptes: CompteComptable[],
+): Produit {
+  const legacy = produit.compteComptableId
+    ? comptes.find((c) => c.id === produit.compteComptableId)
+    : undefined;
+  const classeLegacy = legacy ? classeNumeroCompte(legacy.numero) : "";
+
+  let chargeId = produit.compteChargeId;
+  let venteId = produit.compteVenteId;
+  if (!chargeId && classeLegacy === "6" && legacy) chargeId = legacy.id;
+  if (!venteId && classeLegacy === "7" && legacy) venteId = legacy.id;
+
+  const defautCharge =
+    comptes.find((c) => c.roleCompte === "defaut_charge") ??
+    comptesParClasse(comptes, "6")[0];
+  const defautVente =
+    comptes.find((c) => c.roleCompte === "defaut_vente") ??
+    comptesParClasse(comptes, "7")[0];
+
+  if (!chargeId) chargeId = defautCharge?.id;
+  if (!venteId) venteId = defautVente?.id;
+  const typeAchat = produit.typeAchat ?? "marchandises";
+
+  if (
+    chargeId === produit.compteChargeId &&
+    venteId === produit.compteVenteId &&
+    typeAchat === produit.typeAchat
+  ) {
+    return produit;
+  }
+  return {
+    ...produit,
+    compteChargeId: chargeId,
+    compteVenteId: venteId,
+    typeAchat,
+  };
+}
+
 export function parserCsvPlanComptable(texte: string): {
   lignes: LigneCsvPlan[];
   erreurs: string[];

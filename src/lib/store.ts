@@ -80,12 +80,15 @@ import {
   longueurNumeroCompteEffective,
   LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
+  migrerProduitComptes,
   motifLignesAchatInvalides,
   motifNumeroCompteInvalide,
   MSG_COMPTE_VERROUILLE,
   parserCsvPlanComptable,
   regenererEcrituresComptables,
+  validerImportPlanComptable,
 } from "./comptabilite";
+import { PLAN_PCG_2005 } from "./pcg-2005";
 import {
   assurerTiers,
   controlerPlafondCredit,
@@ -216,7 +219,10 @@ type Store = {
   ) => { ok: true } | { ok: false; reason: string };
   importerComptesComptablesCsv: (
     texte: string,
-  ) => { ok: true; imported: number; skipped: number; errors: string[] } | { ok: false; reason: string };
+  ) => { ok: true; imported: number } | { ok: false; reason: string };
+  importerPlanComptableDefaut: () =>
+    | { ok: true; imported: number }
+    | { ok: false; reason: string };
   updateIdentiteNavigation: (
     data: Partial<IdentiteNavigation>,
   ) => { ok: true } | { ok: false; reason: string };
@@ -500,14 +506,83 @@ function assignerComptesProduit(
   produit: Produit,
   comptes: CompteComptable[],
 ): Produit {
-  const charge = compteChargeProduit(produit, comptes);
-  const vente = compteVenteProduit(produit, comptes);
+  return migrerProduitComptes(produit, comptes);
+}
+
+function etatApresMigrationComptes(state: {
+  parametres: Parametres;
+  comptesComptables: CompteComptable[];
+  produits: Produit[];
+}) {
+  const seeded = seedComptesDefautState(state);
   return {
-    ...produit,
-    typeAchat: produit.typeAchat ?? "marchandises",
-    compteChargeId: produit.compteChargeId ?? charge?.id,
-    compteVenteId: produit.compteVenteId ?? vente?.id,
+    ...seeded,
+    produits: state.produits.map((p) =>
+      migrerProduitComptes(p, seeded.comptesComptables),
+    ),
   };
+}
+
+function importerLignesPlanAtomique(
+  getState: () => {
+    parametres: Parametres;
+    comptesComptables: CompteComptable[];
+  },
+  apply: (
+    updater: (state: {
+      parametres: Parametres;
+      comptesComptables: CompteComptable[];
+      factures: Facture[];
+      achats: Achat[];
+      produits: Produit[];
+      clients: Client[];
+      fournisseurs: Fournisseur[];
+      journalActivites: JournalActivite[];
+    }) => Record<string, unknown>,
+  ) => void,
+  lignes: { numero: string; libelle: string }[],
+  libelleJournal: string,
+): { ok: true; imported: number } | { ok: false; reason: string } {
+  const auth = useAuthStore.getState();
+  if (!auth.hasPermission("comptabilite.gerer")) {
+    return {
+      ok: false,
+      reason: "L'import du plan est réservé à l'administrateur ou au comptable.",
+    };
+  }
+  const longueur = longueurNumeroCompteEffective(getState().parametres);
+  if (longueur == null) {
+    return {
+      ok: false,
+      reason: "Fixez d'abord la longueur des numéros de compte.",
+    };
+  }
+  const valide = validerImportPlanComptable(
+    lignes,
+    getState().comptesComptables,
+    longueur,
+  );
+  if (!valide.ok) return valide;
+  apply((state) => {
+    const comptes = [
+      ...valide.comptes.map((row) => ({
+        id: uid("cpt"),
+        numero: row.numero,
+        libelle: row.libelle,
+      })),
+      ...state.comptesComptables,
+    ];
+    return avecJournal(state, {
+      comptesComptables: comptes,
+      journalActivites: [
+        entreeActivite("creation", "compte_comptable", {
+          libelle: `${libelleJournal} : ${valide.comptes.length} compte(s)`,
+        }),
+        ...state.journalActivites,
+      ],
+    });
+  });
+  return { ok: true, imported: valide.comptes.length };
 }
 
 function journalDepuis(state: {
@@ -849,14 +924,12 @@ export const useStore = create<Store>()((set, get) => ({
       },
       assurerComptesComptablesDefaut: () => {
         set((state) => {
-          const seeded = seedComptesDefautState(state);
-          if (
-            seeded.parametres === state.parametres &&
-            seeded.comptesComptables === state.comptesComptables
-          ) {
-            return state;
-          }
-          return seeded;
+          const next = etatApresMigrationComptes(state);
+          const inchange =
+            next.parametres === state.parametres &&
+            next.comptesComptables === state.comptesComptables &&
+            next.produits.every((p, i) => p === state.produits[i]);
+          return inchange ? state : next;
         });
       },
       addCompteComptable: (data) => {
@@ -1010,65 +1083,22 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true as const };
       },
       importerComptesComptablesCsv: (texte) => {
-        const auth = useAuthStore.getState();
-        if (!auth.hasPermission("comptabilite.gerer")) {
-          return {
-            ok: false as const,
-            reason: "L'import du plan est réservé à l'administrateur ou au comptable.",
-          };
-        }
-        const longueur = longueurNumeroCompteEffective(get().parametres);
-        if (longueur == null) {
-          return {
-            ok: false as const,
-            reason: "Fixez d'abord la longueur des numéros de compte.",
-          };
-        }
         const { lignes, erreurs } = parserCsvPlanComptable(texte);
-        if (lignes.length === 0 && erreurs.length > 0) {
-          return { ok: false as const, reason: erreurs[0] ?? "CSV invalide." };
+        if (erreurs.length > 0) {
+          return {
+            ok: false as const,
+            reason: `Import annulé : aucun compte n'a été créé. ${erreurs.slice(0, 8).join(" ")}`,
+          };
         }
-        let imported = 0;
-        let skipped = 0;
-        const errors = [...erreurs];
-        set((state) => {
-          let comptes = [...state.comptesComptables];
-          for (const row of lignes) {
-            const motif = motifNumeroCompteInvalide(row.numero, longueur);
-            if (motif) {
-              errors.push(`${row.numero} : ${motif}`);
-              skipped += 1;
-              continue;
-            }
-            const numero = completerNumeroCompte(row.numero, longueur);
-            if (compteParNumero(comptes, numero)) {
-              errors.push(`${numero} : numéro déjà existant.`);
-              skipped += 1;
-              continue;
-            }
-            comptes = [
-              {
-                id: uid("cpt"),
-                numero,
-                libelle: row.libelle,
-              },
-              ...comptes,
-            ];
-            imported += 1;
-          }
-          if (imported === 0) return state;
-          return avecJournal(state, {
-            comptesComptables: comptes,
-            journalActivites: [
-              entreeActivite("creation", "compte_comptable", {
-                libelle: `Import CSV : ${imported} compte(s)`,
-              }),
-              ...state.journalActivites,
-            ],
-          });
-        });
-        return { ok: true as const, imported, skipped, errors };
+        return importerLignesPlanAtomique(get, set, lignes, "Import CSV");
       },
+      importerPlanComptableDefaut: () =>
+        importerLignesPlanAtomique(
+          get,
+          set,
+          PLAN_PCG_2005,
+          "Import PCG 2005",
+        ),
       updateIdentiteNavigation: (data) => {
         const auth = useAuthStore.getState();
         if (!auth.hasPermission("navigation.identite")) {
@@ -3607,11 +3637,16 @@ export const useStore = create<Store>()((set, get) => ({
             fournisseurs: merged.fournisseurs,
             tiers: merged.tiers,
           });
+          const comptesProduits = etatApresMigrationComptes({
+            ...merged,
+            ...sync,
+          });
           return avecJournal(
-            { ...merged, ...sync },
+            { ...merged, ...sync, ...comptesProduits },
             {
               ...merged,
               ...sync,
+              ...comptesProduits,
               ventes: rebuildVentesDepuisFactures(factures),
             },
           );

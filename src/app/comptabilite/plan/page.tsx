@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { BookOpen, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { ComptabiliteSubnav } from "@/components/comptabilite-subnav";
 import { EmptyState } from "@/components/empty-state";
 import { IconButton } from "@/components/icon-button";
@@ -10,6 +10,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
 import { appliqueTVA } from "@/lib/commercial";
 import {
+  completerNumeroCompte,
   compteUtiliseEnEcriture,
   comptesTvaManquants,
   ecrireCsvPlanModele,
@@ -40,6 +41,7 @@ function PlanComptableContent() {
     updateCompteComptable,
     deleteCompteComptable,
     importerComptesComptablesCsv,
+    importerPlanComptableDefaut,
   } = useStore();
   const peutGerer = useAuthStore((s) => s.hasPermission("comptabilite.gerer"));
   const assujetti = appliqueTVA(parametres);
@@ -102,11 +104,21 @@ function PlanComptableContent() {
       setMessage(res.reason);
       return;
     }
-    setMessage(
-      `${res.imported} compte(s) importé(s)` +
-        (res.skipped ? ` — ${res.skipped} ignoré(s)` : "") +
-        (res.errors.length ? ` : ${res.errors.slice(0, 3).join(" ")}` : "."),
-    );
+    setMessage(`${res.imported} compte(s) importé(s).`);
+  }
+
+  function onImportDefaut() {
+    if (
+      !confirm(
+        `Importer le plan comptable PCG 2005 (classes 1 à 8, hors TVA 445x) ?\n\n` +
+          `Les numéros seront complétés à ${longueur ?? LONGUEUR_COMPTE_MIN} chiffres. ` +
+          `Si un numéro existe déjà, aucun compte ne sera créé.`,
+      )
+    ) {
+      return;
+    }
+    const res = importerPlanComptableDefaut();
+    setMessage(res.ok ? `${res.imported} compte(s) importé(s) (PCG 2005).` : res.reason);
   }
 
   function telechargerModele() {
@@ -125,7 +137,7 @@ function PlanComptableContent() {
     <div>
       <PageHeader
         title="Plan comptable"
-        description="Créez vos comptes à la main ou importez-les. Aucun plan pré-rempli n'est imposé."
+        description="Saisissez vos comptes, importez le PCG 2005 ou un CSV personnalisé. Les comptes de TVA 445x restent à créer à la main."
         showPosSelector={false}
       />
       <ComptabiliteSubnav />
@@ -189,7 +201,15 @@ function PlanComptableContent() {
       )}
 
       {message && (
-        <p className="mb-4 text-sm text-muted">{message}</p>
+        <p
+          className={`mb-4 rounded-[var(--radius)] px-4 py-3 text-sm ${
+            message.startsWith("Import annulé")
+              ? "border border-amber-300 bg-amber-50 text-amber-900"
+              : "text-muted"
+          }`}
+        >
+          {message}
+        </p>
       )}
 
       {peutGerer && (
@@ -274,34 +294,66 @@ function PlanComptableContent() {
                   Annuler
                 </button>
               )}
-              <label className="btn btn-secondary cursor-pointer">
-                <Upload className="h-4 w-4" />
-                Importer CSV
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void onImport(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={telechargerModele}
-              >
-                Modèle CSV
-              </button>
             </div>
           </form>
           {editionVerrouillee && (
             <p className="mt-3 text-sm text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
           )}
+        </section>
+      )}
+
+      {peutGerer && (
+        <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="font-display text-lg font-semibold">
+            Importer un plan comptable
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            Deux points de départ, utilisables l&apos;un après l&apos;autre :
+            le référentiel PCG 2005 fourni par Steward, ou votre propre fichier
+            CSV. Dans les deux cas, un second import échoue intégralement si un
+            numéro existe déjà. Vous pouvez ensuite ajouter des comptes à la
+            main. Les comptes de TVA (445x) ne sont pas inclus dans le plan par
+            défaut.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={longueur == null}
+              onClick={onImportDefaut}
+            >
+              <BookOpen className="h-4 w-4" />
+              Importer le plan comptable par défaut
+            </button>
+            <label className="btn btn-secondary cursor-pointer">
+              <Upload className="h-4 w-4" />
+              Importer mon propre plan comptable
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                disabled={longueur == null}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void onImport(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={telechargerModele}
+            >
+              Modèle CSV
+            </button>
+          </div>
           <p className="mt-3 text-xs text-muted">
-            Import CSV : deux colonnes, numéro et libellé (séparateur ; ou ,).
+            CSV : deux colonnes, numéro et libellé (séparateur ; ou ,). Si la
+            longueur paramétrée est plus grande que le numéro source, des zéros
+            sont ajoutés à droite (607 →{" "}
+            {completerNumeroCompte("607", longueur ?? LONGUEUR_COMPTE_MIN)}). Import
+            transactionnel : un seul conflit annule tout le fichier.
           </p>
         </section>
       )}
@@ -310,7 +362,7 @@ function PlanComptableContent() {
         <EmptyState
           icon={<Plus className="h-5 w-5" />}
           title="Aucun compte"
-          description="Fixez la longueur des numéros, puis créez vos comptes ou importez un CSV."
+          description="Fixez la longueur des numéros, puis créez vos comptes, importez le PCG 2005 ou un CSV."
         />
       ) : (
         <div className="table-shell">
