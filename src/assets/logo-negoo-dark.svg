@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 108" fill="none" role="img" aria-labelledby="negoo-title negoo-desc">
-  <title id="negoo-title">Négoo</title>
+  <title id="negoo-title">NÃ©goo</title>
   <desc id="negoo-desc">Plateforme de gestion commerciale</desc>
   <rect x="0" y="14" width="80" height="80" rx="18.75" fill="#1E5C4E"/>
   <g transform="translate(0 14) scale(1.25)" fill="none" stroke="#fff" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round">
@@ -8,6 +8,6 @@
     <path d="M35 30.5 L48 38 L35 45.5"/>
     <path d="M45.5 38 H16"/>
   </g>
-  <text x="96" y="62" fill="#ffffff" font-family="Manrope, Nunito, 'Segoe UI', sans-serif" font-size="44" font-weight="700" letter-spacing="-0.04em">Négoo</text>
+  <text x="96" y="62" fill="#ffffff" font-family="Manrope, Nunito, 'Segoe UI', sans-serif" font-size="44" font-weight="700" letter-spacing="-0.04em">NÃ©goo</text>
   <text x="96" y="86" fill="#c5d4cf" font-family="Manrope, Nunito, 'Segoe UI', sans-serif" font-size="11" font-weight="500" letter-spacing="0.16em">PLATEFORME DE GESTION COMMERCIALE</text>
 </svg>
