@@ -9,6 +9,11 @@ import {
   type ModeleDocument,
 } from "@/lib/document-templates";
 import {
+  classeDensiteTableau,
+  estColonneNumeriqueArticle,
+  largeursColonnesPourcent,
+} from "@/lib/document-table-layout";
+import {
   FACTURE_TYPES,
   MODES_PAIEMENT,
   appliqueTVA,
@@ -60,21 +65,6 @@ type Props = {
   /** Aperçu éditeur : remplit les zones avec des libellés d'exemple */
   apercuModele?: boolean;
 };
-
-const COLONNES_NUMERIQUES: ColonneArticleId[] = [
-  "pu_ht",
-  "pu_ttc",
-  "remise_pct",
-  "remise_ht",
-  "pu_ht_remise",
-  "pu_ttc_remise",
-  "quantite",
-  "total_ht",
-  "total_ht_remise",
-  "tva_pct",
-  "tva_montant",
-  "total_ttc",
-];
 
 export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   function DocumentPreview(props, ref) {
@@ -128,6 +118,9 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   const nomDocument = titre ?? z.document.nomDocument ?? labelType;
 
   const colonnesVisibles = z.articles.colonnes.filter((c) => c.visible);
+  const largeursColonnes = largeursColonnesPourcent(
+    colonnesVisibles.map((c) => c.id),
+  );
 
   const ligneCalc = (l: LigneDocument) => {
     const pu = l.prixUnitaire;
@@ -221,7 +214,9 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   };
 
   const alignCol = (colId: ColonneArticleId) =>
-    COLONNES_NUMERIQUES.includes(colId) ? "text-right" : "text-left";
+    estColonneNumeriqueArticle(colId)
+      ? "doc-col-num text-right"
+      : "doc-col-text text-left";
 
   const ex = (val: string | undefined, placeholder: string) =>
     val ?? (apercuModele ? placeholder : "");
@@ -392,7 +387,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   return (
     <div
       ref={ref}
-      className="document-preview-sheet print-area mx-auto w-full max-w-[210mm] rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm"
+      className="document-preview-sheet print-area mx-auto box-border w-full max-w-[210mm] overflow-x-hidden rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm"
     >
       {(estProforma || factureType === "proforma") && (
         <p className="mb-3 rounded bg-amber-100 px-3 py-1 text-center text-xs font-bold uppercase tracking-wider text-amber-900">
@@ -497,7 +492,17 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
 
       {/* Zone 5 — Tableau des articles */}
       {colonnesVisibles.length > 0 && (
-        <table className="data mb-4 w-full text-sm">
+        <table
+          className={`data mb-4 w-full ${classeDensiteTableau(colonnesVisibles.length)}`.trim()}
+        >
+          <colgroup>
+            {colonnesVisibles.map((c) => (
+              <col
+                key={c.id}
+                style={{ width: `${largeursColonnes[c.id] ?? 10}%` }}
+              />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {colonnesVisibles.map((c) => (
@@ -684,113 +689,115 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
         </div>
       )}
 
-      {/* Détail des acomptes */}
-      {acomptesDetail.length > 0 && (
-        <div className="mb-4 rounded-lg border border-line p-3 text-sm">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
-            Acomptes
-          </p>
-          {acomptesDetail.map((a) => (
-            <div key={a.numero} className="flex justify-between text-xs">
-              <span>
-                {a.numero} — {formatDate(a.date)}
-                {a.mode ? ` (${MODES_PAIEMENT[a.mode] ?? a.mode})` : ""}
-              </span>
-              <span className="font-semibold">− {formatCurrency(a.montant)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Zone 8 — Montant en lettres */}
-      {z.montantEnLettres.afficher && (
-        <div className="mb-4 rounded-lg border border-line px-4 py-2 text-sm" style={softStyle}>
-          <p
-            className="text-[10px] font-bold uppercase tracking-wider"
-            style={labelStyle}
-          >
-            {z.montantEnLettres.titre}
-          </p>
-          <p className="mt-0.5 capitalize">
-            {montantEnLettres(totaux.netAPayer)}
-          </p>
-        </div>
-      )}
-
-      {/* Zone 7 — Mode de règlement & échéance */}
-      {z.reglement.afficher && (
-        <div className="mb-4 rounded-lg border border-line p-3 text-xs">
-          <p
-            className="mb-1 text-[10px] font-bold uppercase tracking-wider"
-            style={labelStyle}
-          >
-            Mode de règlement
-            {z.reglement.delai && echeance
-              ? ` — Échéance : ${formatDate(echeance)}`
-              : ""}
-          </p>
-          {z.reglement.mode && modePaiement && (
-            <p>Mode : {MODES_PAIEMENT[modePaiement] ?? modePaiement}</p>
-          )}
-          {z.reglement.description && <p>{conditions}</p>}
-          {z.reglement.compteBancaire && parametres.rib && (
-            <p className="mt-1">
-              Compte bancaire :{" "}
-              {parametres.banque ? `${parametres.banque} — ` : ""}
-              {parametres.rib}
+      <div className="document-preview-pied">
+        {/* Détail des acomptes */}
+        {acomptesDetail.length > 0 && (
+          <div className="mb-4 rounded-lg border border-line p-3 text-sm">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+              Acomptes
             </p>
+            {acomptesDetail.map((a) => (
+              <div key={a.numero} className="flex justify-between text-xs">
+                <span>
+                  {a.numero} — {formatDate(a.date)}
+                  {a.mode ? ` (${MODES_PAIEMENT[a.mode] ?? a.mode})` : ""}
+                </span>
+                <span className="font-semibold">− {formatCurrency(a.montant)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Zone 8 — Montant en lettres */}
+        {z.montantEnLettres.afficher && (
+          <div className="mb-4 rounded-lg border border-line px-4 py-2 text-sm" style={softStyle}>
+            <p
+              className="text-[10px] font-bold uppercase tracking-wider"
+              style={labelStyle}
+            >
+              {z.montantEnLettres.titre}
+            </p>
+            <p className="mt-0.5 capitalize">
+              {montantEnLettres(totaux.netAPayer)}
+            </p>
+          </div>
+        )}
+
+        {/* Zone 7 — Mode de règlement & échéance */}
+        {z.reglement.afficher && (
+          <div className="mb-4 rounded-lg border border-line p-3 text-xs">
+            <p
+              className="mb-1 text-[10px] font-bold uppercase tracking-wider"
+              style={labelStyle}
+            >
+              Mode de règlement
+              {z.reglement.delai && echeance
+                ? ` — Échéance : ${formatDate(echeance)}`
+                : ""}
+            </p>
+            {z.reglement.mode && modePaiement && (
+              <p>Mode : {MODES_PAIEMENT[modePaiement] ?? modePaiement}</p>
+            )}
+            {z.reglement.description && <p>{conditions}</p>}
+            {z.reglement.compteBancaire && parametres.rib && (
+              <p className="mt-1">
+                Compte bancaire :{" "}
+                {parametres.banque ? `${parametres.banque} — ` : ""}
+                {parametres.rib}
+              </p>
+            )}
+          </div>
+        )}
+
+        {note && <p className="mb-2 text-xs text-muted">Note : {note}</p>}
+
+        {/* Mentions légales */}
+        <div className="mt-4 border-t border-line pt-3 text-[10px] leading-relaxed text-muted">
+          <p className="font-semibold text-ink">
+            {mentionRegimeFiscal(parametres)}
+          </p>
+          <p className="mt-1">
+            NIF : {parametres.nif || "—"} · STAT : {parametres.stat || "—"}
+            {parametres.rcs ? ` · RCS : ${parametres.rcs}` : ""}
+          </p>
+          {modele?.mentionsLegales && (
+            <p className="mt-1">{modele.mentionsLegales}</p>
           )}
         </div>
-      )}
 
-      {note && <p className="mb-2 text-xs text-muted">Note : {note}</p>}
-
-      {/* Mentions légales */}
-      <div className="mt-4 border-t border-line pt-3 text-[10px] leading-relaxed text-muted">
-        <p className="font-semibold text-ink">
-          {mentionRegimeFiscal(parametres)}
-        </p>
-        <p className="mt-1">
-          NIF : {parametres.nif || "—"} · STAT : {parametres.stat || "—"}
-          {parametres.rcs ? ` · RCS : ${parametres.rcs}` : ""}
-        </p>
-        {modele?.mentionsLegales && (
-          <p className="mt-1">{modele.mentionsLegales}</p>
+        {modele?.piedDePage && (
+          <p className="mt-2 text-center text-[11px] text-muted">
+            {modele.piedDePage}
+          </p>
         )}
-      </div>
 
-      {modele?.piedDePage && (
-        <p className="mt-2 text-center text-[11px] text-muted">
-          {modele.piedDePage}
-        </p>
-      )}
-
-      {/* Zone 9 — Signataire */}
-      {z.signataire.afficher && (
-        <div className="mt-8 flex justify-end">
-          <div className="min-w-[12rem] max-w-[16rem] text-center">
-            {parametres.signatureDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={parametres.signatureDataUrl}
-                alt="Signature électronique"
-                className="mx-auto mb-1 h-16 w-auto max-w-full object-contain"
-              />
-            ) : (
-              <div className="mb-1 flex h-16 items-end justify-center border-b border-dashed border-line">
-                <span className="pb-1 text-[10px] text-muted">
-                  Signature
-                </span>
+        {/* Zone 9 — Signataire */}
+        {z.signataire.afficher && (
+          <div className="doc-cachet mt-5 flex justify-end">
+            <div className="min-w-[12rem] max-w-[16rem] text-center">
+              {parametres.signatureDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={parametres.signatureDataUrl}
+                  alt="Signature électronique"
+                  className="mx-auto mb-1 h-16 w-auto max-w-full object-contain"
+                />
+              ) : (
+                <div className="mb-1 flex h-16 items-end justify-center border-b border-dashed border-line">
+                  <span className="pb-1 text-[10px] text-muted">
+                    Signature
+                  </span>
+                </div>
+              )}
+              <div className="pt-2 text-xs text-muted">
+                {z.signataire.nom?.trim() ||
+                  parametres.signatureNom?.trim() ||
+                  "Signature / cachet"}
               </div>
-            )}
-            <div className="pt-2 text-xs text-muted">
-              {z.signataire.nom?.trim() ||
-                parametres.signatureNom?.trim() ||
-                "Signature / cachet"}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 });

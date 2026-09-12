@@ -2,13 +2,13 @@
 export function formatCurrency(value: number): string {
   return `${new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: 0,
-  }).format(Math.round(value))} Ar`;
+  }).format(Math.round(value))}\u00A0Ar`;
 }
 
 export function formatCurrencyPrecise(value: number): string {
   return `${new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: 0,
-  }).format(Math.round(value))} Ar`;
+  }).format(Math.round(value))}\u00A0Ar`;
 }
 
 export function formatCompactCurrency(value: number): string {

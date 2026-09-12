@@ -473,9 +473,106 @@ table.ca-report tbody tr.ca-report-row-active td {
 }
 
 .document-preview-sheet {
+  box-sizing: border-box;
+  max-width: 210mm;
+  overflow-x: hidden;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
   color-adjust: exact;
+}
+
+.document-preview-sheet *,
+.document-preview-sheet *::before,
+.document-preview-sheet *::after {
+  box-sizing: border-box;
+}
+
+/* Tableau d'articles : largeur A4 stricte, colonnes recalculées, police locale. */
+.document-preview-sheet table.data {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.document-preview-sheet table.data.doc-table-compact {
+  font-size: 10.5px;
+}
+
+.document-preview-sheet table.data.doc-table-dense {
+  font-size: 10px;
+}
+
+.document-preview-sheet table.data th,
+.document-preview-sheet table.data td {
+  padding: 4px 5px;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.document-preview-sheet table.data th {
+  white-space: normal;
+  line-height: 1.15;
+  font-size: 0.92em;
+}
+
+.document-preview-sheet table.data.doc-table-dense th {
+  font-size: 9px;
+}
+
+.document-preview-sheet table.data td.doc-col-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.document-preview-sheet table.data th.doc-col-num,
+.document-preview-sheet table.data td.doc-col-num {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-preview-sheet table.data thead {
+  display: table-header-group;
+}
+
+.document-preview-sheet table.data tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.document-preview-sheet table.data tr:hover td {
+  background: transparent;
+}
+
+/* Pied : collé au tableau ; ne pas le rendre entier insécable (évite une page 2 vide). */
+.document-preview-pied {
+  break-before: avoid-page;
+  page-break-before: avoid;
+}
+
+.document-preview-pied .doc-cachet {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  break-before: avoid-page;
+  page-break-before: avoid;
+}
+
+@media print {
+  .document-preview-sheet {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    box-shadow: none !important;
+    overflow-x: hidden !important;
+  }
+
+  .document-preview-sheet table.data tr:hover td {
+    background: transparent !important;
+  }
 }
 
 .document-export-host {

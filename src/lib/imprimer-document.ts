@@ -1,8 +1,12 @@
 /** Impression / PDF d'une feuille commerciale à l'identique de l'aperçu écran. */
 
+export type OrientationDocument = "portrait" | "landscape";
+
 export type OptionsImpressionDocument = {
   /** Nom du fichier proposé (Enregistrer au format PDF). */
   filename?: string;
+  /** Portrait par défaut ; paysage si le tableau 8 colonnes reste trop dense. */
+  orientation?: OrientationDocument;
 };
 
 function collectHeadHtml() {
@@ -59,11 +63,15 @@ export async function imprimerFeuilleCommerciale(
   sheet: HTMLElement,
   opts: OptionsImpressionDocument = {},
 ) {
+  const paysage = opts.orientation === "landscape";
+  const pageW = paysage ? "297mm" : "210mm";
+  const pageH = paysage ? "210mm" : "297mm";
+
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute("title", "Impression document");
   iframe.style.cssText =
-    "position:fixed;left:0;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;z-index:-1;";
+    `position:fixed;left:0;top:0;width:${pageW};height:${pageH};border:0;opacity:0;pointer-events:none;z-index:-1;`;
   document.body.appendChild(iframe);
 
   const idoc = iframe.contentDocument;
@@ -83,8 +91,10 @@ export async function imprimerFeuilleCommerciale(
   clone.classList.add("document-preview-sheet");
   clone.style.margin = "0";
   clone.style.maxWidth = "none";
-  clone.style.width = "210mm";
+  clone.style.width = pageW;
   clone.style.boxShadow = "none";
+  clone.style.boxSizing = "border-box";
+  clone.style.overflowX = "hidden";
 
   idoc.open();
   idoc.write(`<!DOCTYPE html>
@@ -94,9 +104,14 @@ export async function imprimerFeuilleCommerciale(
 <meta name="color-scheme" content="light only" />
 ${collectHeadHtml()}
 <style>
+  *, *::before, *::after { box-sizing: border-box; }
   html, body {
     margin: 0 !important;
     padding: 0 !important;
+    width: ${pageW} !important;
+    max-width: ${pageW} !important;
+    height: auto !important;
+    overflow-x: hidden !important;
     background: #ffffff !important;
     color: #0c1f28;
     print-color-adjust: exact !important;
@@ -111,16 +126,25 @@ ${collectHeadHtml()}
     forced-color-adjust: none !important;
     box-shadow: none !important;
     margin: 0 !important;
-    max-width: none !important;
-    width: 210mm !important;
+    max-width: ${pageW} !important;
+    width: ${pageW} !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .document-preview-sheet table.data {
+    table-layout: fixed !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   @page {
-    size: A4;
+    size: A4 ${paysage ? "landscape" : "portrait"};
     margin: 0;
   }
   @media print {
     html, body {
       background: #ffffff !important;
+      width: ${pageW} !important;
+      overflow-x: hidden !important;
       print-color-adjust: exact !important;
       -webkit-print-color-adjust: exact !important;
       color-adjust: exact !important;

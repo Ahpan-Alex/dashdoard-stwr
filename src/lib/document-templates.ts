@@ -255,7 +255,7 @@ export const COLONNES_ARTICLE_CATALOGUE: {
 /** Nombre maximal de colonnes affichables simultanément dans le tableau. */
 export const MAX_COLONNES_ARTICLE = 8;
 
-const COLONNES_VISIBLES_DEFAUT: ColonneArticleId[] = [
+export const COLONNES_VISIBLES_DEFAUT: ColonneArticleId[] = [
   "code",
   "designation",
   "pu_ht",
