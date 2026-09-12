@@ -71,12 +71,18 @@ import { emptyAppState, pickAppState } from "./empty-state";
 import { motifRepartitionInvalide, sitesAchat, utilisateurRattacheAuSite } from "./sites";
 import {
   appliquerRoleUnique,
-  completerNumeroCompte,
+  appliquerSeedComptesDefaut,
+  compteChargeProduit,
   compteParNumero,
+  compteUtiliseEnEcriture,
+  compteVenteProduit,
+  completerNumeroCompte,
   longueurNumeroCompteEffective,
   LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
+  motifLignesAchatInvalides,
   motifNumeroCompteInvalide,
+  MSG_COMPTE_VERROUILLE,
   parserCsvPlanComptable,
   regenererEcrituresComptables,
 } from "./comptabilite";
@@ -191,6 +197,7 @@ type Store = {
   definirLongueurNumeroCompte: (
     longueur: number,
   ) => { ok: true } | { ok: false; reason: string };
+  assurerComptesComptablesDefaut: () => void;
   addCompteComptable: (data: {
     numero: string;
     libelle: string;
@@ -472,6 +479,37 @@ function uid(prefix: string) {
   return createId(prefix);
 }
 
+function seedComptesDefautState(state: {
+  parametres: Parametres;
+  comptesComptables: CompteComptable[];
+}) {
+  let longueur = longueurNumeroCompteEffective(state.parametres);
+  let parametres = state.parametres;
+  if (longueur == null) {
+    longueur = LONGUEUR_COMPTE_MIN;
+    parametres = { ...parametres, longueurNumeroCompte: longueur };
+  }
+  const { comptes } = appliquerSeedComptesDefaut(
+    state.comptesComptables,
+    longueur,
+  );
+  return { parametres, comptesComptables: comptes };
+}
+
+function assignerComptesProduit(
+  produit: Produit,
+  comptes: CompteComptable[],
+): Produit {
+  const charge = compteChargeProduit(produit, comptes);
+  const vente = compteVenteProduit(produit, comptes);
+  return {
+    ...produit,
+    typeAchat: produit.typeAchat ?? "marchandises",
+    compteChargeId: produit.compteChargeId ?? charge?.id,
+    compteVenteId: produit.compteVenteId ?? vente?.id,
+  };
+}
+
 function journalDepuis(state: {
   factures: Facture[];
   achats: Achat[];
@@ -503,10 +541,18 @@ function avecJournal<T extends Record<string, unknown>>(
     fournisseurs: Fournisseur[];
   },
   patch: T,
-): T & { ecrituresComptables: EcritureComptable[] } {
+): T & {
+  ecrituresComptables: EcritureComptable[];
+  parametres: Parametres;
+  comptesComptables: CompteComptable[];
+} {
+  const merged = { ...state, ...patch };
+  const seeded = seedComptesDefautState(merged);
   return {
     ...patch,
-    ecrituresComptables: journalDepuis({ ...state, ...patch }),
+    parametres: seeded.parametres,
+    comptesComptables: seeded.comptesComptables,
+    ecrituresComptables: journalDepuis({ ...merged, ...seeded }),
   };
 }
 
@@ -801,6 +847,18 @@ export const useStore = create<Store>()((set, get) => ({
         });
         return { ok: true as const };
       },
+      assurerComptesComptablesDefaut: () => {
+        set((state) => {
+          const seeded = seedComptesDefautState(state);
+          if (
+            seeded.parametres === state.parametres &&
+            seeded.comptesComptables === state.comptesComptables
+          ) {
+            return state;
+          }
+          return seeded;
+        });
+      },
       addCompteComptable: (data) => {
         const auth = useAuthStore.getState();
         if (!auth.hasPermission("comptabilite.gerer")) {
@@ -864,6 +922,9 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const prev = get().comptesComptables.find((c) => c.id === id);
         if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        if (compteUtiliseEnEcriture(id, get().ecrituresComptables)) {
+          return { ok: false as const, reason: MSG_COMPTE_VERROUILLE };
+        }
         const longueur = longueurNumeroCompteEffective(get().parametres);
         const numeroRaw = data.numero ?? prev.numero;
         const motif = motifNumeroCompteInvalide(numeroRaw, longueur);
@@ -914,14 +975,29 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const prev = get().comptesComptables.find((c) => c.id === id);
         if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        if (compteUtiliseEnEcriture(id, get().ecrituresComptables)) {
+          return { ok: false as const, reason: MSG_COMPTE_VERROUILLE };
+        }
         set((state) =>
           avecJournal(state, {
             comptesComptables: state.comptesComptables.filter((c) => c.id !== id),
-            produits: state.produits.map((p) =>
-              p.compteComptableId === id
-                ? { ...p, compteComptableId: undefined }
-                : p,
-            ),
+            produits: state.produits.map((p) => ({
+              ...p,
+              compteComptableId:
+                p.compteComptableId === id ? undefined : p.compteComptableId,
+              compteChargeId:
+                p.compteChargeId === id ? undefined : p.compteChargeId,
+              compteVenteId:
+                p.compteVenteId === id ? undefined : p.compteVenteId,
+            })),
+            achats: state.achats.map((a) => ({
+              ...a,
+              lignes: a.lignes.map((l) =>
+                l.compteComptableId === id
+                  ? { ...l, compteComptableId: undefined }
+                  : l,
+              ),
+            })),
             journalActivites: [
               entreeActivite("suppression", "compte_comptable", {
                 entiteId: id,
@@ -1344,6 +1420,11 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const motifRep = motifRepartitionInvalide(prev.lignes);
         if (motifRep) return { ok: false, reason: motifRep };
+        const motifCompta = motifLignesAchatInvalides(
+          prev.lignes,
+          get().comptesComptables,
+        );
+        if (motifCompta) return { ok: false, reason: motifCompta };
         set((s) =>
           avecJournal(s, {
             achats: s.achats.map((a) =>
@@ -1557,7 +1638,13 @@ export const useStore = create<Store>()((set, get) => ({
           state.produits,
           nomFournisseur(state, next.fournisseurId),
         );
-        const produitIds = [...new Set(prev.lignes.map((l) => l.produitId))];
+        const produitIds = [
+          ...new Set(
+            prev.lignes
+              .map((l) => l.produitId)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ];
         if (
           stockDevientNegatif(
             entrees,
@@ -2078,8 +2165,13 @@ export const useStore = create<Store>()((set, get) => ({
 
       addProduit: (produit) =>
         set((state) => {
-          const nouveau = { ...produit, id: uid("prod") };
+          const seeded = seedComptesDefautState(state);
+          const nouveau = assignerComptesProduit(
+            { ...produit, id: uid("prod") },
+            seeded.comptesComptables,
+          );
           return {
+            ...seeded,
             produits: [nouveau, ...state.produits],
             journalActivites: [
               entreeActivite("creation", "produit", {
@@ -2094,7 +2186,46 @@ export const useStore = create<Store>()((set, get) => ({
         set((state) => {
           const prev = state.produits.find((p) => p.id === id);
           if (!prev) return state;
-          const next = { ...prev, ...data };
+          const seeded = seedComptesDefautState(state);
+          const auth = useAuthStore.getState();
+          const patch: Partial<Produit> = { ...data };
+          if (!auth.hasPermission("parametres.gerer")) {
+            delete patch.compteChargeId;
+            delete patch.compteVenteId;
+            delete patch.compteComptableId;
+          }
+          const chargeEffective = compteChargeProduit(
+            prev,
+            seeded.comptesComptables,
+          );
+          const venteEffective = compteVenteProduit(
+            prev,
+            seeded.comptesComptables,
+          );
+          if (
+            patch.compteChargeId !== undefined &&
+            patch.compteChargeId !== (prev.compteChargeId ?? chargeEffective?.id) &&
+            compteUtiliseEnEcriture(
+              chargeEffective?.id,
+              state.ecrituresComptables,
+            )
+          ) {
+            delete patch.compteChargeId;
+          }
+          if (
+            patch.compteVenteId !== undefined &&
+            patch.compteVenteId !== (prev.compteVenteId ?? venteEffective?.id) &&
+            compteUtiliseEnEcriture(
+              venteEffective?.id,
+              state.ecrituresComptables,
+            )
+          ) {
+            delete patch.compteVenteId;
+          }
+          const next = assignerComptesProduit(
+            { ...prev, ...patch },
+            seeded.comptesComptables,
+          );
           const hist: HistoriquePrix[] = [];
           const push = (
             champ: HistoriquePrix["champ"],

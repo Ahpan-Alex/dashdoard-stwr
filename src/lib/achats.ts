@@ -1,6 +1,7 @@
 import { endOfDay, isWithinInterval, parseISO, startOfDay } from "date-fns";
 import { nextNumero } from "./commercial";
 import { achatConcerneSite, htAchatPourSite, repartirQuantiteLivree } from "./sites";
+import { ligneAchatStockee } from "./type-achat";
 import type {
   Achat,
   AchatLigne,
@@ -50,7 +51,12 @@ export function montantHTLigne(l: Pick<AchatLigne, "quantite" | "prixAchatUnitai
 export function totauxAchat(achat: Achat) {
   const ht = achat.lignes.reduce((s, l) => s + montantHTLigne(l), 0);
   const tva =
-    achat.tauxTVA > 0 ? Math.round(ht * (achat.tauxTVA / 100)) : 0;
+    achat.tauxTVA > 0
+      ? achat.lignes.reduce((s, l) => {
+          if (l.taxable === false) return s;
+          return s + Math.round(montantHTLigne(l) * (achat.tauxTVA / 100));
+        }, 0)
+      : 0;
   return { ht, tva, ttc: ht + tva };
 }
 
@@ -116,13 +122,16 @@ export function quantiteRetourneeProduit(achat: Achat, produitId: string) {
   }, 0);
 }
 
-export function reliquatProduit(achat: Achat, produitId: string) {
+export function reliquatProduit(achat: Achat, produitId: string | undefined) {
+  if (!produitId) return 0;
   const cmd = achat.lignes.find((l) => l.produitId === produitId)?.quantite ?? 0;
   return Math.max(0, cmd - quantiteLivreeProduit(achat, produitId));
 }
 
 export function reliquatTotal(achat: Achat) {
-  return achat.lignes.reduce((s, l) => s + reliquatProduit(achat, l.produitId), 0);
+  return achat.lignes
+    .filter(ligneAchatStockee)
+    .reduce((s, l) => s + reliquatProduit(achat, l.produitId), 0);
 }
 
 export function quantiteCommandee(achat: Achat) {
@@ -130,16 +139,22 @@ export function quantiteCommandee(achat: Achat) {
 }
 
 export function quantiteLivreeTotale(achat: Achat) {
-  return achat.lignes.reduce(
-    (s, l) => s + quantiteLivreeProduit(achat, l.produitId),
-    0,
-  );
+  return achat.lignes
+    .filter(ligneAchatStockee)
+    .reduce((s, l) => s + quantiteLivreeProduit(achat, l.produitId ?? ""), 0);
 }
 
 export function statutLivraisonAchat(achat: Achat): LivraisonAchatStatut {
   if (achat.statut === "annule") return "annulee";
-  const cmd = quantiteCommandee(achat);
-  const liv = quantiteLivreeTotale(achat);
+  const stockees = achat.lignes.filter(ligneAchatStockee);
+  if (stockees.length === 0) {
+    return achat.statut === "valide" ? "livree" : "en_attente";
+  }
+  const cmd = stockees.reduce((s, l) => s + l.quantite, 0);
+  const liv = stockees.reduce(
+    (s, l) => s + quantiteLivreeProduit(achat, l.produitId ?? ""),
+    0,
+  );
   if (liv <= 0) return "en_attente";
   if (liv + 1e-9 < cmd) return "partielle";
   return "livree";
@@ -251,8 +266,11 @@ export function entreesDepuisAchat(
   for (const liv of achat.livraisons) {
     if (liv.statut === "annulee" || liv.statut === "en_attente") continue;
     for (const l of liv.lignes) {
-      if (l.quantiteLivree <= 0) continue;
-      const ligneCmd = achat.lignes.find((x) => x.produitId === l.produitId);
+      if (l.quantiteLivree <= 0 || !l.produitId) continue;
+      const ligneCmd = achat.lignes.find(
+        (x) => ligneAchatStockee(x) && x.produitId === l.produitId,
+      );
+      if (!ligneCmd) continue;
       const prod = produits.find((p) => p.id === l.produitId);
       const pu = ligneCmd?.prixAchatUnitaire ?? prod?.prixAchat ?? 0;
       const pv = prod?.prixVenteHT ?? 0;
@@ -280,9 +298,12 @@ export function entreesDepuisAchat(
   }
   for (const av of avoirsValides(achat)) {
     for (const l of av.lignes) {
-      if (l.quantite <= 0) continue;
+      if (l.quantite <= 0 || !l.produitId) continue;
       const prod = produits.find((p) => p.id === l.produitId);
-      const ligneCmd = achat.lignes.find((x) => x.produitId === l.produitId);
+      const ligneCmd = achat.lignes.find(
+        (x) => ligneAchatStockee(x) && x.produitId === l.produitId,
+      );
+      if (!ligneCmd) continue;
       const parts = ligneCmd
         ? repartirQuantiteLivree(ligneCmd, l.quantite, achat.pointDeVenteId)
         : [{ pointDeVenteId: achat.pointDeVenteId, quantite: l.quantite }];

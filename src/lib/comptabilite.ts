@@ -8,6 +8,7 @@ import { montantHTLigne } from "./achats";
 import { factureEstFiscale } from "./facturation-mg";
 import type {
   Achat,
+  AchatLigne,
   AvoirAchat,
   Client,
   CompteComptable,
@@ -19,6 +20,21 @@ import type {
   Produit,
   RoleCompteComptable,
 } from "./types";
+import {
+  TYPE_ACHAT_LABELS,
+  TYPES_ACHAT_LIBRES,
+  TYPES_ACHAT_PRODUIT,
+  ligneAchatStockee,
+  typeAchatSurFicheProduit,
+} from "./type-achat";
+
+export {
+  TYPE_ACHAT_LABELS,
+  TYPES_ACHAT_LIBRES,
+  TYPES_ACHAT_PRODUIT,
+  ligneAchatStockee,
+  typeAchatSurFicheProduit,
+};
 
 export const LONGUEUR_COMPTE_MIN = 6;
 export const LONGUEUR_COMPTE_MAX = 9;
@@ -27,7 +43,120 @@ export const ROLE_COMPTE_LABELS: Record<RoleCompteComptable, string> = {
   general: "Général",
   tva_deductible: "TVA déductible",
   tva_collectee: "TVA collectée",
+  defaut_charge: "Charge à définir",
+  defaut_vente: "Produit à définir",
 };
+
+export const MSG_COMPTE_VERROUILLE =
+  "Ce compte a déjà été utilisé dans une écriture générée et ne peut plus être modifié.";
+
+export function classeNumeroCompte(numero: string) {
+  return chiffresNumeroCompte(numero).slice(0, 1);
+}
+
+export function comptesParClasse(
+  comptes: CompteComptable[],
+  classe: "2" | "6" | "7",
+) {
+  return comptes
+    .filter((c) => classeNumeroCompte(c.numero) === classe)
+    .sort((a, b) => a.numero.localeCompare(b.numero));
+}
+
+export const LIBELLE_COMPTE_DEFAUT_CHARGE = "Compte de charge à définir";
+export const LIBELLE_COMPTE_DEFAUT_VENTE = "Compte de produits à définir";
+export const ID_COMPTE_DEFAUT_CHARGE = "cpt-defaut-charge";
+export const ID_COMPTE_DEFAUT_VENTE = "cpt-defaut-vente";
+
+export function numeroCompteDefaut(classe: "6" | "7", longueur: number) {
+  return completerNumeroCompte(classe, longueur);
+}
+
+export function appliquerSeedComptesDefaut(
+  comptes: CompteComptable[],
+  longueur: number,
+): { comptes: CompteComptable[]; ajoutes: CompteComptable[] } {
+  const ajoutes: CompteComptable[] = [];
+  let next = [...comptes];
+  if (!next.some((c) => classeNumeroCompte(c.numero) === "6")) {
+    const charge: CompteComptable = {
+      id: ID_COMPTE_DEFAUT_CHARGE,
+      numero: numeroCompteDefaut("6", longueur),
+      libelle: LIBELLE_COMPTE_DEFAUT_CHARGE,
+      roleCompte: "defaut_charge",
+    };
+    if (!compteParNumero(next, charge.numero)) {
+      next = [charge, ...next];
+      ajoutes.push(charge);
+    }
+  }
+  if (!next.some((c) => classeNumeroCompte(c.numero) === "7")) {
+    const vente: CompteComptable = {
+      id: ID_COMPTE_DEFAUT_VENTE,
+      numero: numeroCompteDefaut("7", longueur),
+      libelle: LIBELLE_COMPTE_DEFAUT_VENTE,
+      roleCompte: "defaut_vente",
+    };
+    if (!compteParNumero(next, vente.numero)) {
+      next = [vente, ...next];
+      ajoutes.push(vente);
+    }
+  }
+  if (ajoutes.length === 0) return { comptes, ajoutes };
+  return { comptes: next, ajoutes };
+}
+
+export function compteChargeProduit(
+  produit: Pick<Produit, "compteChargeId" | "compteComptableId">,
+  comptes: CompteComptable[],
+) {
+  if (produit.compteChargeId) {
+    return comptes.find((c) => c.id === produit.compteChargeId);
+  }
+  if (produit.compteComptableId) {
+    const legacy = comptes.find((c) => c.id === produit.compteComptableId);
+    if (legacy && classeNumeroCompte(legacy.numero) === "6") return legacy;
+  }
+  return (
+    comptes.find((c) => c.roleCompte === "defaut_charge") ??
+    comptesParClasse(comptes, "6")[0]
+  );
+}
+
+export function compteVenteProduit(
+  produit: Pick<Produit, "compteVenteId" | "compteComptableId">,
+  comptes: CompteComptable[],
+) {
+  if (produit.compteVenteId) {
+    return comptes.find((c) => c.id === produit.compteVenteId);
+  }
+  if (produit.compteComptableId) {
+    const legacy = comptes.find((c) => c.id === produit.compteComptableId);
+    if (legacy && classeNumeroCompte(legacy.numero) === "7") return legacy;
+  }
+  return (
+    comptes.find((c) => c.roleCompte === "defaut_vente") ??
+    comptesParClasse(comptes, "7")[0]
+  );
+}
+
+export function idsComptesUtilisesEnEcriture(ecritures: EcritureComptable[]) {
+  const ids = new Set<string>();
+  for (const e of ecritures) {
+    for (const l of e.lignes) {
+      if (l.compteId) ids.add(l.compteId);
+    }
+  }
+  return ids;
+}
+
+export function compteUtiliseEnEcriture(
+  compteId: string | undefined,
+  ecritures: EcritureComptable[],
+) {
+  if (!compteId) return false;
+  return idsComptesUtilisesEnEcriture(ecritures).has(compteId);
+}
 
 export function longueurNumeroCompteEffective(
   parametres: Pick<Parametres, "longueurNumeroCompte">,
@@ -132,6 +261,7 @@ export type LigneVentilation = {
   designation: string;
   ht: number;
   taxable: boolean;
+  compteId?: string;
 };
 
 export function ventilerFacture(
@@ -158,20 +288,72 @@ export function ventilerFacture(
 }
 
 export function ventilerAchat(
-  lignes: { produitId: string; quantite: number; prixAchatUnitaire: number }[],
+  lignes: Array<
+    Pick<
+      AchatLigne,
+      | "produitId"
+      | "designation"
+      | "typeAchat"
+      | "compteComptableId"
+      | "taxable"
+      | "quantite"
+      | "prixAchatUnitaire"
+    >
+  >,
   produits: Produit[],
   parametres: Parametres,
 ): LigneVentilation[] {
   const assujetti = appliqueTVA(parametres);
   return lignes.map((l) => {
-    const produit = produits.find((p) => p.id === l.produitId);
+    const produit = l.produitId
+      ? produits.find((p) => p.id === l.produitId)
+      : undefined;
     return {
       produitId: l.produitId,
-      designation: produit?.libelleCourt || produit?.libelleLong || "Article",
+      designation:
+        l.designation ||
+        produit?.libelleCourt ||
+        produit?.libelleLong ||
+        "Article",
       ht: montantHTLigne(l),
-      taxable: produitEstTaxable(produit, assujetti),
+      taxable: produit
+        ? produitEstTaxable(produit, assujetti)
+        : assujetti && l.taxable !== false,
+      compteId: l.compteComptableId,
     };
   });
+}
+
+export function motifLignesAchatInvalides(
+  lignes: AchatLigne[],
+  comptes: CompteComptable[],
+): string | null {
+  if (lignes.length === 0) return "Ajoutez au moins une ligne.";
+  for (const l of lignes) {
+    if (!(l.quantite > 0)) return "Chaque ligne doit avoir une quantité positive.";
+    if (ligneAchatStockee(l)) continue;
+    const type = l.typeAchat;
+    if (type === "service_general" || type === "immobilisation") {
+      if (!l.designation?.trim()) {
+        return "Saisissez la désignation de chaque ligne d'achat libre.";
+      }
+      if (!l.compteComptableId) {
+        return "Sélectionnez un compte pour chaque service général ou immobilisation.";
+      }
+      const compte = comptes.find((c) => c.id === l.compteComptableId);
+      if (!compte) return "Un compte d'achat libre est introuvable.";
+      const classe = classeNumeroCompte(compte.numero);
+      if (type === "immobilisation" && classe !== "2") {
+        return "Une immobilisation doit être imputée à un compte de classe 2.";
+      }
+      if (type === "service_general" && classe !== "6") {
+        return "Un service général doit être imputé à un compte de classe 6.";
+      }
+      continue;
+    }
+    if (!l.produitId) return "Sélectionnez un produit pour chaque ligne catalogue.";
+  }
+  return null;
 }
 
 function arrondiAr(n: number) {
@@ -239,6 +421,8 @@ function ventilerVersComptes(opts: {
   assujetti: boolean;
   /** Vente : crédit des produits ; achat : débit des produits. */
   produitsAuCredit: boolean;
+  /** Indépendant du sens débit/crédit (un avoir inverse le sens, pas le compte). */
+  natureCompte: "charge" | "vente";
   compteTva: CompteComptable | undefined;
   libelleTva: string;
 }): LigneEcritureComptable[] {
@@ -247,7 +431,13 @@ function ventilerVersComptes(opts: {
   opts.ventilations.forEach((v, i) => {
     if (v.ht === 0) return;
     const produit = opts.produits.find((p) => p.id === v.produitId);
-    const compte = opts.comptes.find((c) => c.id === produit?.compteComptableId);
+    const compte = v.compteId
+      ? opts.comptes.find((c) => c.id === v.compteId)
+      : produit
+        ? opts.natureCompte === "vente"
+          ? compteVenteProduit(produit, opts.comptes)
+          : compteChargeProduit(produit, opts.comptes)
+        : undefined;
     const libelle = compte
       ? compte.libelle
       : `${v.designation} (sans compte)`;
@@ -300,6 +490,7 @@ export function ecritureDepuisFactureVente(opts: {
     tauxTVA: tauxUnique(facture, opts.parametres),
     assujetti,
     produitsAuCredit: !avoir,
+    natureCompte: "vente",
     compteTva: compteParRole(opts.comptes, "tva_collectee"),
     libelleTva: "TVA collectée",
   });
@@ -349,6 +540,7 @@ export function ecritureDepuisAchat(opts: {
     tauxTVA: tauxUnique(achat, opts.parametres),
     assujetti,
     produitsAuCredit: false,
+    natureCompte: "charge",
     compteTva: compteParRole(opts.comptes, "tva_deductible"),
     libelleTva: "TVA déductible",
   });
@@ -394,6 +586,7 @@ export function ecritureDepuisAvoirAchat(opts: {
     tauxTVA: tauxUnique(achat, opts.parametres),
     assujetti,
     produitsAuCredit: true,
+    natureCompte: "charge",
     compteTva: compteParRole(opts.comptes, "tva_deductible"),
     libelleTva: "TVA déductible",
   });

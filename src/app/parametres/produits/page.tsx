@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Ban, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
@@ -23,8 +23,17 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
 import { appliqueTVA, libelleClient } from "@/lib/commercial";
-import { produitEstTaxable } from "@/lib/comptabilite";
-import type { CategorieProduit, Produit } from "@/lib/types";
+import {
+  compteChargeProduit,
+  compteUtiliseEnEcriture,
+  compteVenteProduit,
+  comptesParClasse,
+  MSG_COMPTE_VERROUILLE,
+  produitEstTaxable,
+  TYPE_ACHAT_LABELS,
+  TYPES_ACHAT_PRODUIT,
+} from "@/lib/comptabilite";
+import type { CategorieProduit, Produit, TypeAchat } from "@/lib/types";
 
 type ProduitFormState = {
   code: string;
@@ -41,6 +50,7 @@ type ProduitFormState = {
   seuilRupture: string;
   seuilSurstock: string;
   gerePeremption: boolean;
+  typeAchat: TypeAchat;
 };
 
 function parseSeuilOptionnel(raw: string): number | undefined {
@@ -66,6 +76,9 @@ function formDepuisProduit(p: Produit): ProduitFormState {
     seuilRupture: p.seuilRupture != null ? String(p.seuilRupture) : "",
     seuilSurstock: p.seuilSurstock != null ? String(p.seuilSurstock) : "",
     gerePeremption: Boolean(p.gerePeremption),
+    typeAchat: p.typeAchat && (TYPES_ACHAT_PRODUIT as readonly string[]).includes(p.typeAchat)
+      ? p.typeAchat
+      : "marchandises",
   };
 }
 
@@ -94,8 +107,14 @@ export default function ParametresProduitsPage() {
     addTarifClient,
     deleteTarifClient,
     comptesComptables,
+    ecrituresComptables,
+    assurerComptesComptablesDefaut,
   } = useStore();
   const peutComptaProduit = useAuthStore((s) => s.hasPermission("parametres.gerer"));
+
+  useEffect(() => {
+    assurerComptesComptablesDefaut();
+  }, [assurerComptesComptablesDefaut]);
 
   const avecTVA = appliqueTVA(parametres);
 
@@ -134,6 +153,7 @@ export default function ParametresProduitsPage() {
       seuilRupture: "",
       seuilSurstock: "",
       gerePeremption: false,
+      typeAchat: "marchandises",
     };
   }
 
@@ -348,6 +368,7 @@ export default function ParametresProduitsPage() {
       seuilRupture: parseSeuilOptionnel(form.seuilRupture),
       seuilSurstock: parseSeuilOptionnel(form.seuilSurstock),
       gerePeremption: form.gerePeremption,
+      typeAchat: form.typeAchat,
     };
 
     if (editingId) {
@@ -701,6 +722,25 @@ export default function ParametresProduitsPage() {
                 }
               />
             </label>
+            <label className="block text-xs font-semibold text-muted sm:col-span-2">
+              Type d&apos;achat
+              <select
+                className="select mt-1"
+                value={form.typeAchat}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    typeAchat: e.target.value as TypeAchat,
+                  })
+                }
+              >
+                {TYPES_ACHAT_PRODUIT.map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_ACHAT_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block text-xs font-semibold text-muted">
               Unité
               <input
@@ -1011,68 +1051,14 @@ export default function ParametresProduitsPage() {
                   <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
                     Comptabilité
                   </p>
-                  {peutComptaProduit ? (
-                    <div className="space-y-2">
-                      <label className="block text-xs font-semibold text-muted">
-                        Compte associé
-                        <select
-                          className="select mt-1"
-                          value={selected.compteComptableId ?? ""}
-                          onChange={(e) =>
-                            updateProduit(selected.id, {
-                              compteComptableId: e.target.value || undefined,
-                            })
-                          }
-                        >
-                          <option value="">Aucun compte</option>
-                          {[...comptesComptables]
-                            .sort((a, b) => a.numero.localeCompare(b.numero))
-                            .map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.numero} — {c.libelle}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={produitEstTaxable(selected, avecTVA)}
-                          disabled={!avecTVA}
-                          onChange={(e) =>
-                            updateProduit(selected.id, {
-                              taxable: e.target.checked,
-                            })
-                          }
-                        />
-                        Produit taxable (TVA)
-                      </label>
-                      <p className="text-xs text-muted">
-                        Plusieurs produits peuvent partager le même compte.
-                        {!avecTVA
-                          ? " Entreprise non assujettie : aucune ligne de TVA ne sera générée."
-                          : ""}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted">
-                      {selected.compteComptableId
-                        ? `${
-                            comptesComptables.find(
-                              (c) => c.id === selected.compteComptableId,
-                            )?.numero ?? ""
-                          } — ${
-                            comptesComptables.find(
-                              (c) => c.id === selected.compteComptableId,
-                            )?.libelle ?? "Compte"
-                          }`
-                        : "Aucun compte associé."}{" "}
-                      {produitEstTaxable(selected, avecTVA)
-                        ? "Taxable."
-                        : "Non taxable."}{" "}
-                      Seul l&apos;administrateur peut modifier ces champs.
-                    </p>
-                  )}
+                  <ComptaProduitPanel
+                    produit={selected}
+                    comptes={comptesComptables}
+                    ecritures={ecrituresComptables}
+                    avecTVA={avecTVA}
+                    peutModifier={peutComptaProduit}
+                    onChange={(patch) => updateProduit(selected.id, patch)}
+                  />
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1196,6 +1182,124 @@ export default function ParametresProduitsPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function libelleCompte(
+  compte: { numero: string; libelle: string } | undefined,
+) {
+  if (!compte) return "Compte à définir";
+  return `${compte.numero} — ${compte.libelle}`;
+}
+
+function ComptaProduitPanel({
+  produit,
+  comptes,
+  ecritures,
+  avecTVA,
+  peutModifier,
+  onChange,
+}: {
+  produit: Produit;
+  comptes: import("@/lib/types").CompteComptable[];
+  ecritures: import("@/lib/types").EcritureComptable[];
+  avecTVA: boolean;
+  peutModifier: boolean;
+  onChange: (patch: Partial<Produit>) => void;
+}) {
+  const charge = compteChargeProduit(produit, comptes);
+  const vente = compteVenteProduit(produit, comptes);
+  const charges = comptesParClasse(comptes, "6");
+  const ventes = comptesParClasse(comptes, "7");
+  const chargeVerrouille = compteUtiliseEnEcriture(charge?.id, ecritures);
+  const venteVerrouille = compteUtiliseEnEcriture(vente?.id, ecritures);
+  const type = produit.typeAchat ?? "marchandises";
+
+  if (!peutModifier) {
+    return (
+      <p className="text-sm text-muted">
+        {TYPE_ACHAT_LABELS[type]}. Charge : {libelleCompte(charge)}. Vente :{" "}
+        {libelleCompte(vente)}.{" "}
+        {produitEstTaxable(produit, avecTVA) ? "Taxable." : "Non taxable."} Seul
+        l&apos;administrateur peut modifier les comptes.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold text-muted">
+        Type d&apos;achat
+        <select
+          className="select mt-1"
+          value={type}
+          onChange={(e) =>
+            onChange({ typeAchat: e.target.value as TypeAchat })
+          }
+        >
+          {TYPES_ACHAT_PRODUIT.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_ACHAT_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Compte de charge (achat)
+        <select
+          className="select mt-1"
+          value={charge?.id ?? ""}
+          disabled={chargeVerrouille}
+          onChange={(e) =>
+            onChange({ compteChargeId: e.target.value || undefined })
+          }
+        >
+          {charges.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.numero} — {c.libelle}
+            </option>
+          ))}
+        </select>
+      </label>
+      {chargeVerrouille && (
+        <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
+      )}
+      <label className="block text-xs font-semibold text-muted">
+        Compte de vente
+        <select
+          className="select mt-1"
+          value={vente?.id ?? ""}
+          disabled={venteVerrouille}
+          onChange={(e) =>
+            onChange({ compteVenteId: e.target.value || undefined })
+          }
+        >
+          {ventes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.numero} — {c.libelle}
+            </option>
+          ))}
+        </select>
+      </label>
+      {venteVerrouille && (
+        <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
+      )}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={produitEstTaxable(produit, avecTVA)}
+          disabled={!avecTVA}
+          onChange={(e) => onChange({ taxable: e.target.checked })}
+        />
+        Produit taxable (TVA)
+      </label>
+      <p className="text-xs text-muted">
+        Plusieurs produits peuvent partager le même compte.
+        {!avecTVA
+          ? " Entreprise non assujettie : aucune ligne de TVA ne sera générée."
+          : ""}
+      </p>
     </div>
   );
 }

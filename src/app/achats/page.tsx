@@ -45,6 +45,13 @@ import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
 import { createId } from "@/lib/id";
 import { libelleProduit } from "@/lib/produits";
+import {
+  comptesParClasse,
+  TYPE_ACHAT_LABELS,
+  TYPES_ACHAT_LIBRES,
+  TYPES_ACHAT_PRODUIT,
+  ligneAchatStockee,
+} from "@/lib/comptabilite";
 import { useStore } from "@/lib/store";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
@@ -55,6 +62,7 @@ import type {
   AvoirAchatLigne,
   LivraisonAchatLigne,
   ModePaiement,
+  TypeAchat,
 } from "@/lib/types";
 
 const AUJOURD_HUI = jourLocalISO();
@@ -92,7 +100,12 @@ function AchatsListe() {
     pointDeVenteActifId,
     parametres,
     addAchat,
+    assurerComptesComptablesDefaut,
   } = useStore();
+
+  useEffect(() => {
+    assurerComptesComptablesDefaut();
+  }, [assurerComptesComptablesDefaut]);
   const { visibles: sitesVisibles } = useSitesVisibles();
 
   const { visible } = useAffichageTable("achats");
@@ -490,12 +503,18 @@ function AchatEditor({
   const livGlobale = statutLivraisonAchat(achat);
   const payGlobale = statutPaiementAchat(achat);
 
-  const nomProduit = (id: string) => {
+  const nomProduit = (id: string | undefined) => {
+    if (!id) return "Ligne libre";
     const p = produits.find((x) => x.id === id);
     return p ? libelleProduit(p) : "Produit";
   };
-  const unite = (id: string) =>
-    produits.find((x) => x.id === id)?.unite ?? "";
+  const unite = (id: string | undefined) =>
+    id ? produits.find((x) => x.id === id)?.unite ?? "" : "";
+  const libelleLigne = (l: AchatLigne) =>
+    l.produitId
+      ? nomProduit(l.produitId)
+      : l.designation?.trim() ||
+        TYPE_ACHAT_LABELS[l.typeAchat ?? "service_general"];
 
   const enregistrerCommande = () => {
     const res = updateAchat(
@@ -642,7 +661,7 @@ function AchatEditor({
           echeance={echeance}
           setEcheance={setEcheance}
           brouillon={brouillon}
-          nomProduit={nomProduit}
+          libelleLigne={libelleLigne}
           unite={unite}
           tot={tot}
           onSave={enregistrerCommande}
@@ -786,7 +805,7 @@ function CommandePanel({
   echeance,
   setEcheance,
   brouillon,
-  nomProduit,
+  libelleLigne,
   unite,
   tot,
   onSave,
@@ -799,16 +818,56 @@ function CommandePanel({
   echeance: string;
   setEcheance: (e: string) => void;
   brouillon: boolean;
-  nomProduit: (id: string) => string;
-  unite: (id: string) => string;
+  libelleLigne: (l: AchatLigne) => string;
+  unite: (id: string | undefined) => string;
   tot: { ht: number; tva: number; ttc: number };
   onSave: () => void;
 }) {
   const produits = useStore((s) => s.produits);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const comptesComptables = useStore((s) => s.comptesComptables);
+  const [typeNouveau, setTypeNouveau] = useState<TypeAchat>("marchandises");
   const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
+  const [designationLibre, setDesignationLibre] = useState("");
+  const [compteLibreId, setCompteLibreId] = useState("");
+  const [taxableLibre, setTaxableLibre] = useState(true);
+
+  const typeLibre =
+    typeNouveau === "service_general" || typeNouveau === "immobilisation";
+  const comptesLibres = comptesParClasse(
+    comptesComptables,
+    typeNouveau === "immobilisation" ? "2" : "6",
+  );
 
   const ajouterLigne = () => {
+    if (typeLibre) {
+      if (!designationLibre.trim()) {
+        alert("Saisissez la désignation.");
+        return;
+      }
+      if (!compteLibreId) {
+        alert(
+          typeNouveau === "immobilisation"
+            ? "Sélectionnez un compte d'immobilisation (classe 2)."
+            : "Sélectionnez un compte de charge (classe 6).",
+        );
+        return;
+      }
+      setLignes([
+        ...lignes,
+        {
+          id: createId("al"),
+          designation: designationLibre.trim(),
+          typeAchat: typeNouveau,
+          compteComptableId: compteLibreId,
+          taxable: taxableLibre,
+          quantite: 1,
+          prixAchatUnitaire: 0,
+        },
+      ]);
+      setDesignationLibre("");
+      return;
+    }
     if (!produitId) return;
     if (lignes.some((l) => l.produitId === produitId)) {
       alert("Cet article est déjà sur la commande.");
@@ -820,6 +879,7 @@ function CommandePanel({
       {
         id: createId("al"),
         produitId,
+        typeAchat: p?.typeAchat ?? typeNouveau,
         quantite: 1,
         prixAchatUnitaire: p?.prixAchat ?? 0,
         repartitions: [{ pointDeVenteId: achat.pointDeVenteId, quantite: 1 }],
@@ -867,21 +927,93 @@ function CommandePanel({
       {brouillon && (
         <div className="mb-4 flex flex-wrap items-end gap-2">
           <label className="block text-xs font-semibold text-muted">
-            Ajouter un article
+            Type d&apos;achat
             <select
               className="select mt-1 min-w-[16rem]"
-              value={produitId}
-              onChange={(e) => setProduitId(e.target.value)}
+              value={typeNouveau}
+              onChange={(e) => {
+                const t = e.target.value as TypeAchat;
+                setTypeNouveau(t);
+                setCompteLibreId("");
+              }}
             >
-              {produits
-                .filter((p) => p.actif)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {libelleProduit(p)}
-                  </option>
-                ))}
+              {TYPES_ACHAT_PRODUIT.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_ACHAT_LABELS[t]}
+                </option>
+              ))}
+              {TYPES_ACHAT_LIBRES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_ACHAT_LABELS[t]}
+                </option>
+              ))}
             </select>
           </label>
+          {typeLibre ? (
+            <>
+              <label className="block text-xs font-semibold text-muted">
+                Désignation
+                <input
+                  className="input mt-1 min-w-[16rem]"
+                  value={designationLibre}
+                  onChange={(e) => setDesignationLibre(e.target.value)}
+                  placeholder={
+                    typeNouveau === "immobilisation"
+                      ? "Ex. Ordinateur portable"
+                      : "Ex. Honoraires, loyer…"
+                  }
+                />
+              </label>
+              <label className="block text-xs font-semibold text-muted">
+                Compte
+                <select
+                  className="select mt-1 min-w-[16rem]"
+                  value={compteLibreId}
+                  onChange={(e) => setCompteLibreId(e.target.value)}
+                >
+                  <option value="">
+                    {comptesLibres.length === 0
+                      ? typeNouveau === "immobilisation"
+                        ? "Aucun compte de classe 2"
+                        : "Aucun compte de classe 6"
+                      : "Choisir un compte"}
+                  </option>
+                  {comptesLibres.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.numero} — {c.libelle}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {achat.tauxTVA > 0 && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={taxableLibre}
+                    onChange={(e) => setTaxableLibre(e.target.checked)}
+                  />
+                  Taxable
+                </label>
+              )}
+            </>
+          ) : (
+            <label className="block text-xs font-semibold text-muted">
+              Article catalogue
+              <select
+                className="select mt-1 min-w-[16rem]"
+                value={produitId}
+                onChange={(e) => setProduitId(e.target.value)}
+              >
+                {produits
+                  .filter((p) => p.actif)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {libelleProduit(p)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           <button type="button" className="btn btn-secondary" onClick={ajouterLigne}>
             <Plus className="h-4 w-4" />
             Ajouter
@@ -894,6 +1026,7 @@ function CommandePanel({
           <thead>
             <tr>
               <th>Article</th>
+              <th>Type</th>
               <th>Qté commandée</th>
               <th>PU HT</th>
               <th>Montant HT</th>
@@ -906,14 +1039,30 @@ function CommandePanel({
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={9} className="text-muted">
                   Aucun article.
                 </td>
               </tr>
             ) : (
               lignes.map((l) => (
                 <tr key={l.id}>
-                  <td className="font-medium">{nomProduit(l.produitId)}</td>
+                  <td className="font-medium">
+                    {libelleLigne(l)}
+                    {l.compteComptableId && !l.produitId && (
+                      <p className="text-xs font-normal text-muted">
+                        {comptesComptables.find((c) => c.id === l.compteComptableId)
+                          ?.numero}{" "}
+                        —{" "}
+                        {
+                          comptesComptables.find((c) => c.id === l.compteComptableId)
+                            ?.libelle
+                        }
+                      </p>
+                    )}
+                  </td>
+                  <td className="text-xs text-muted">
+                    {TYPE_ACHAT_LABELS[l.typeAchat ?? "marchandises"]}
+                  </td>
                   <td>
                     {brouillon ? (
                       <input
@@ -954,22 +1103,36 @@ function CommandePanel({
                   </td>
                   <td>{formatCurrency(l.quantite * l.prixAchatUnitaire)}</td>
                   <td className="min-w-[14rem] align-top">
-                    <RepartitionLigne
-                      ligne={l}
-                      siteDefaut={achat.pointDeVenteId}
-                      sites={pointsDeVente.filter((p) => p.actif)}
-                      brouillon={brouillon}
-                      onChange={(repartitions) =>
-                        setLignes(
-                          lignes.map((x) =>
-                            x.id === l.id ? { ...x, repartitions } : x,
-                          ),
-                        )
-                      }
-                    />
+                    {ligneAchatStockee(l) ? (
+                      <RepartitionLigne
+                        ligne={l}
+                        siteDefaut={achat.pointDeVenteId}
+                        sites={pointsDeVente.filter((p) => p.actif)}
+                        brouillon={brouillon}
+                        onChange={(repartitions) =>
+                          setLignes(
+                            lignes.map((x) =>
+                              x.id === l.id ? { ...x, repartitions } : x,
+                            ),
+                          )
+                        }
+                      />
+                    ) : (
+                      <span className="text-xs text-muted">Sans stock</span>
+                    )}
                   </td>
-                  <td>{formatNumber(quantiteLivreeProduit(achat, l.produitId))}</td>
-                  <td>{formatNumber(reliquatProduit({ ...achat, lignes }, l.produitId))}</td>
+                  <td>
+                    {ligneAchatStockee(l)
+                      ? formatNumber(quantiteLivreeProduit(achat, l.produitId ?? ""))
+                      : "—"}
+                  </td>
+                  <td>
+                    {ligneAchatStockee(l)
+                      ? formatNumber(
+                          reliquatProduit({ ...achat, lignes }, l.produitId),
+                        )
+                      : "—"}
+                  </td>
                   {brouillon && (
                     <td className="text-right">
                       <button
@@ -1038,12 +1201,14 @@ function LivraisonsPanel({
   const [date, setDate] = useState(AUJOURD_HUI);
   const [confirmer, setConfirmer] = useState(true);
   const [datePeremption, setDatePeremption] = useState("");
-  const gerePeremption = achat.lignes.some((l) =>
+  const lignesStock = achat.lignes.filter(ligneAchatStockee);
+  const gerePeremption = lignesStock.some((l) =>
     produits.find((p) => p.id === l.produitId)?.gerePeremption,
   );
   const [qtys, setQtys] = useState<Record<string, string>>({});
 
-  const lignesForm: LivraisonAchatLigne[] = achat.lignes
+  const lignesForm: LivraisonAchatLigne[] = lignesStock
+    .filter((l): l is AchatLigne & { produitId: string } => Boolean(l.produitId))
     .map((l) => {
       const rel = reliquatProduit(achat, l.produitId);
       const saisie = Number(qtys[l.produitId] ?? String(rel));
@@ -1060,6 +1225,16 @@ function LivraisonsPanel({
       <div className="flex items-start gap-2 rounded-[var(--radius)] border border-line bg-card p-4 text-sm text-muted">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         Validez la commande pour enregistrer des livraisons (entrées de stock + CUMP).
+      </div>
+    );
+  }
+
+  if (lignesStock.length === 0) {
+    return (
+      <div className="flex items-start gap-2 rounded-[var(--radius)] border border-line bg-card p-4 text-sm text-muted">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        Aucun article en stock à réceptionner. Les services généraux et
+        immobilisations n&apos;entrent pas en stock.
       </div>
     );
   }
@@ -1110,14 +1285,15 @@ function LivraisonsPanel({
                 </tr>
               </thead>
               <tbody>
-                {achat.lignes.map((l) => {
-                  const rel = reliquatProduit(achat, l.produitId);
-                  if (rel <= 0) return null;
+                {lignesStock.map((l) => {
+                  const produitId = l.produitId;
+                  const rel = reliquatProduit(achat, produitId);
+                  if (rel <= 0 || !produitId) return null;
                   return (
-                    <tr key={l.produitId}>
-                      <td>{nomProduit(l.produitId)}</td>
+                    <tr key={produitId}>
+                      <td>{nomProduit(produitId)}</td>
                       <td>
-                        {formatNumber(rel)} {unite(l.produitId)}
+                        {formatNumber(rel)} {unite(produitId)}
                       </td>
                       <td>
                         <input
@@ -1126,9 +1302,9 @@ function LivraisonsPanel({
                           step="0.1"
                           max={rel}
                           className="input w-28"
-                          value={qtys[l.produitId] ?? String(rel)}
+                          value={qtys[produitId] ?? String(rel)}
                           onChange={(e) =>
-                            setQtys({ ...qtys, [l.produitId]: e.target.value })
+                            setQtys({ ...qtys, [produitId]: e.target.value })
                           }
                         />
                       </td>
@@ -1457,16 +1633,18 @@ function RetoursPanel({
               </tr>
             </thead>
             <tbody>
-              {achat.lignes.map((l) => {
+              {achat.lignes.filter(ligneAchatStockee).map((l) => {
+                const produitId = l.produitId;
+                if (!produitId) return null;
                 const dispo =
-                  quantiteLivreeProduit(achat, l.produitId) -
-                  quantiteRetourneeProduit(achat, l.produitId);
+                  quantiteLivreeProduit(achat, produitId) -
+                  quantiteRetourneeProduit(achat, produitId);
                 if (dispo <= 0) return null;
                 return (
-                  <tr key={l.produitId}>
-                    <td>{nomProduit(l.produitId)}</td>
+                  <tr key={produitId}>
+                    <td>{nomProduit(produitId)}</td>
                     <td>
-                      {formatNumber(dispo)} {unite(l.produitId)}
+                      {formatNumber(dispo)} {unite(produitId)}
                     </td>
                     <td>
                       <input
@@ -1475,9 +1653,9 @@ function RetoursPanel({
                         step="0.1"
                         max={dispo}
                         className="input w-28"
-                        value={qtys[l.produitId] ?? ""}
+                        value={qtys[produitId] ?? ""}
                         onChange={(e) =>
-                          setQtys({ ...qtys, [l.produitId]: e.target.value })
+                          setQtys({ ...qtys, [produitId]: e.target.value })
                         }
                       />
                     </td>
@@ -1492,6 +1670,10 @@ function RetoursPanel({
           className="btn btn-primary mt-3"
           onClick={() => {
             const lignes: AvoirAchatLigne[] = achat.lignes
+              .filter(ligneAchatStockee)
+              .filter((l): l is AchatLigne & { produitId: string } =>
+                Boolean(l.produitId),
+              )
               .map((l) => ({
                 produitId: l.produitId,
                 quantite: Number(qtys[l.produitId] ?? 0),

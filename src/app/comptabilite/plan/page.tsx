@@ -10,11 +10,13 @@ import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
 import { appliqueTVA } from "@/lib/commercial";
 import {
+  compteUtiliseEnEcriture,
   comptesTvaManquants,
   ecrireCsvPlanModele,
   LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
   longueurNumeroCompteEffective,
+  MSG_COMPTE_VERROUILLE,
   ROLE_COMPTE_LABELS,
 } from "@/lib/comptabilite";
 import { useStore } from "@/lib/store";
@@ -32,6 +34,7 @@ function PlanComptableContent() {
   const {
     parametres,
     comptesComptables,
+    ecrituresComptables,
     definirLongueurNumeroCompte,
     addCompteComptable,
     updateCompteComptable,
@@ -61,6 +64,10 @@ function PlanComptableContent() {
     () =>
       [...comptesComptables].sort((a, b) => a.numero.localeCompare(b.numero)),
     [comptesComptables],
+  );
+  const editionVerrouillee = compteUtiliseEnEcriture(
+    editingId ?? undefined,
+    ecrituresComptables,
   );
 
   function onFixerLongueur(e: FormEvent) {
@@ -199,6 +206,7 @@ function PlanComptableContent() {
               <input
                 className="input mt-1 font-mono"
                 value={form.numero}
+                disabled={editionVerrouillee}
                 onChange={(e) => setForm({ ...form, numero: e.target.value })}
                 placeholder={longueur ? `${longueur} chiffres` : "D’abord fixer la longueur"}
                 required
@@ -209,6 +217,7 @@ function PlanComptableContent() {
               <input
                 className="input mt-1"
                 value={form.libelle}
+                disabled={editionVerrouillee}
                 onChange={(e) => setForm({ ...form, libelle: e.target.value })}
                 required
               />
@@ -218,6 +227,7 @@ function PlanComptableContent() {
               <select
                 className="select mt-1"
                 value={form.roleCompte}
+                disabled={editionVerrouillee}
                 onChange={(e) =>
                   setForm({
                     ...form,
@@ -235,7 +245,11 @@ function PlanComptableContent() {
               </select>
             </label>
             <div className="flex flex-wrap gap-2 sm:col-span-4">
-              <button type="submit" className="btn btn-primary" disabled={longueur == null}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={longueur == null || editionVerrouillee}
+              >
                 {editingId ? (
                   <>
                     <Pencil className="h-4 w-4" />
@@ -283,6 +297,9 @@ function PlanComptableContent() {
               </button>
             </div>
           </form>
+          {editionVerrouillee && (
+            <p className="mt-3 text-sm text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
+          )}
           <p className="mt-3 text-xs text-muted">
             Import CSV : deux colonnes, numéro et libellé (séparateur ; ou ,).
           </p>
@@ -307,17 +324,30 @@ function PlanComptableContent() {
               </tr>
             </thead>
             <tbody>
-              {comptesTries.map((c) => (
-                <tr key={c.id}>
+              {comptesTries.map((c) => {
+                const verrouille = compteUtiliseEnEcriture(
+                  c.id,
+                  ecrituresComptables,
+                );
+                return (
+                <tr key={c.id} className={verrouille ? "opacity-70" : undefined}>
                   <td className="font-mono text-xs font-semibold">{c.numero}</td>
-                  <td>{c.libelle}</td>
+                  <td>
+                    {c.libelle}
+                    {verrouille && (
+                      <p className="mt-1 text-xs text-amber-800">
+                        {MSG_COMPTE_VERROUILLE}
+                      </p>
+                    )}
+                  </td>
                   <td className="text-xs text-muted">
                     {ROLE_COMPTE_LABELS[c.roleCompte ?? "general"]}
                   </td>
                   {peutGerer && (
                     <td className="text-right">
                       <IconButton
-                        label="Modifier"
+                        label={verrouille ? MSG_COMPTE_VERROUILLE : "Modifier"}
+                        disabled={verrouille}
                         onClick={() => {
                           setEditingId(c.id);
                           setForm({
@@ -330,7 +360,8 @@ function PlanComptableContent() {
                         <Pencil className="h-4 w-4" />
                       </IconButton>
                       <IconButton
-                        label="Supprimer"
+                        label={verrouille ? MSG_COMPTE_VERROUILLE : "Supprimer"}
+                        disabled={verrouille}
                         onClick={() => {
                           if (!confirm(`Supprimer ${c.numero} ${c.libelle} ?`)) {
                             return;
@@ -344,7 +375,8 @@ function PlanComptableContent() {
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

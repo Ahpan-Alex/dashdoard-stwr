@@ -36,6 +36,14 @@ export type CategorieProduit = {
   actif: boolean;
 };
 
+export type TypeAchat =
+  | "marchandises"
+  | "matieres_premieres"
+  | "fournitures"
+  | "service_produit"
+  | "service_general"
+  | "immobilisation";
+
 export type Produit = {
   id: string;
   /** Code métier unique (saisi par l'utilisateur) */
@@ -63,8 +71,19 @@ export type Produit = {
   seuilSurstock?: number;
   /** Si vrai, les lots d'entrée peuvent porter une date de péremption. */
   gerePeremption?: boolean;
-  /** Compte du plan associé (plusieurs produits peuvent partager le même). */
+  /**
+   * Ancien champ unique (rétrocompat). Préférer compteChargeId / compteVenteId.
+   */
   compteComptableId?: string;
+  /** Compte de charge (classe 6) pour les écritures d'achat. */
+  compteChargeId?: string;
+  /** Compte de vente (classe 7) pour les écritures de vente. */
+  compteVenteId?: string;
+  /**
+   * Nature d'achat catalogue. Uniquement les types qui passent par la fiche
+   * produit (pas service général ni immobilisation).
+   */
+  typeAchat?: TypeAchat;
   /**
    * TVA applicable sur ce produit.
    * Absent : déduit du taux TVA catalogue (rétrocompatibilité).
@@ -405,7 +424,15 @@ export type AchatLigneRepartition = {
 
 export type AchatLigne = {
   id: string;
-  produitId: string;
+  /** Absent pour une ligne libre (service général, immobilisation). */
+  produitId?: string;
+  /** Libellé saisi (lignes libres). */
+  designation?: string;
+  typeAchat?: TypeAchat;
+  /** Compte choisi à la saisie (lignes libres). */
+  compteComptableId?: string;
+  /** TVA sur la ligne libre. Absent = suit l'assujettissement. */
+  taxable?: boolean;
   quantite: number;
   /** Prix d'achat unitaire HT (Ar) */
   prixAchatUnitaire: number;
@@ -918,7 +945,9 @@ export type JournalActivite = {
 export type RoleCompteComptable =
   | "general"
   | "tva_deductible"
-  | "tva_collectee";
+  | "tva_collectee"
+  | "defaut_charge"
+  | "defaut_vente";
 
 export type CompteComptable = {
   id: string;

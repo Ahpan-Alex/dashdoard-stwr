@@ -1,3 +1,4 @@
+import { ligneAchatStockee } from "./type-achat";
 import type { Achat, AchatLigne, AchatLigneRepartition, PointDeVente, RoleSite } from "./types";
 
 export const ROLE_SITE_LABELS: Record<RoleSite, string> = {
@@ -79,6 +80,7 @@ export function repartitionLigneValide(ligne: AchatLigne): boolean {
 
 export function motifRepartitionInvalide(lignes: AchatLigne[]): string | null {
   for (const l of lignes) {
+    if (!ligneAchatStockee(l)) continue;
     if (!repartitionLigneValide(l)) {
       return "La répartition par site d'une ligne ne correspond pas à la quantité commandée.";
     }
