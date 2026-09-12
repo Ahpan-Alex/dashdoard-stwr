@@ -79,6 +79,7 @@ export function emptyAppState(): AppState {
     journalActivites: [],
     comptesComptables: [],
     ecrituresComptables: [],
+    transfertsComptables: [],
   };
 }
 
@@ -119,6 +120,7 @@ export function pickAppState(state: AppState): AppState {
     journalActivites: state.journalActivites ?? [],
     comptesComptables: state.comptesComptables ?? [],
     ecrituresComptables: state.ecrituresComptables ?? [],
+    transfertsComptables: state.transfertsComptables ?? [],
     pointDeVenteActifId: state.pointDeVenteActifId,
   };
 }

@@ -8,6 +8,7 @@ import {
   Boxes,
   Receipt,
   MapPin,
+  BookOpen,
   FileSpreadsheet,
   Landmark,
   Users,
@@ -209,9 +210,9 @@ const sections: { title: string; links: NavLink[] }[] = [
     title: "Comptabilité",
     links: [
       {
-        href: "/comptabilite/plan",
-        label: "Plan comptable",
-        icon: FileSpreadsheet,
+        href: "/comptabilite",
+        label: "Comptabilité",
+        icon: BookOpen,
         permission: "comptabilite.lire",
         matchPrefixes: ["/comptabilite"],
         children: [
@@ -221,8 +222,12 @@ const sections: { title: string; links: NavLink[] }[] = [
             exact: true,
           },
           {
-            href: "/comptabilite/ecritures",
-            label: "Écritures",
+            href: "/comptabilite/journaux",
+            label: "Journaux",
+          },
+          {
+            href: "/comptabilite/transfert",
+            label: "Transfert",
           },
         ],
       },

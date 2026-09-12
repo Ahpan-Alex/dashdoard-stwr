@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 const MENUS = [
   { href: "/comptabilite/plan", label: "Plan comptable" },
-  { href: "/comptabilite/ecritures", label: "Écritures" },
+  { href: "/comptabilite/journaux", label: "Journaux" },
+  { href: "/comptabilite/transfert", label: "Transfert" },
 ] as const;
 
 export function ComptabiliteSubnav() {
@@ -13,7 +14,10 @@ export function ComptabiliteSubnav() {
   return (
     <nav className="mb-6 flex flex-wrap gap-2">
       {MENUS.map((item) => {
-        const active = pathname === item.href;
+        const active =
+          pathname === item.href ||
+          (item.href === "/comptabilite/journaux" &&
+            pathname === "/comptabilite/ecritures");
         return (
           <Link
             key={item.href}

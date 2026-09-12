@@ -979,6 +979,21 @@ export type EcritureComptable = {
   sourceType: SourceEcriture;
   sourceId: string;
   lignes: LigneEcritureComptable[];
+  /** Marquée après un export Transfert ; figée ensuite. */
+  transferee?: boolean;
+  transfertId?: string;
+  transfereeAt?: string;
+};
+
+export type TransfertComptable = {
+  id: string;
+  date: string;
+  journal: JournalEcriture | "tous";
+  debut?: string;
+  fin?: string;
+  ecritureIds: string[];
+  lignes: (string | number)[][];
+  nomFichier: string;
 };
 
 export type AppState = {
@@ -1021,5 +1036,6 @@ export type AppState = {
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];
   ecrituresComptables: EcritureComptable[];
+  transfertsComptables: TransfertComptable[];
   pointDeVenteActifId: string | "tous";
 };

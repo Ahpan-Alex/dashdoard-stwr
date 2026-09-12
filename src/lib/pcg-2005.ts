@@ -1,245 +1,344 @@
 export type LignePlanComptable = { numero: string; libelle: string };
 
 /**
- * Référentiel PCG 2005 embarqué (Steward) — classes 1 à 8.
- * Hors comptes de TVA 445x (création manuelle).
- * Numéros sources 3 chiffres ou plus, pour ne pas entrer en collision
- * avec les comptes de repli 600000 / 700000 après complément de zéros.
+ * Référentiel par défaut embarqué (Steward).
+ * Hors comptes de TVA 445x — création manuelle.
  */
-export const PLAN_PCG_2005: LignePlanComptable[] = [
-  // Classe 1 — Capitaux
-  { numero: "101", libelle: "Capital" },
-  { numero: "104", libelle: "Primes liées au capital social" },
-  { numero: "105", libelle: "Écarts de réévaluation" },
-  { numero: "106", libelle: "Réserves" },
-  { numero: "108", libelle: "Compte de l'exploitant" },
-  { numero: "109", libelle: "Actionnaires : capital souscrit non appelé" },
-  { numero: "110", libelle: "Report à nouveau (solde créditeur)" },
-  { numero: "119", libelle: "Report à nouveau (solde débiteur)" },
-  { numero: "120", libelle: "Résultat de l'exercice (bénéfice)" },
-  { numero: "129", libelle: "Résultat de l'exercice (perte)" },
-  { numero: "131", libelle: "Subventions d'équipement" },
-  { numero: "138", libelle: "Autres subventions d'investissement" },
-  { numero: "151", libelle: "Provisions pour risques" },
-  { numero: "155", libelle: "Provisions pour impôts" },
-  { numero: "157", libelle: "Provisions pour charges à répartir" },
-  { numero: "158", libelle: "Autres provisions pour charges" },
-  { numero: "161", libelle: "Emprunts obligataires convertibles" },
-  { numero: "163", libelle: "Autres emprunts obligataires" },
-  { numero: "164", libelle: "Emprunts auprès des établissements de crédit" },
-  { numero: "165", libelle: "Dépôts et cautionnements reçus" },
-  { numero: "168", libelle: "Autres emprunts et dettes assimilées" },
-  { numero: "171", libelle: "Dettes rattachées à des participations" },
-  { numero: "178", libelle: "Autres dettes rattachées à des participations" },
+const PCG_2005_CSV = `numero;libelle
+10;Capital, réserves et assimilés
+101;Capital
+104;Primes liées au capital social
+105;Ecart d'évaluation
+106;Réserves
+107;Ecart d'équivalence
+108;Compte de l'exploitant
+109;Actionnaires, capital souscrit non appelé
+11;Report à nouveau
+110;Report à nouveau solde créditeur
+119;Report à nouveau solde débiteur
+12;Résultat de l'exercice
+120;Résultat de l'exercice (bénéfice)
+128;Résultat provisoire
+129;Résultat de l'exercice (perte)
+13;Produits et charges différés - hors cycle d'exploitation
+131;Subventions d'équipement
+132;Autres subventions d'investissement
+133;Impôts différés actif
+134;Impôts différés passif
+138;Autres produits et charges différés
+139;Subventions d'investissement inscrites au compte de résultat
+14;Provisions réglementées
+142;Provisions réglementées relatives aux immobilisations
+143;Provisions réglementées relatives aux stocks
+144;Provisions réglementées relatives aux autres éléments de l'actif
+145;Amortissements dérogatoires
+146;Provisions spéciale de réévaluation
+147;Plus-values réinvesties
+148;Autres provisions réglementées
+15;Provisions pour charges - passifs non courants
+153;Provisions pour pensions et obligations similaires
+155;Provisions pour impôts
+156;Provisions pour renouvellement des immobilisations (concession)
+158;Autres provisions pour charges - passifs non courants
+16;Emprunts et dettes assimilés
+161;Emprunts obligataires convertibles
+163;Autres emprunts obligataires
+164;Emprunts auprès des établissements de crédit
+165;Dépôts et cautionnements reçus
+167;Dettes sur contrat de location-financement
+168;Autres emprunts et dettes assimilés
+169;Primes de remboursement des obligations
+17;Dettes rattachées à des participations
+171;Dettes rattachées à des participations groupe
+172;Dettes rattachées à des participations hors groupe
+173;Dettes rattachées à des sociétés en participation
+178;Autres dettes rattachés à des participations
+18;Comptes de liaison des établissements et sociétés en participation
+181;Comptes de liaison entre établissements
+188;Comptes de liaison entre sociétés en participation
+20;Immobilisations incorporelles
+201;Frais d'établissements
+203;Frais de développement immobilisables
+204;Logiciels informatiques et assimilés
+205;Concessions et droits similaires, brevets, licences, marques
+207;Fonds commercial
+208;Autres immobilisations incorporelles
+21;Immobilisations corporelles
+211;Terrains
+212;Agencements et aménagements de terrain
+213;Constructions
+215;Installations techniques
+218;Autres immobilisations corporelles
+22;Immobilisations mises en concession
+221;Terrains en concession
+222;Agencements et aménagements de terrain en concession
+223;Constructions en concession
+225;Installations techniques en concession
+228;Autres immobilisations corporelles en concession
+229;Droits du concédant
+23;Immobilisations en cours
+232;Immobilisations corporelles en cours
+237;Immobilisations incorporelles en cours
+238;Avances et acomptes versés sur commandes d'immobilisations
+26;Participations et créances rattachées à des participations
+261;Titres de participation
+262;Autres formes de participations
+265;Titres de participation évalués par équivalence
+266;Créances rattachées à des participations groupe
+267;Créances rattachées à des participations hors groupe
+268;Créances rattachées à des sociétés en participation
+269;Versements restant à effectuer sur titres de participation non libérés
+27;Autres immobilisations financières
+271;Titres immobilisés autres que les titres immobilisés de l'activité de portefeuille
+272;Titres représentatifs de droit de créance (obligations, bons)
+273;Titres immobilisés de l'activité de portefeuille
+274;Prêts
+275;Dépôts et cautionnements versés
+276;Autres créances immobilisées
+277;Actions propres (ou parts propres)
+279;Versements restant à effectuer sur titres immobilisés non libérés
+28;Amortissement des immobilisations
+280;Amortissement des immobilisations incorporelles
+281;Amortissement des immobilisations corporelles
+282;Amortissement des immobilisations mises en concession
+29;Pertes de valeur sur immobilisations
+290;Perte de valeur sur immobilisations incorporelles
+291;Perte de valeur sur immobilisations corporelles
+292;Dépréciation sur immobilisations mises en concession
+293;Perte de valeur sur immobilisations en cours
+296;Perte de valeur sur participations et créances rattachées à participations
+297;Perte de valeur sur autres immobilisations financières
+31;Matières premières et fournitures
+32;Autres approvisionnements
+321;Matières consommables
+322;Fournitures consommables
+326;Emballages
+33;En cours de production de biens
+331;Produits en cours
+335;Travaux en cours
+34;En cours de production de services
+341;Etudes en cours
+345;Prestations de service en cours
+35;Stocks de produits
+351;Produits intermédiaires
+355;Produits finis
+358;Produits résiduels ou matières de récupération (déchets, rebuts)
+37;Stocks de marchandises
+38;Stocks à l'extérieur (en cours de route, en dépôt ou en consignation)
+39;Pertes de valeur sur stocks et en cours
+391;Pertes de valeur Matières premières et fournitures
+392;Pertes de valeur Autres approvisionnements
+393;Pertes de valeur En cours de production de biens
+394;Pertes de valeur En cours de production de services
+395;Pertes de valeur Stocks de produits
+397;Pertes de valeur Stocks de marchandises
+398;Pertes de valeur Stocks à l'extérieur
+40;Fournisseurs et comptes rattachés
+401;Fournisseurs de biens et services
+403;Fournisseurs effets à payer
+404;Fournisseurs d'immobilisations
+405;Fournisseurs d'immobilisations effets à payer
+408;Fournisseurs factures non parvenues
+409;Fournisseurs débiteurs : avances et acomptes, RRR à obtenir, autres créances
+41;Clients et comptes rattachés
+411;Clients
+413;Clients effets à recevoir
+416;Clients douteux
+417;Créances sur travaux non encore facturables
+418;Clients - produits non encore facturés
+419;Clients créditeurs
+42;Personnel et comptes rattachés
+421;Personnel, rémunérations dues
+422;Fonds sociaux - œuvres sociales
+425;Personnel, avances et acomptes accordés
+426;Personnel, dépôts reçus
+427;Personnel, oppositions
+428;Personnel, charges à payer et produits à recevoir
+43;Organismes sociaux et comptes rattachés
+431;Organismes sociaux A
+432;Organismes sociaux B
+438;Organismes sociaux, charges à payer
+44;Etat, collectivités publiques, organismes internationaux
+441;Etat, subventions à recevoir
+442;Etat, impôts et taxes recouvrables sur des tiers
+443;Opérations particulières avec l'Etat et autres organismes publiques
+444;Etat, impôts sur les résultats
+447;Autres impôts, taxes et versements assimilés
+448;Etat, charges à payer et produits à recevoir
+45;Groupe et Associés
+451;Opérations Groupe
+455;Associés - comptes courants
+456;Associés, opérations sur le capital
+457;Associés, dividendes à payer
+458;Associés, opérations faites en commun ou en groupement
+46;Débiteurs divers et créditeurs divers
+462;Créances sur cessions d'immobilisations
+464;Dettes sur acquisitions de valeurs mobilières de placement
+465;Créances sur cessions de valeurs mobilières de placement
+467;Autres comptes débiteurs ou créditeurs
+468;Divers charges à payer ou produits à recevoir
+47;Comptes transitoires ou d'attente
+471;Comptes d'attente
+48;Charges ou produits constatés d'avance et provisions
+481;Provisions - passifs courants
+486;Charges constatées d'avance
+487;Produits constatés d'avance
+49;Pertes de valeur sur comptes de tiers
+491;Pertes de valeur sur comptes de clients
+495;Pertes de valeur sur comptes du groupe et des associés
+496;Pertes de valeur sur comptes de débiteurs divers
+50;Valeurs mobilières de placement
+501;Part dans des entreprises liées
+503;Actions
+504;Autres titres conférant un droit de propriété
+505;Obligations et bons émis par la société et rachetés par elle
+506;Obligations
+507;Bons du trésor et bons de caisse à court terme
+508;Autres valeurs mobilières de placement et créances assimilés
+509;Versements restant à effectuer sur VMP non libérées
+51;Banques, établissements financiers et assimilés
+511;Valeurs à l'encaissement
+512;Banques comptes courants
+515;Caisse du Trésor Public et établissements publics
+517;Autres organismes financiers
+518;Intérêts courus
+519;Concours bancaires courants
+52;Instruments de trésorerie
+53;Caisse
+54;Régies d'avances et accréditifs
+58;Virements internes
+581;Virements de fonds
+588;Autres virements internes
+59;Pertes de valeur sur comptes financiers
+591;Pertes de valeur sur valeurs en banque et Ets financiers
+594;Pertes de valeur sur régies d'avances et accréditifs
+60;Achats consommés
+601;Matières premières
+602;Autres approvisionnements
+603;Variations des stocks
+604;Achats d'études et de prestations de service
+605;Achats de matériels, équipements et travaux
+606;Achats non stockés de matières et fournitures
+607;Achats de marchandises
+608;Frais accessoires d'achat
+609;Rabais, remises, ristournes obtenus sur achats
+61;Services extérieurs
+611;Sous-traitance générale
+613;Locations
+614;Charges locatives et charges de copropriété
+615;Entretien, réparations et maintenance
+616;Primes d'assurances
+617;Etudes et recherches
+618;Documentation et divers
+619;Rabais, remises, ristournes obtenus sur services extérieurs
+62;Autres services extérieurs
+621;Personnel extérieur à l'entreprise
+622;Rémunérations d'intermédiaires et honoraires
+623;Publicité, publication, relations publiques
+624;Transports de biens et transport collectif du personnel
+625;Déplacements, missions et réceptions
+626;Frais postaux et de télécommunications
+627;Services bancaires et assimilés
+628;Cotisations et divers
+629;Rabais, remises, ristournes obtenus sur autres services extérieurs
+63;Impôts, taxes et versements assimilés
+631;Impôts, taxes et versements assimilés sur rémunérations
+635;Autres impôts et taxes
+64;Charges de personnel
+641;Rémunérations du personnel
+644;Rémunérations des dirigeants
+645;Cotisations aux organismes sociaux
+646;Charges sociales sur rémunérations des dirigeants
+647;Autres charges sociales
+648;Autres charges de personnel
+65;Autres charges des activités ordinaires
+651;Redevances pour concessions, brevets, licences, logiciels et valeurs similaires
+652;Moins values sur cessions d'actifs non courants
+653;Jetons de présence
+654;Pertes sur créances irrécouvrables
+655;Quote-part de résultat sur opérations faites en commun
+656;Amendes et pénalités, subventions accordées, dons et libéralités
+657;Charges exceptionnelles de gestion courante
+658;Autres charges de gestion courante
+66;Charges financières
+661;Charges d'intérêts
+664;Pertes sur créances liées à des participations
+665;Moins-values sur titres de placement
+666;Pertes de change
+667;Moins-values sur instruments financiers et assimilés
+668;Autres charges financières
+67;Eléments extraordinaires (charges)
+671;Charges exceptionnelles sur opérations de gestion
+672;Charges sur exercices antérieurs (en cours d'exercice seulement)
+673;Autres charges exceptionnelles
+68;Dotations aux amortissements, provisions, pertes de valeur
+681;Dotations - actifs non courants
+685;Dotations - actifs courants
+69;Impôts sur les bénéfices
+692;Imposition différée actif
+693;Imposition différée passif
+695;Impôts sur les bénéfices basés sur le résultat des activités ordinaires
+698;Autres impôts sur les résultats
+70;Ventes de produits fabriqués, marchandises, prestations
+701;Ventes de produits finis
+702;Ventes de produits intermédiaires
+703;Ventes de produits résiduels
+704;Vente de travaux
+705;Vente d'études
+706;Vente de prestations de service
+707;Ventes de marchandises
+708;Produits des activités annexes
+709;Rabais, remises et ristournes accordés
+71;Production stockée (ou déstockage)
+713;Variation de stocks d'en-cours
+714;Variation de stocks de produits
+72;Production immobilisée
+721;Production immobilisée d'actif incorporel
+722;Production immobilisée d'actif corporel
+74;Subventions d'exploitation
+741;Subvention d'équilibre
+748;Autres subventions d'exploitation
+75;Autres produits opérationnels
+751;Redevances pour concessions, brevets, licences, logiciels et valeurs similaires
+752;Plus-values sur cessions d'actifs non courants
+753;Jetons de présence et rémunérations d'administrateurs ou de gérant
+754;Quotes-parts de subventions d'investissement virées au résultat de l'exercice
+755;Quote-part de résultat sur opérations faites en commun
+756;Libéralités perçues, rentrées sur créances amorties
+757;Produits exceptionnels sur opérations de gestion
+758;Autres produits de gestion courante
+76;Produits financiers
+761;Produits de participations
+762;Produits des autres immobilisations financières
+763;Revenus des autres créances
+764;Revenus et plus-values des valeurs mobilières de placement
+766;Gains de change
+767;Produits nets sur cessions de valeurs mobilières de placement
+768;Autres produits financiers
+77;Eléments extraordinaires (produits)
+771;Produits exceptionnels sur opérations de gestion
+772;Produits exercices antérieurs (en cours d'exercice seulement)
+773;Autres produits exceptionnels
+78;Reprises sur provisions et pertes de valeur
+781;Reprise d'exploitation - actifs non courants
+785;Reprise d'exploitation - actifs courants
+786;Reprises financières`;
 
-  // Classe 2 — Immobilisations
-  { numero: "201", libelle: "Frais d'établissement" },
-  { numero: "203", libelle: "Frais de recherche et de développement" },
-  { numero: "205", libelle: "Concessions, brevets, licences, marques" },
-  { numero: "206", libelle: "Droit au bail" },
-  { numero: "207", libelle: "Fonds commercial" },
-  { numero: "208", libelle: "Autres immobilisations incorporelles" },
-  { numero: "211", libelle: "Terrains" },
-  { numero: "213", libelle: "Constructions" },
-  { numero: "215", libelle: "Installations techniques, matériel et outillage" },
-  { numero: "2182", libelle: "Matériel de transport" },
-  { numero: "2183", libelle: "Matériel de bureau et matériel informatique" },
-  { numero: "2184", libelle: "Mobilier" },
-  { numero: "218", libelle: "Autres immobilisations corporelles" },
-  { numero: "231", libelle: "Immobilisations corporelles en cours" },
-  { numero: "237", libelle: "Avances et acomptes versés sur immobilisations" },
-  { numero: "261", libelle: "Titres de participation" },
-  { numero: "266", libelle: "Autres formes de participation" },
-  { numero: "267", libelle: "Créances rattachées à des participations" },
-  { numero: "271", libelle: "Titres immobilisés (droit de propriété)" },
-  { numero: "272", libelle: "Titres immobilisés (droit de créance)" },
-  { numero: "274", libelle: "Prêts" },
-  { numero: "275", libelle: "Dépôts et cautionnements versés" },
-  { numero: "276", libelle: "Autres créances immobilisées" },
+function parserReferentiel(csv: string): LignePlanComptable[] {
+  const lignes: LignePlanComptable[] = [];
+  for (const line of csv.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const sep = trimmed.indexOf(";");
+    if (sep < 0) continue;
+    const numero = trimmed.slice(0, sep).replace(/\D/g, "");
+    const libelle = trimmed.slice(sep + 1).trim();
+    if (!numero || /numero/i.test(numero)) continue;
+    if (numero.startsWith("445")) continue;
+    if (!libelle) continue;
+    lignes.push({ numero, libelle });
+  }
+  return lignes;
+}
 
-  // Classe 3 — Stocks
-  { numero: "311", libelle: "Matières premières" },
-  { numero: "321", libelle: "Matières consommables" },
-  { numero: "322", libelle: "Fournitures consommables" },
-  { numero: "326", libelle: "Emballages" },
-  { numero: "331", libelle: "Produits en cours" },
-  { numero: "335", libelle: "Travaux en cours" },
-  { numero: "341", libelle: "Études en cours" },
-  { numero: "345", libelle: "Prestations de services en cours" },
-  { numero: "351", libelle: "Produits intermédiaires" },
-  { numero: "355", libelle: "Produits finis" },
-  { numero: "358", libelle: "Produits résiduels" },
-  { numero: "371", libelle: "Marchandises" },
-  { numero: "391", libelle: "Dépréciations des matières premières" },
-  { numero: "397", libelle: "Dépréciations des stocks de marchandises" },
-
-  // Classe 4 — Tiers (hors 445x TVA)
-  { numero: "401", libelle: "Fournisseurs" },
-  { numero: "403", libelle: "Fournisseurs — Effets à payer" },
-  { numero: "404", libelle: "Fournisseurs d'immobilisations" },
-  { numero: "408", libelle: "Fournisseurs — Factures non parvenues" },
-  { numero: "409", libelle: "Fournisseurs débiteurs" },
-  { numero: "411", libelle: "Clients" },
-  { numero: "413", libelle: "Clients — Effets à recevoir" },
-  { numero: "416", libelle: "Clients douteux ou litigieux" },
-  { numero: "418", libelle: "Clients — Produits non encore facturés" },
-  { numero: "419", libelle: "Clients créditeurs" },
-  { numero: "421", libelle: "Personnel — Rémunérations dues" },
-  { numero: "422", libelle: "Comités d'entreprise et d'établissement" },
-  { numero: "424", libelle: "Participation des salariés aux résultats" },
-  { numero: "425", libelle: "Personnel — Avances et acomptes" },
-  { numero: "427", libelle: "Personnel — Opposition sur salaires" },
-  { numero: "428", libelle: "Personnel — Charges à payer et produits à recevoir" },
-  { numero: "431", libelle: "Sécurité sociale" },
-  { numero: "437", libelle: "Autres organismes sociaux" },
-  { numero: "438", libelle: "Organismes sociaux — Charges à payer" },
-  { numero: "441", libelle: "État — Subventions à recevoir" },
-  { numero: "442", libelle: "État — Impôts et taxes recouvrables sur des tiers" },
-  { numero: "444", libelle: "État — Impôts sur les bénéfices" },
-  { numero: "447", libelle: "Autres impôts, taxes et versements assimilés" },
-  { numero: "448", libelle: "État — Charges à payer et produits à recevoir" },
-  { numero: "451", libelle: "Groupe" },
-  { numero: "455", libelle: "Associés — Comptes courants" },
-  { numero: "456", libelle: "Associés — Opérations sur le capital" },
-  { numero: "457", libelle: "Associés — Dividendes à payer" },
-  { numero: "458", libelle: "Associés — Opérations faites en commun" },
-  { numero: "462", libelle: "Créances sur cessions d'immobilisations" },
-  { numero: "464", libelle: "Dettes sur acquisitions de valeurs mobilières" },
-  { numero: "465", libelle: "Créances sur cessions de valeurs mobilières" },
-  { numero: "467", libelle: "Autres comptes débiteurs ou créditeurs" },
-  { numero: "468", libelle: "Divers — Charges à payer et produits à recevoir" },
-  { numero: "471", libelle: "Comptes d'attente" },
-  { numero: "476", libelle: "Différences de conversion — Actif" },
-  { numero: "477", libelle: "Différences de conversion — Passif" },
-  { numero: "478", libelle: "Autres comptes transitoires" },
-  { numero: "481", libelle: "Charges à répartir sur plusieurs exercices" },
-  { numero: "486", libelle: "Charges constatées d'avance" },
-  { numero: "487", libelle: "Produits constatés d'avance" },
-  { numero: "491", libelle: "Dépréciations des comptes de clients" },
-
-  // Classe 5 — Financiers
-  { numero: "501", libelle: "Parts dans des entreprises liées" },
-  { numero: "502", libelle: "Actions propres" },
-  { numero: "503", libelle: "Actions" },
-  { numero: "506", libelle: "Obligations" },
-  { numero: "507", libelle: "Bons du Trésor et bons de caisse" },
-  { numero: "508", libelle: "Autres valeurs mobilières et créances assimilées" },
-  { numero: "511", libelle: "Valeurs à l'encaissement" },
-  { numero: "512", libelle: "Banques" },
-  { numero: "514", libelle: "Chèques postaux" },
-  { numero: "515", libelle: "Caisses du Trésor et des établissements publics" },
-  { numero: "516", libelle: "Sociétés de bourse" },
-  { numero: "517", libelle: "Autres organismes financiers" },
-  { numero: "518", libelle: "Intérêts courus" },
-  { numero: "519", libelle: "Concours bancaires courants" },
-  { numero: "530", libelle: "Caisse" },
-  { numero: "531", libelle: "Caisse siège" },
-  { numero: "532", libelle: "Caisse succursale" },
-  { numero: "540", libelle: "Régies d'avances et accréditifs" },
-  { numero: "580", libelle: "Virements internes" },
-  { numero: "590", libelle: "Dépréciations des valeurs mobilières de placement" },
-
-  // Classe 6 — Charges
-  { numero: "601", libelle: "Achats stockés — Matières premières" },
-  { numero: "602", libelle: "Achats stockés — Autres approvisionnements" },
-  { numero: "604", libelle: "Achats d'études et prestations de services" },
-  { numero: "605", libelle: "Achats de matériel, équipements et travaux" },
-  { numero: "607", libelle: "Achats de marchandises" },
-  { numero: "608", libelle: "Frais accessoires d'achat" },
-  { numero: "609", libelle: "Rabais, remises et ristournes obtenus sur achats" },
-  { numero: "6031", libelle: "Variation des stocks de matières premières" },
-  { numero: "6032", libelle: "Variation des stocks des autres approvisionnements" },
-  { numero: "6037", libelle: "Variation des stocks de marchandises" },
-  { numero: "611", libelle: "Sous-traitance générale" },
-  { numero: "612", libelle: "Redevances de crédit-bail" },
-  { numero: "613", libelle: "Locations" },
-  { numero: "614", libelle: "Charges locatives et de copropriété" },
-  { numero: "615", libelle: "Entretien et réparations" },
-  { numero: "616", libelle: "Primes d'assurances" },
-  { numero: "617", libelle: "Études et recherches" },
-  { numero: "618", libelle: "Divers" },
-  { numero: "621", libelle: "Personnel extérieur à l'entreprise" },
-  { numero: "622", libelle: "Rémunérations d'intermédiaires et honoraires" },
-  { numero: "623", libelle: "Publicité, publications, relations publiques" },
-  { numero: "624", libelle: "Transports de biens et transports collectifs du personnel" },
-  { numero: "625", libelle: "Déplacements, missions et réceptions" },
-  { numero: "626", libelle: "Frais postaux et de télécommunications" },
-  { numero: "627", libelle: "Services bancaires et assimilés" },
-  { numero: "628", libelle: "Divers" },
-  { numero: "631", libelle: "Impôts, taxes et versements assimilés sur rémunérations" },
-  { numero: "633", libelle: "Impôts, taxes et versements assimilés sur rémunérations (autres)" },
-  { numero: "635", libelle: "Autres impôts, taxes et versements assimilés" },
-  { numero: "641", libelle: "Rémunérations du personnel" },
-  { numero: "644", libelle: "Rémunération du travail de l'exploitant" },
-  { numero: "645", libelle: "Charges de sécurité sociale et de prévoyance" },
-  { numero: "647", libelle: "Autres charges sociales" },
-  { numero: "648", libelle: "Autres charges de personnel" },
-  { numero: "651", libelle: "Redevances pour concessions, brevets, licences" },
-  { numero: "653", libelle: "Jetons de présence" },
-  { numero: "654", libelle: "Pertes sur créances irrécouvrables" },
-  { numero: "655", libelle: "Quotes-parts de résultat sur opérations faites en commun" },
-  { numero: "658", libelle: "Charges diverses de gestion courante" },
-  { numero: "661", libelle: "Charges d'intérêts" },
-  { numero: "664", libelle: "Pertes sur créances liées à des participations" },
-  { numero: "665", libelle: "Escomptes accordés" },
-  { numero: "666", libelle: "Pertes de change" },
-  { numero: "667", libelle: "Charges nettes sur cessions de VMP" },
-  { numero: "668", libelle: "Autres charges financières" },
-  { numero: "671", libelle: "Charges exceptionnelles sur opérations de gestion" },
-  { numero: "672", libelle: "Charges sur exercices antérieurs" },
-  { numero: "675", libelle: "Valeurs comptables des éléments d'actif cédés" },
-  { numero: "678", libelle: "Autres charges exceptionnelles" },
-  { numero: "681", libelle: "Dotations aux amortissements et provisions — exploitation" },
-  { numero: "686", libelle: "Dotations aux amortissements et provisions — financier" },
-  { numero: "687", libelle: "Dotations aux amortissements et provisions — exceptionnel" },
-  { numero: "691", libelle: "Participation des salariés aux résultats" },
-  { numero: "695", libelle: "Impôts sur les bénéfices" },
-  { numero: "698", libelle: "Intégration fiscale — Charges" },
-  { numero: "699", libelle: "Produits — Reports en arrière des déficits" },
-
-  // Classe 7 — Produits
-  { numero: "701", libelle: "Ventes de produits finis" },
-  { numero: "702", libelle: "Ventes de produits intermédiaires" },
-  { numero: "703", libelle: "Ventes de produits résiduels" },
-  { numero: "704", libelle: "Travaux" },
-  { numero: "705", libelle: "Études" },
-  { numero: "706", libelle: "Prestations de services" },
-  { numero: "707", libelle: "Ventes de marchandises" },
-  { numero: "708", libelle: "Produits des activités annexes" },
-  { numero: "709", libelle: "Rabais, remises et ristournes accordés par l'entreprise" },
-  { numero: "713", libelle: "Variation des stocks (en-cours, produits)" },
-  { numero: "721", libelle: "Production immobilisée — Immobilisations incorporelles" },
-  { numero: "722", libelle: "Production immobilisée — Immobilisations corporelles" },
-  { numero: "740", libelle: "Subventions d'exploitation" },
-  { numero: "751", libelle: "Redevances pour concessions, brevets, licences" },
-  { numero: "752", libelle: "Revenus des immeubles non affectés à des activités" },
-  { numero: "753", libelle: "Jetons de présence et rémunérations d'administrateurs" },
-  { numero: "754", libelle: "Ristournes perçues des coopératives" },
-  { numero: "755", libelle: "Quotes-parts de résultat sur opérations faites en commun" },
-  { numero: "756", libelle: "Gains de change sur créances commerciales" },
-  { numero: "758", libelle: "Produits divers de gestion courante" },
-  { numero: "761", libelle: "Produits de participations" },
-  { numero: "762", libelle: "Produits des autres immobilisations financières" },
-  { numero: "763", libelle: "Revenus des autres créances" },
-  { numero: "764", libelle: "Revenus des valeurs mobilières de placement" },
-  { numero: "765", libelle: "Escomptes obtenus" },
-  { numero: "766", libelle: "Gains de change" },
-  { numero: "767", libelle: "Produits nets sur cessions de VMP" },
-  { numero: "768", libelle: "Autres produits financiers" },
-  { numero: "771", libelle: "Produits exceptionnels sur opérations de gestion" },
-  { numero: "772", libelle: "Produits sur exercices antérieurs" },
-  { numero: "775", libelle: "Produits des cessions d'éléments d'actif" },
-  { numero: "777", libelle: "Quote-part des subventions d'investissement virée au résultat" },
-  { numero: "778", libelle: "Autres produits exceptionnels" },
-  { numero: "781", libelle: "Reprises sur amortissements et provisions — exploitation" },
-  { numero: "786", libelle: "Reprises sur provisions — financier" },
-  { numero: "787", libelle: "Reprises sur provisions — exceptionnel" },
-  { numero: "791", libelle: "Transferts de charges d'exploitation" },
-  { numero: "796", libelle: "Transferts de charges financières" },
-  { numero: "797", libelle: "Transferts de charges exceptionnelles" },
-
-  // Classe 8 — Comptes spéciaux
-  { numero: "801", libelle: "Engagements donnés par l'entité" },
-  { numero: "802", libelle: "Engagements reçus par l'entité" },
-  { numero: "809", libelle: "Contrepartie des engagements" },
-];
+export const PLAN_PCG_2005: LignePlanComptable[] = parserReferentiel(PCG_2005_CSV);

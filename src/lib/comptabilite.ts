@@ -15,6 +15,7 @@ import type {
   EcritureComptable,
   Facture,
   Fournisseur,
+  JournalEcriture,
   LigneEcritureComptable,
   Parametres,
   Produit,
@@ -609,55 +610,12 @@ export function ecritureDepuisAvoirAchat(opts: {
   };
 }
 
-export function regenererEcrituresComptables(opts: {
-  factures: Facture[];
-  achats: Achat[];
-  produits: Produit[];
-  comptesComptables: CompteComptable[];
-  parametres: Parametres;
-  clients: Client[];
-  fournisseurs: Fournisseur[];
-}): EcritureComptable[] {
-  const out: EcritureComptable[] = [];
-  for (const facture of opts.factures) {
-    const e = ecritureDepuisFactureVente({
-      facture,
-      produits: opts.produits,
-      comptes: opts.comptesComptables,
-      parametres: opts.parametres,
-      clients: opts.clients,
-    });
-    if (e) out.push(e);
-  }
-  for (const achat of opts.achats) {
-    const e = ecritureDepuisAchat({
-      achat,
-      produits: opts.produits,
-      comptes: opts.comptesComptables,
-      parametres: opts.parametres,
-      fournisseurs: opts.fournisseurs,
-    });
-    if (e) out.push(e);
-    for (const avoir of achat.avoirs ?? []) {
-      const ev = ecritureDepuisAvoirAchat({
-        achat,
-        avoir,
-        produits: opts.produits,
-        comptes: opts.comptesComptables,
-        parametres: opts.parametres,
-        fournisseurs: opts.fournisseurs,
-      });
-      if (ev) out.push(ev);
-    }
-  }
-  return out.sort((a, b) => {
-    const da = a.date.localeCompare(b.date);
-    if (da !== 0) return da;
-    return a.piece.localeCompare(b.piece);
-  });
-}
+export const JOURNAL_ECRITURE_LABELS: Record<JournalEcriture, string> = {
+  vente: "Vente",
+  achat: "Achat",
+};
 
-export function totauxEcriture(e: EcritureComptable) {
+export function totauxEcriture(e: Pick<EcritureComptable, "lignes">) {
   return e.lignes.reduce(
     (acc, l) => ({
       debit: acc.debit + l.debit,
@@ -667,14 +625,124 @@ export function totauxEcriture(e: EcritureComptable) {
   );
 }
 
+export function ecritureEstEquilibree(e: Pick<EcritureComptable, "lignes">) {
+  const { debit, credit } = totauxEcriture(e);
+  return debit === credit && debit > 0;
+}
+
+export function ecritureEstTransferee(e: Pick<EcritureComptable, "transferee">) {
+  return Boolean(e.transferee);
+}
+
+export function regenererEcrituresComptables(opts: {
+  factures: Facture[];
+  achats: Achat[];
+  produits: Produit[];
+  comptesComptables: CompteComptable[];
+  parametres: Parametres;
+  clients: Client[];
+  fournisseurs: Fournisseur[];
+  existantes?: EcritureComptable[];
+}): EcritureComptable[] {
+  const generees: EcritureComptable[] = [];
+  for (const facture of opts.factures) {
+    const e = ecritureDepuisFactureVente({
+      facture,
+      produits: opts.produits,
+      comptes: opts.comptesComptables,
+      parametres: opts.parametres,
+      clients: opts.clients,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
+  }
+  for (const achat of opts.achats) {
+    const e = ecritureDepuisAchat({
+      achat,
+      produits: opts.produits,
+      comptes: opts.comptesComptables,
+      parametres: opts.parametres,
+      fournisseurs: opts.fournisseurs,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
+    for (const avoir of achat.avoirs ?? []) {
+      const ev = ecritureDepuisAvoirAchat({
+        achat,
+        avoir,
+        produits: opts.produits,
+        comptes: opts.comptesComptables,
+        parametres: opts.parametres,
+        fournisseurs: opts.fournisseurs,
+      });
+      if (ev && ecritureEstEquilibree(ev)) generees.push(ev);
+    }
+  }
+  const prevById = new Map((opts.existantes ?? []).map((e) => [e.id, e]));
+  const used = new Set<string>();
+  const out: EcritureComptable[] = [];
+  for (const e of generees) {
+    const prev = prevById.get(e.id);
+    if (prev && ecritureEstTransferee(prev)) {
+      out.push(prev);
+    } else {
+      out.push({
+        ...e,
+        transferee: prev?.transferee,
+        transfertId: prev?.transfertId,
+        transfereeAt: prev?.transfereeAt,
+      });
+    }
+    used.add(e.id);
+  }
+  for (const prev of opts.existantes ?? []) {
+    if (ecritureEstTransferee(prev) && !used.has(prev.id)) out.push(prev);
+  }
+  return out.sort((a, b) => {
+    const da = a.date.localeCompare(b.date);
+    if (da !== 0) return da;
+    return a.piece.localeCompare(b.piece);
+  });
+}
+
+export function filtrerEcrituresComptables(
+  ecritures: EcritureComptable[],
+  filtre: {
+    journal?: JournalEcriture | "tous";
+    debut?: string;
+    fin?: string;
+    statut?: "tous" | "transferee" | "en_attente";
+  },
+) {
+  return ecritures.filter((e) => {
+    if (filtre.journal && filtre.journal !== "tous" && e.journal !== filtre.journal) {
+      return false;
+    }
+    const d = e.date.slice(0, 10);
+    if (filtre.debut && d < filtre.debut) return false;
+    if (filtre.fin && d > filtre.fin) return false;
+    if (filtre.statut === "transferee" && !ecritureEstTransferee(e)) return false;
+    if (filtre.statut === "en_attente" && ecritureEstTransferee(e)) return false;
+    return true;
+  });
+}
+
 export function lignesExportEcritures(ecritures: EcritureComptable[]) {
   const rows: (string | number)[][] = [
-    ["Date", "Pièce", "Libellé", "N° compte", "Libellé compte", "Débit", "Crédit"],
+    [
+      "Date",
+      "Journal",
+      "Pièce",
+      "Libellé",
+      "N° compte",
+      "Libellé compte",
+      "Débit",
+      "Crédit",
+    ],
   ];
   for (const e of ecritures) {
     for (const l of e.lignes) {
       rows.push([
         e.date.slice(0, 10),
+        JOURNAL_ECRITURE_LABELS[e.journal],
         e.piece,
         e.libelle,
         l.numero,
@@ -693,17 +761,23 @@ export function validerImportPlanComptable(
   lignes: LigneCsvPlan[],
   existants: CompteComptable[],
   longueur: number,
+  opts?: {
+    /** En cas de collision après zéros à droite, garder le numéro source le plus long (11 vs 110). */
+    prefererNumeroSourcePlusLong?: boolean;
+    /** Numéros déjà présents mais remplaçables (comptes de repli 600000/700000 inutilisés). */
+    numerosAbsorbables?: Set<string>;
+  },
 ):
   | { ok: true; comptes: LigneCsvPlan[] }
   | { ok: false; reason: string } {
   if (lignes.length === 0) {
     return { ok: false, reason: "Import annulé : aucun compte à importer." };
   }
-  const prepares: LigneCsvPlan[] = [];
-  const vus = new Map<string, string>();
+  const prepares = new Map<string, { numero: string; libelle: string; sourceLen: number }>();
   const conflits: string[] = [];
   const internes: string[] = [];
   const invalides: string[] = [];
+  const absorbables = opts?.numerosAbsorbables ?? new Set<string>();
 
   for (const row of lignes) {
     const numero = completerNumeroCompte(row.numero, longueur);
@@ -712,19 +786,36 @@ export function validerImportPlanComptable(
       invalides.push(`${row.numero} : ${motif}`);
       continue;
     }
-    if (vus.has(numero)) {
+    const sourceLen = chiffresNumeroCompte(row.numero).length;
+    const deja = prepares.get(numero);
+    if (deja) {
+      if (
+        opts?.prefererNumeroSourcePlusLong &&
+        sourceLen !== deja.sourceLen
+      ) {
+        if (sourceLen > deja.sourceLen) {
+          prepares.set(numero, { numero, libelle: row.libelle, sourceLen });
+        }
+        continue;
+      }
       internes.push(numero);
       continue;
     }
-    vus.set(numero, row.libelle);
-    if (compteParNumero(existants, numero)) {
+    prepares.set(numero, { numero, libelle: row.libelle, sourceLen });
+    const existant = compteParNumero(existants, numero);
+    if (existant && !absorbables.has(existant.numero) && !absorbables.has(numero)) {
       conflits.push(numero);
     }
-    prepares.push({ numero, libelle: row.libelle });
   }
 
   if (invalides.length === 0 && internes.length === 0 && conflits.length === 0) {
-    return { ok: true, comptes: prepares };
+    return {
+      ok: true,
+      comptes: [...prepares.values()].map(({ numero, libelle }) => ({
+        numero,
+        libelle,
+      })),
+    };
   }
 
   const parts: string[] = [

@@ -75,7 +75,10 @@ import {
   compteChargeProduit,
   compteParNumero,
   compteUtiliseEnEcriture,
+  filtrerEcrituresComptables,
+  lignesExportEcritures,
   compteVenteProduit,
+  chiffresNumeroCompte,
   completerNumeroCompte,
   longueurNumeroCompteEffective,
   LONGUEUR_COMPTE_MAX,
@@ -140,6 +143,7 @@ import type {
   Inventaire,
   JournalActivite,
   JournalAudit,
+  JournalEcriture,
   LivraisonAchatLigne,
   ModePaiement,
   MouvementCompteCourant,
@@ -150,6 +154,7 @@ import type {
   RapportFinJournee,
   SourceTransformation,
   TarifClient,
+  TransfertComptable,
   Tiers,
   TransfertStock,
   TransfertStockLigne,
@@ -189,6 +194,7 @@ type Store = {
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];
   ecrituresComptables: EcritureComptable[];
+  transfertsComptables: TransfertComptable[];
   identiteNavigation: IdentiteNavigation;
   preferencesAffichage: PreferencesAffichage;
   parametresAlertes: ParametresAlertes;
@@ -222,6 +228,13 @@ type Store = {
   ) => { ok: true; imported: number } | { ok: false; reason: string };
   importerPlanComptableDefaut: () =>
     | { ok: true; imported: number }
+    | { ok: false; reason: string };
+  creerTransfertComptable: (opts: {
+    journal: JournalEcriture | "tous";
+    debut?: string;
+    fin?: string;
+  }) =>
+    | { ok: true; id: string; count: number }
     | { ok: false; reason: string };
   updateIdentiteNavigation: (
     data: Partial<IdentiteNavigation>,
@@ -527,6 +540,7 @@ function importerLignesPlanAtomique(
   getState: () => {
     parametres: Parametres;
     comptesComptables: CompteComptable[];
+    ecrituresComptables: EcritureComptable[];
   },
   apply: (
     updater: (state: {
@@ -542,6 +556,10 @@ function importerLignesPlanAtomique(
   ) => void,
   lignes: { numero: string; libelle: string }[],
   libelleJournal: string,
+  opts?: {
+    prefererNumeroSourcePlusLong?: boolean;
+    absorberComptesDefaut?: boolean;
+  },
 ): { ok: true; imported: number } | { ok: false; reason: string } {
   const auth = useAuthStore.getState();
   if (!auth.hasPermission("comptabilite.gerer")) {
@@ -557,28 +575,62 @@ function importerLignesPlanAtomique(
       reason: "Fixez d'abord la longueur des numéros de compte.",
     };
   }
+  const state = getState();
+  const numerosAbsorbables = new Set<string>();
+  if (opts?.absorberComptesDefaut) {
+    for (const c of state.comptesComptables) {
+      if (
+        (c.roleCompte === "defaut_charge" || c.roleCompte === "defaut_vente") &&
+        !compteUtiliseEnEcriture(c.id, state.ecrituresComptables)
+      ) {
+        numerosAbsorbables.add(c.numero);
+      }
+    }
+  }
   const valide = validerImportPlanComptable(
     lignes,
-    getState().comptesComptables,
+    state.comptesComptables,
     longueur,
+    {
+      prefererNumeroSourcePlusLong: opts?.prefererNumeroSourcePlusLong,
+      numerosAbsorbables,
+    },
   );
   if (!valide.ok) return valide;
-  apply((state) => {
+  apply((prev) => {
+    const absorbIds = new Set(
+      prev.comptesComptables
+        .filter((c) => numerosAbsorbables.has(c.numero))
+        .map((c) => c.id),
+    );
+    const restants = valide.comptes.filter((row) => {
+      const existant = prev.comptesComptables.find(
+        (c) => chiffresNumeroCompte(c.numero) === chiffresNumeroCompte(row.numero),
+      );
+      return !existant || !absorbIds.has(existant.id);
+    });
     const comptes = [
-      ...valide.comptes.map((row) => ({
+      ...restants.map((row) => ({
         id: uid("cpt"),
         numero: row.numero,
         libelle: row.libelle,
       })),
-      ...state.comptesComptables,
+      ...prev.comptesComptables.map((c) => {
+        if (!absorbIds.has(c.id)) return c;
+        const row = valide.comptes.find(
+          (r) => chiffresNumeroCompte(r.numero) === chiffresNumeroCompte(c.numero),
+        );
+        if (!row) return c;
+        return { ...c, numero: row.numero, libelle: row.libelle, roleCompte: undefined };
+      }),
     ];
-    return avecJournal(state, {
+    return avecJournal(prev, {
       comptesComptables: comptes,
       journalActivites: [
         entreeActivite("creation", "compte_comptable", {
           libelle: `${libelleJournal} : ${valide.comptes.length} compte(s)`,
         }),
-        ...state.journalActivites,
+        ...prev.journalActivites,
       ],
     });
   });
@@ -593,6 +645,7 @@ function journalDepuis(state: {
   parametres: Parametres;
   clients: Client[];
   fournisseurs: Fournisseur[];
+  ecrituresComptables?: EcritureComptable[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
     factures: state.factures,
@@ -602,6 +655,7 @@ function journalDepuis(state: {
     parametres: state.parametres,
     clients: state.clients,
     fournisseurs: state.fournisseurs,
+    existantes: state.ecrituresComptables,
   });
 }
 
@@ -614,6 +668,7 @@ function avecJournal<T extends Record<string, unknown>>(
     parametres: Parametres;
     clients: Client[];
     fournisseurs: Fournisseur[];
+    ecrituresComptables?: EcritureComptable[];
   },
   patch: T,
 ): T & {
@@ -627,7 +682,13 @@ function avecJournal<T extends Record<string, unknown>>(
     ...patch,
     parametres: seeded.parametres,
     comptesComptables: seeded.comptesComptables,
-    ecrituresComptables: journalDepuis({ ...merged, ...seeded }),
+    ecrituresComptables: journalDepuis({
+      ...merged,
+      ...seeded,
+      ecrituresComptables:
+        (patch as { ecrituresComptables?: EcritureComptable[] })
+          .ecrituresComptables ?? state.ecrituresComptables,
+    }),
   };
 }
 
@@ -1098,7 +1159,68 @@ export const useStore = create<Store>()((set, get) => ({
           set,
           PLAN_PCG_2005,
           "Import PCG 2005",
+          {
+            prefererNumeroSourcePlusLong: true,
+            absorberComptesDefaut: true,
+          },
         ),
+      creerTransfertComptable: (opts) => {
+        const auth = useAuthStore.getState();
+        if (!auth.hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Le transfert est réservé à l'administrateur ou au comptable.",
+          };
+        }
+        const state = get();
+        const aExporter = filtrerEcrituresComptables(state.ecrituresComptables, {
+          journal: opts.journal,
+          debut: opts.debut,
+          fin: opts.fin,
+          statut: "en_attente",
+        });
+        if (aExporter.length === 0) {
+          return {
+            ok: false as const,
+            reason: "Aucune écriture en attente ne correspond à ces filtres.",
+          };
+        }
+        const id = uid("trc");
+        const date = new Date().toISOString();
+        const stamp = date.slice(0, 10);
+        const transfert: TransfertComptable = {
+          id,
+          date,
+          journal: opts.journal,
+          debut: opts.debut || undefined,
+          fin: opts.fin || undefined,
+          ecritureIds: aExporter.map((e) => e.id),
+          lignes: lignesExportEcritures(aExporter),
+          nomFichier: `transfert-comptable-${stamp}`,
+        };
+        const ids = new Set(transfert.ecritureIds);
+        set((s) => ({
+          ecrituresComptables: s.ecrituresComptables.map((e) =>
+            ids.has(e.id)
+              ? {
+                  ...e,
+                  transferee: true,
+                  transfertId: id,
+                  transfereeAt: date,
+                }
+              : e,
+          ),
+          transfertsComptables: [transfert, ...(s.transfertsComptables ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "compte_comptable", {
+              entiteId: id,
+              libelle: `Transfert comptable : ${aExporter.length} écriture(s)`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id, count: aExporter.length };
+      },
       updateIdentiteNavigation: (data) => {
         const auth = useAuthStore.getState();
         if (!auth.hasPermission("navigation.identite")) {
