@@ -14,9 +14,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "STWR — Gestion Poissonnerie",
+  title: "Négoo — Gestion commerciale",
   description:
-    "Dashboard de gestion pour poissonnerie : achats, stocks, chiffre d'affaires et écritures comptables multi-points de vente.",
+    "Plateforme de gestion commerciale : achats, stocks, chiffre d'affaires et écritures comptables multi-sites.",
 };
 
 export default function RootLayout({

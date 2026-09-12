@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Fish,
   LayoutDashboard,
   ShoppingCart,
   Boxes,
@@ -44,6 +43,7 @@ import {
 import { useStore } from "@/lib/store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { AlertesCloche } from "./alertes-cloche";
+import { LogoNegoo, LogoNegooMark } from "./logo-negoo";
 import { useAlertes } from "@/lib/use-alertes";
 
 type NavChild = {
@@ -547,30 +547,41 @@ export function Sidebar() {
 
   return (
     <aside className="no-print flex w-64 shrink-0 flex-col bg-sidebar text-sea-100">
-      <div className="border-b border-white/10 px-5 py-6">
-        <div className="flex items-center gap-3">
-          {identiteNavigation?.logoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={identiteNavigation.logoDataUrl}
-              alt=""
-              className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-0.5 shadow-lg shadow-sea-900/40"
-            />
-          ) : (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea-600 text-white shadow-lg shadow-sea-900/40">
-              <Fish className="h-5 w-5" />
-            </div>
-          )}
+      <div className="border-b border-white/10 px-4 py-5">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <p
-              className="truncate font-display text-lg font-semibold leading-tight text-white"
-              title={nomAfficheMenu(identiteNavigation)}
-            >
-              {nomAfficheMenu(identiteNavigation)}
-            </p>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-sea-300">
-              Navigation
-            </p>
+            {identiteNavigation?.logoDataUrl ||
+            identiteNavigation?.nom?.trim() ? (
+              <div className="flex items-center gap-3">
+                {identiteNavigation?.logoDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={identiteNavigation.logoDataUrl}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-0.5 shadow-lg shadow-sea-900/40"
+                  />
+                ) : (
+                  <LogoNegooMark className="h-10 w-10 shrink-0 rounded-xl shadow-lg shadow-sea-900/40" />
+                )}
+                <div className="min-w-0">
+                  <p
+                    className="truncate font-display text-lg font-semibold leading-tight text-white"
+                    title={nomAfficheMenu(identiteNavigation)}
+                  >
+                    {nomAfficheMenu(identiteNavigation)}
+                  </p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-sea-300">
+                    Navigation
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <LogoNegoo
+                tone="onDark"
+                showTagline={false}
+                className="w-[158px] max-w-full"
+              />
+            )}
           </div>
           <AlertesCloche />
         </div>

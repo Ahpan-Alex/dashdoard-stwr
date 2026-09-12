@@ -7,6 +7,7 @@ import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
 import { fileToMenuLogoDataUrl, LOGO_MENU } from "@/lib/logo";
+import { LogoNegooMark } from "@/components/logo-negoo";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { useStore } from "@/lib/store";
 
@@ -115,9 +116,7 @@ function IdentiteMenuContent() {
                 className="h-16 w-16 rounded-xl bg-sidebar object-contain p-1"
               />
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-line bg-card text-[11px] text-muted">
-                Aucun
-              </div>
+              <LogoNegooMark className="h-16 w-16 rounded-xl" />
             )}
             <div className="flex flex-wrap gap-2">
               <label
@@ -169,9 +168,7 @@ function IdentiteMenuContent() {
                 className="h-10 w-10 rounded-xl bg-white object-contain p-0.5"
               />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sea-600 text-[11px] text-white">
-                —
-              </div>
+              <LogoNegooMark className="h-10 w-10 rounded-xl" />
             )}
             <p className="truncate font-display text-lg font-semibold text-white">
               {nomAfficheMenu({ nom, logoDataUrl })}
