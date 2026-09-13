@@ -96,6 +96,7 @@ export function clientDepuisTiers(t: Tiers): Client {
     delaiPaiementJours: t.delaiPaiementClientJours,
     remiseHabituellePercent: t.remiseHabituelleClientPercent,
     plafondCredit: t.plafondCredit,
+    compteClientId: t.compteClientId,
   };
 }
 
@@ -113,6 +114,7 @@ export function fournisseurDepuisTiers(t: Tiers): Fournisseur {
     actif: t.actif,
     delaiPaiementJours: t.delaiPaiementFournisseurJours,
     remiseHabituellePercent: t.remiseHabituelleFournisseurPercent,
+    compteFournisseurId: t.compteFournisseurId,
   };
 }
 
@@ -134,6 +136,7 @@ export function tiersDepuisClient(c: Client): Tiers {
     delaiPaiementClientJours: c.delaiPaiementJours,
     remiseHabituelleClientPercent: c.remiseHabituellePercent,
     plafondCredit: c.plafondCredit,
+    compteClientId: c.compteClientId,
   };
 }
 
@@ -152,6 +155,7 @@ export function tiersDepuisFournisseur(f: Fournisseur): Tiers {
     roles: ["fournisseur"],
     delaiPaiementFournisseurJours: f.delaiPaiementJours,
     remiseHabituelleFournisseurPercent: f.remiseHabituellePercent,
+    compteFournisseurId: f.compteFournisseurId,
   };
 }
 
@@ -163,6 +167,8 @@ function fusionnerTiers(base: Tiers, extra: Partial<Tiers>): Tiers {
     roles,
     nom: extra.nom?.trim() || base.nom,
     contacts: extra.contacts ?? base.contacts,
+    compteClientId: extra.compteClientId ?? base.compteClientId,
+    compteFournisseurId: extra.compteFournisseurId ?? base.compteFournisseurId,
   };
 }
 

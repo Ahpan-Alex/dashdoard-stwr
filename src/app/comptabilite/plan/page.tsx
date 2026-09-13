@@ -228,7 +228,11 @@ function PlanComptableContent() {
                 value={form.numero}
                 disabled={editionVerrouillee}
                 onChange={(e) => setForm({ ...form, numero: e.target.value })}
-                placeholder={longueur ? `${longueur} chiffres` : "D’abord fixer la longueur"}
+                placeholder={
+                  longueur
+                    ? `Ex. 401, 4111… (${longueur} chiffres)`
+                    : "D’abord fixer la longueur"
+                }
                 required
               />
             </label>
@@ -264,6 +268,16 @@ function PlanComptableContent() {
                 )}
               </select>
             </label>
+            {longueur != null && form.numero.replace(/\D/g, "") && (
+              <p className="sm:col-span-4 text-xs text-muted">
+                Enregistré comme{" "}
+                <span className="font-mono font-semibold">
+                  {completerNumeroCompte(form.numero, longueur)}
+                </span>{" "}
+                (zéros à droite). Les comptes 401 (fournisseurs) et 411
+                (clients) et leurs sous-comptes (4011, 4112…) sont autorisés.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 sm:col-span-4">
               <button
                 type="submit"

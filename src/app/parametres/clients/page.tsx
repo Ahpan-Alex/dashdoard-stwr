@@ -21,6 +21,7 @@ import {
 } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import type { Client } from "@/lib/types";
 
 export default function ParametresClientsPage() {
@@ -35,6 +36,9 @@ export default function ParametresClientsPage() {
     addClient,
     updateClient,
     deleteClient,
+    comptesComptables,
+    ecrituresComptables,
+    tiers,
   } = useStore();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -80,10 +84,12 @@ export default function ParametresClientsPage() {
       return;
     }
     const payload = payloadClient(form);
-    if (editingId) {
-      updateClient(editingId, payload);
-    } else {
-      addClient({ ...payload, actif: true });
+    const res = editingId
+      ? updateClient(editingId, payload)
+      : addClient({ ...payload, actif: true });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
     }
     fermerForm();
   }
@@ -141,6 +147,13 @@ export default function ParametresClientsPage() {
             submitLabel={
               editingId ? "Enregistrer les modifications" : "Enregistrer"
             }
+            comptes={comptesComptables}
+            tiers={tiers}
+            ignoreTiersId={editingId ?? undefined}
+            compteVerrouille={compteUtiliseEnEcriture(
+              form.compteClientId,
+              ecrituresComptables,
+            )}
           />
         </div>
       )}

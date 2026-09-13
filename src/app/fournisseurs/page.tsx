@@ -18,6 +18,7 @@ import { motifLienFournisseur } from "@/lib/commercial";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useAffichageTable } from "@/lib/use-affichage-table";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import type { Fournisseur } from "@/lib/types";
 
 export default function FournisseursPage() {
@@ -28,6 +29,9 @@ export default function FournisseursPage() {
     addFournisseur,
     updateFournisseur,
     deleteFournisseur,
+    comptesComptables,
+    ecrituresComptables,
+    tiers,
   } = useStore();
   const { visible } = useAffichageTable("fournisseurs");
   const [open, setOpen] = useState(false);
@@ -59,10 +63,12 @@ export default function FournisseursPage() {
     e.preventDefault();
     if (!form.nom.trim()) return;
     const payload = payloadFournisseur(form);
-    if (editingId) {
-      updateFournisseur(editingId, payload);
-    } else {
-      addFournisseur({ ...payload, actif: true });
+    const res = editingId
+      ? updateFournisseur(editingId, payload)
+      : addFournisseur({ ...payload, actif: true });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
     }
     fermerForm();
   }
@@ -101,6 +107,13 @@ export default function FournisseursPage() {
           onSubmit={onSubmit}
           onCancel={fermerForm}
           submitLabel={editingId ? "Enregistrer les modifications" : "Enregistrer"}
+          comptes={comptesComptables}
+          tiers={tiers}
+          ignoreTiersId={editingId ?? undefined}
+          compteVerrouille={compteUtiliseEnEcriture(
+            form.compteFournisseurId,
+            ecrituresComptables,
+          )}
         />
       )}
 

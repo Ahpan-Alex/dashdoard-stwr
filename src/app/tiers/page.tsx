@@ -22,6 +22,7 @@ import {
   soldeClientTiers,
   soldeFournisseurTiers,
 } from "@/lib/tiers";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import type { RoleTiers, Tiers } from "@/lib/types";
 
 export default function TiersPage() {
@@ -44,6 +45,8 @@ function TiersListe() {
     addTiers,
     updateTiers,
     deleteTiers,
+    comptesComptables,
+    ecrituresComptables,
   } = useStore();
   const liste = useMemo(
     () => assurerTiers({ clients, fournisseurs, tiers }),
@@ -145,6 +148,17 @@ function TiersListe() {
           onSubmit={onSubmit}
           onCancel={fermer}
           submitLabel={editingId ? "Enregistrer" : "Créer"}
+          comptes={comptesComptables}
+          tiers={liste}
+          ignoreTiersId={editingId ?? undefined}
+          compteClientVerrouille={compteUtiliseEnEcriture(
+            form.compteClientId,
+            ecrituresComptables,
+          )}
+          compteFournisseurVerrouille={compteUtiliseEnEcriture(
+            form.compteFournisseurId,
+            ecrituresComptables,
+          )}
         />
       )}
 

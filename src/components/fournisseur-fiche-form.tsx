@@ -1,7 +1,9 @@
 "use client";
 
 import type { FormEvent } from "react";
-import type { Fournisseur } from "@/lib/types";
+import { CompteTiersSelect } from "@/components/compte-tiers-select";
+import { PREFIXE_COMPTE_FOURNISSEUR } from "@/lib/comptabilite";
+import type { CompteComptable, Fournisseur, Tiers } from "@/lib/types";
 
 export type FournisseurFormState = {
   nom: string;
@@ -11,6 +13,7 @@ export type FournisseurFormState = {
   ville: string;
   specialite: string;
   nif: string;
+  compteFournisseurId: string;
 };
 
 export const FOURNISSEUR_FORM_VIDE: FournisseurFormState = {
@@ -21,6 +24,7 @@ export const FOURNISSEUR_FORM_VIDE: FournisseurFormState = {
   ville: "",
   specialite: "",
   nif: "",
+  compteFournisseurId: "",
 };
 
 export function fournisseurVersForm(f: Fournisseur): FournisseurFormState {
@@ -32,6 +36,7 @@ export function fournisseurVersForm(f: Fournisseur): FournisseurFormState {
     ville: f.ville ?? "",
     specialite: f.specialite ?? "",
     nif: f.nif ?? "",
+    compteFournisseurId: f.compteFournisseurId ?? "",
   };
 }
 
@@ -46,6 +51,7 @@ export function payloadFournisseur(
     ville: form.ville.trim() || undefined,
     specialite: form.specialite.trim() || undefined,
     nif: form.nif.trim() || undefined,
+    compteFournisseurId: form.compteFournisseurId || undefined,
   };
 }
 
@@ -55,6 +61,10 @@ type Props = {
   onSubmit: (e: FormEvent) => void;
   onCancel: () => void;
   submitLabel: string;
+  comptes?: CompteComptable[];
+  tiers?: Tiers[];
+  ignoreTiersId?: string;
+  compteVerrouille?: boolean;
 };
 
 export function FournisseurFicheForm({
@@ -63,6 +73,10 @@ export function FournisseurFicheForm({
   onSubmit,
   onCancel,
   submitLabel,
+  comptes = [],
+  tiers = [],
+  ignoreTiersId,
+  compteVerrouille,
 }: Props) {
   return (
     <form
@@ -128,6 +142,19 @@ export function FournisseurFicheForm({
           onChange={(e) => setForm({ ...form, nif: e.target.value })}
         />
       </label>
+      <CompteTiersSelect
+        label="Compte comptable fournisseur (401)"
+        prefixe={PREFIXE_COMPTE_FOURNISSEUR}
+        value={form.compteFournisseurId}
+        required
+        verrouille={compteVerrouille}
+        comptes={comptes}
+        tiers={tiers}
+        ignoreTiersId={ignoreTiersId}
+        onChange={(compteFournisseurId) =>
+          setForm({ ...form, compteFournisseurId })
+        }
+      />
       <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
         <button type="submit" className="btn btn-primary">
           {submitLabel}

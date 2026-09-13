@@ -24,12 +24,16 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
 import { appliqueTVA, libelleClient } from "@/lib/commercial";
 import {
+  champsComptesProduitRequis,
   compteChargeProduit,
   compteUtiliseEnEcriture,
   compteVenteProduit,
   comptesParClasse,
+  estCompteGeneriqueProduit,
+  motifComptesProduitInvalides,
   MSG_COMPTE_VERROUILLE,
   produitEstTaxable,
+  produitsAMigrerComptes,
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_PRODUIT,
 } from "@/lib/comptabilite";
@@ -51,6 +55,8 @@ type ProduitFormState = {
   seuilSurstock: string;
   gerePeremption: boolean;
   typeAchat: TypeAchat;
+  compteChargeId: string;
+  compteVenteId: string;
 };
 
 function parseSeuilOptionnel(raw: string): number | undefined {
@@ -79,6 +85,8 @@ function formDepuisProduit(p: Produit): ProduitFormState {
     typeAchat: p.typeAchat && (TYPES_ACHAT_PRODUIT as readonly string[]).includes(p.typeAchat)
       ? p.typeAchat
       : "marchandises",
+    compteChargeId: p.compteChargeId ?? "",
+    compteVenteId: p.compteVenteId ?? "",
   };
 }
 
@@ -154,6 +162,8 @@ export default function ParametresProduitsPage() {
       seuilSurstock: "",
       gerePeremption: false,
       typeAchat: "marchandises",
+      compteChargeId: "",
+      compteVenteId: "",
     };
   }
 
@@ -302,7 +312,16 @@ export default function ParametresProduitsPage() {
     setEditingId(produit.id);
     setSelectedId(produit.id);
     setAlertDoublons(null);
-    setForm(formDepuisProduit(produit));
+    const base = formDepuisProduit(produit);
+    setForm({
+      ...base,
+      compteChargeId:
+        compteChargeProduit(produit, comptesComptables)?.id ??
+        base.compteChargeId,
+      compteVenteId:
+        compteVenteProduit(produit, comptesComptables)?.id ??
+        base.compteVenteId,
+    });
     document
       .getElementById("fiche-produit")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -369,18 +388,37 @@ export default function ParametresProduitsPage() {
       seuilSurstock: parseSeuilOptionnel(form.seuilSurstock),
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
+      compteChargeId: form.compteChargeId || undefined,
+      compteVenteId: form.compteVenteId || undefined,
     };
 
+    const motifCompta = motifComptesProduitInvalides(
+      payload,
+      comptesComptables,
+    );
+    if (motifCompta) {
+      alert(motifCompta);
+      return;
+    }
+
     if (editingId) {
-      updateProduit(editingId, payload, {
+      const res = updateProduit(editingId, payload, {
         motifPrix: "Modification fiche produit",
       });
+      if (!res.ok) {
+        alert(res.reason);
+        return;
+      }
       setSelectedId(editingId);
       annulerEdition();
       return;
     }
 
-    addProduit({ ...payload, actif: true });
+    const res = addProduit({ ...payload, actif: true });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
+    }
     setForm(formVide());
   }
 
@@ -399,7 +437,7 @@ export default function ParametresProduitsPage() {
       selected.prixVenteGrosHT != null ? String(selected.prixVenteGrosHT) : "",
     );
     if (grosRaw === null) return;
-    updateProduit(
+    const res = updateProduit(
       produitId,
       {
         prixAchat: achat,
@@ -408,7 +446,20 @@ export default function ParametresProduitsPage() {
       },
       { motifPrix: "Mise à jour manuelle catalogue" },
     );
+    if (!res.ok && res.reason) alert(res.reason);
   }
+
+  const aMigrer = useMemo(
+    () => produitsAMigrerComptes(produits, comptesComptables),
+    [produits, comptesComptables],
+  );
+  const requisForm = champsComptesProduitRequis(form.typeAchat);
+  const chargesReelles = comptesParClasse(comptesComptables, "6").filter(
+    (c) => !estCompteGeneriqueProduit(c) || c.id === form.compteChargeId,
+  );
+  const ventesReelles = comptesParClasse(comptesComptables, "7").filter(
+    (c) => !estCompteGeneriqueProduit(c) || c.id === form.compteVenteId,
+  );
 
   return (
     <div>
@@ -417,6 +468,20 @@ export default function ParametresProduitsPage() {
         description="Familles (3 niveaux), code unique, multi-prix — désactivation pour préserver les factures."
         showPosSelector={false}
       />
+
+      {aMigrer.length > 0 && (
+        <p className="mb-4 rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {aMigrer.length} produit{aMigrer.length > 1 ? "s" : ""} encore
+          imputé{aMigrer.length > 1 ? "s" : ""} au compte générique « Compte
+          de charge à définir » / « Compte de produits à définir », ou sans
+          compte requis. Corrigez la fiche avant toute autre modification :{" "}
+          {aMigrer
+            .slice(0, 6)
+            .map((p) => p.code)
+            .join(", ")}
+          {aMigrer.length > 6 ? ` et ${aMigrer.length - 6} autre(s)` : ""}.
+        </p>
+      )}
       <ParametresSubnav />
 
       <div
@@ -741,6 +806,46 @@ export default function ParametresProduitsPage() {
                 ))}
               </select>
             </label>
+            {requisForm.charge && (
+              <label className="block text-xs font-semibold text-muted">
+                Compte de charge (achat) *
+                <select
+                  className="select mt-1"
+                  value={form.compteChargeId}
+                  onChange={(e) =>
+                    setForm({ ...form, compteChargeId: e.target.value })
+                  }
+                  required
+                >
+                  <option value="">— Choisir un compte de classe 6 —</option>
+                  {chargesReelles.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.numero} — {c.libelle}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {requisForm.vente && (
+              <label className="block text-xs font-semibold text-muted">
+                Compte de vente *
+                <select
+                  className="select mt-1"
+                  value={form.compteVenteId}
+                  onChange={(e) =>
+                    setForm({ ...form, compteVenteId: e.target.value })
+                  }
+                  required
+                >
+                  <option value="">— Choisir un compte de classe 7 —</option>
+                  {ventesReelles.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.numero} — {c.libelle}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="block text-xs font-semibold text-muted">
               Unité
               <input
@@ -982,7 +1087,10 @@ export default function ParametresProduitsPage() {
                       ) : (
                         <IconButton
                           label="Réactiver le produit"
-                          onClick={() => updateProduit(p.id, { actif: true })}
+                          onClick={() => {
+                            const res = updateProduit(p.id, { actif: true });
+                            if (!res.ok && res.reason) alert(res.reason);
+                          }}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </IconButton>
@@ -1057,7 +1165,10 @@ export default function ParametresProduitsPage() {
                     ecritures={ecrituresComptables}
                     avecTVA={avecTVA}
                     peutModifier={peutComptaProduit}
-                    onChange={(patch) => updateProduit(selected.id, patch)}
+                    onChange={(patch) => {
+                      const res = updateProduit(selected.id, patch);
+                      if (!res.ok && res.reason) alert(res.reason);
+                    }}
                   />
                 </div>
 
@@ -1210,11 +1321,17 @@ function ComptaProduitPanel({
 }) {
   const charge = compteChargeProduit(produit, comptes);
   const vente = compteVenteProduit(produit, comptes);
-  const charges = comptesParClasse(comptes, "6");
-  const ventes = comptesParClasse(comptes, "7");
+  const requis = champsComptesProduitRequis(produit.typeAchat);
+  const charges = comptesParClasse(comptes, "6").filter(
+    (c) => !estCompteGeneriqueProduit(c) || c.id === charge?.id,
+  );
+  const ventes = comptesParClasse(comptes, "7").filter(
+    (c) => !estCompteGeneriqueProduit(c) || c.id === vente?.id,
+  );
   const chargeVerrouille = compteUtiliseEnEcriture(charge?.id, ecritures);
   const venteVerrouille = compteUtiliseEnEcriture(vente?.id, ecritures);
   const type = produit.typeAchat ?? "marchandises";
+  const motifMigration = motifComptesProduitInvalides(produit, comptes);
 
   if (!peutModifier) {
     return (
@@ -1229,6 +1346,11 @@ function ComptaProduitPanel({
 
   return (
     <div className="space-y-2">
+      {motifMigration && (
+        <p className="rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          {motifMigration}
+        </p>
+      )}
       <label className="block text-xs font-semibold text-muted">
         Type d&apos;achat
         <select
@@ -1245,44 +1367,50 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
-      <label className="block text-xs font-semibold text-muted">
-        Compte de charge (achat)
-        <select
-          className="select mt-1"
-          value={charge?.id ?? ""}
-          disabled={chargeVerrouille}
-          onChange={(e) =>
-            onChange({ compteChargeId: e.target.value || undefined })
-          }
-        >
-          {charges.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.numero} — {c.libelle}
-            </option>
-          ))}
-        </select>
-      </label>
+      {requis.charge && (
+        <label className="block text-xs font-semibold text-muted">
+          Compte de charge (achat) *
+          <select
+            className="select mt-1"
+            value={charge?.id ?? ""}
+            disabled={chargeVerrouille}
+            onChange={(e) =>
+              onChange({ compteChargeId: e.target.value || undefined })
+            }
+          >
+            <option value="">— Choisir un compte de classe 6 —</option>
+            {charges.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.numero} — {c.libelle}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {chargeVerrouille && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
-      <label className="block text-xs font-semibold text-muted">
-        Compte de vente
-        <select
-          className="select mt-1"
-          value={vente?.id ?? ""}
-          disabled={venteVerrouille}
-          onChange={(e) =>
-            onChange({ compteVenteId: e.target.value || undefined })
-          }
-        >
-          {ventes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.numero} — {c.libelle}
-            </option>
-          ))}
-        </select>
-      </label>
-      {venteVerrouille && (
+      {requis.vente && (
+        <label className="block text-xs font-semibold text-muted">
+          Compte de vente *
+          <select
+            className="select mt-1"
+            value={vente?.id ?? ""}
+            disabled={venteVerrouille}
+            onChange={(e) =>
+              onChange({ compteVenteId: e.target.value || undefined })
+            }
+          >
+            <option value="">— Choisir un compte de classe 7 —</option>
+            {ventes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.numero} — {c.libelle}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {venteVerrouille && requis.vente && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
       <label className="flex items-center gap-2 text-sm">

@@ -14,6 +14,7 @@ import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import { motifLienFournisseur } from "@/lib/commercial";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import { useStore } from "@/lib/store";
 import type { Fournisseur } from "@/lib/types";
 
@@ -25,6 +26,9 @@ export default function ParametresFournisseursPage() {
     addFournisseur,
     updateFournisseur,
     deleteFournisseur,
+    comptesComptables,
+    ecrituresComptables,
+    tiers,
   } = useStore();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,10 +59,12 @@ export default function ParametresFournisseursPage() {
     e.preventDefault();
     if (!form.nom.trim()) return;
     const payload = payloadFournisseur(form);
-    if (editingId) {
-      updateFournisseur(editingId, payload);
-    } else {
-      addFournisseur({ ...payload, actif: true });
+    const res = editingId
+      ? updateFournisseur(editingId, payload)
+      : addFournisseur({ ...payload, actif: true });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
     }
     fermerForm();
   }
@@ -99,6 +105,13 @@ export default function ParametresFournisseursPage() {
           onSubmit={onSubmit}
           onCancel={fermerForm}
           submitLabel={editingId ? "Enregistrer les modifications" : "Enregistrer"}
+          comptes={comptesComptables}
+          tiers={tiers}
+          ignoreTiersId={editingId ?? undefined}
+          compteVerrouille={compteUtiliseEnEcriture(
+            form.compteFournisseurId,
+            ecrituresComptables,
+          )}
         />
       )}
 

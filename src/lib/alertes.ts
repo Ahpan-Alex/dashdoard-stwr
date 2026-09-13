@@ -3,6 +3,7 @@ import { calculerStocks } from "./calculations";
 import { etatPaiementFacture, resteAPayer } from "./commercial";
 import type { Permission } from "./auth/rbac";
 import { factureEstFiscale } from "./facturation-mg";
+import { produitsAMigrerComptes } from "./comptabilite";
 import { libelleProduit } from "./produits";
 import type {
   Achat,
@@ -11,6 +12,7 @@ import type {
   Facture,
   Fournisseur,
   Inventaire,
+  CompteComptable,
   JournalAudit,
   Parametres,
   PointDeVente,
@@ -18,7 +20,7 @@ import type {
   Vente,
 } from "./types";
 
-export type CategorieAlerte = "achat" | "vente" | "stock";
+export type CategorieAlerte = "achat" | "vente" | "stock" | "comptabilite";
 
 export type TypeAlerte =
   | "achat_echeance_approche"
@@ -30,7 +32,8 @@ export type TypeAlerte =
   | "stock_reappro"
   | "stock_rupture"
   | "stock_surstock"
-  | "stock_peremption";
+  | "stock_peremption"
+  | "produit_compte_generique";
 
 export type GraviteAlerte = "info" | "warning" | "danger";
 
@@ -89,6 +92,7 @@ export const LABEL_CATEGORIE_ALERTE: Record<CategorieAlerte, string> = {
   achat: "Factures d'achat",
   vente: "Factures de vente",
   stock: "Stock",
+  comptabilite: "Comptabilité",
 };
 
 export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
@@ -102,6 +106,7 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   stock_rupture: "Rupture de stock",
   stock_surstock: "Surstockage",
   stock_peremption: "Péremption proche",
+  produit_compte_generique: "Compte produit générique à remplacer",
 };
 
 const CLES_REGLES = Object.keys(
@@ -300,6 +305,7 @@ export type ContexteAlertes = {
   clients: { id: string; nom: string }[];
   fournisseurs: Fournisseur[];
   produits: Produit[];
+  comptesComptables?: CompteComptable[];
   entrees: EntreeStock[];
   ventes: Vente[];
   pointsDeVente: PointDeVente[];
@@ -583,6 +589,24 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
     }
   }
 
+  const aMigrer = produitsAMigrerComptes(
+    ctx.produits,
+    ctx.comptesComptables ?? [],
+  );
+  for (const p of aMigrer) {
+    out.push({
+      id: `produit_compte_generique:${p.id}`,
+      type: "produit_compte_generique",
+      categorie: "comptabilite",
+      titre: `${p.code} — compte comptable à corriger`,
+      message: `${libelleProduit(p)} utilise encore un compte générique ou n'a pas le compte exigé par sa catégorie d'achat.`,
+      date: today,
+      href: `/parametres/produits`,
+      gravite: "warning",
+      entiteId: p.id,
+    });
+  }
+
   return out.sort((a, b) => {
     const g = { danger: 0, warning: 1, info: 2 };
     if (g[a.gravite] !== g[b.gravite]) return g[a.gravite] - g[b.gravite];
@@ -596,6 +620,11 @@ export function alerteVisiblePourUtilisateur(
 ): boolean {
   if (alerte.categorie === "vente") return hasPermission("factures.lire");
   if (alerte.categorie === "stock") return hasPermission("produits.lire");
+  if (alerte.categorie === "comptabilite") {
+    return (
+      hasPermission("parametres.gerer") || hasPermission("comptabilite.lire")
+    );
+  }
   return true;
 }
 

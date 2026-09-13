@@ -60,6 +60,7 @@ export default function TiersDetailPage() {
     parametres,
     updateTiers,
     updatePlafondCredit,
+    comptesComptables,
   } = useStore();
 
   const liste = useMemo(
@@ -375,6 +376,41 @@ export default function TiersDetailPage() {
               </dl>
             </section>
           )}
+          <section className="rounded-[var(--radius)] border border-line bg-card p-5">
+            <h2 className="mb-3 font-display text-lg font-semibold">
+              Comptes comptables
+            </h2>
+            <dl className="grid gap-3 sm:grid-cols-2 text-sm">
+              {estClient(tiersActif) && (
+                <div>
+                  <dt className="text-xs text-muted">Compte client (411)</dt>
+                  <dd className="font-medium font-mono">
+                    {(() => {
+                      const c = comptesComptables.find(
+                        (x) => x.id === tiersActif.compteClientId,
+                      );
+                      return c ? `${c.numero} — ${c.libelle}` : "Non renseigné";
+                    })()}
+                  </dd>
+                </div>
+              )}
+              {estFournisseur(tiersActif) && (
+                <div>
+                  <dt className="text-xs text-muted">
+                    Compte fournisseur (401)
+                  </dt>
+                  <dd className="font-medium font-mono">
+                    {(() => {
+                      const c = comptesComptables.find(
+                        (x) => x.id === tiersActif.compteFournisseurId,
+                      );
+                      return c ? `${c.numero} — ${c.libelle}` : "Non renseigné";
+                    })()}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </section>
         </div>
       )}
 

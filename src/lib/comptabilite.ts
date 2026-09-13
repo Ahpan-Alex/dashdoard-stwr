@@ -20,6 +20,9 @@ import type {
   Parametres,
   Produit,
   RoleCompteComptable,
+  RoleTiers,
+  Tiers,
+  TypeAchat,
 } from "./types";
 import {
   TYPE_ACHAT_LABELS,
@@ -69,42 +72,22 @@ export const LIBELLE_COMPTE_DEFAUT_VENTE = "Compte de produits à définir";
 export const ID_COMPTE_DEFAUT_CHARGE = "cpt-defaut-charge";
 export const ID_COMPTE_DEFAUT_VENTE = "cpt-defaut-vente";
 
+export const PREFIXE_COMPTE_FOURNISSEUR = "401";
+export const PREFIXE_COMPTE_CLIENT = "411";
+export const VALEUR_COMPTE_TIERS_AUTO = "__auto__";
+
+export const MSG_COMPTE_TIERS_AUTO =
+  "Créer automatiquement un sous-compte unique";
+
 export function numeroCompteDefaut(classe: "6" | "7", longueur: number) {
   return completerNumeroCompte(classe, longueur);
 }
 
 export function appliquerSeedComptesDefaut(
   comptes: CompteComptable[],
-  longueur: number,
+  _longueur: number,
 ): { comptes: CompteComptable[]; ajoutes: CompteComptable[] } {
-  const ajoutes: CompteComptable[] = [];
-  let next = [...comptes];
-  if (!next.some((c) => classeNumeroCompte(c.numero) === "6")) {
-    const charge: CompteComptable = {
-      id: ID_COMPTE_DEFAUT_CHARGE,
-      numero: numeroCompteDefaut("6", longueur),
-      libelle: LIBELLE_COMPTE_DEFAUT_CHARGE,
-      roleCompte: "defaut_charge",
-    };
-    if (!compteParNumero(next, charge.numero)) {
-      next = [charge, ...next];
-      ajoutes.push(charge);
-    }
-  }
-  if (!next.some((c) => classeNumeroCompte(c.numero) === "7")) {
-    const vente: CompteComptable = {
-      id: ID_COMPTE_DEFAUT_VENTE,
-      numero: numeroCompteDefaut("7", longueur),
-      libelle: LIBELLE_COMPTE_DEFAUT_VENTE,
-      roleCompte: "defaut_vente",
-    };
-    if (!compteParNumero(next, vente.numero)) {
-      next = [vente, ...next];
-      ajoutes.push(vente);
-    }
-  }
-  if (ajoutes.length === 0) return { comptes, ajoutes };
-  return { comptes: next, ajoutes };
+  return { comptes, ajoutes: [] };
 }
 
 export function compteChargeProduit(
@@ -118,10 +101,7 @@ export function compteChargeProduit(
     const legacy = comptes.find((c) => c.id === produit.compteComptableId);
     if (legacy && classeNumeroCompte(legacy.numero) === "6") return legacy;
   }
-  return (
-    comptes.find((c) => c.roleCompte === "defaut_charge") ??
-    comptesParClasse(comptes, "6")[0]
-  );
+  return undefined;
 }
 
 export function compteVenteProduit(
@@ -135,10 +115,91 @@ export function compteVenteProduit(
     const legacy = comptes.find((c) => c.id === produit.compteComptableId);
     if (legacy && classeNumeroCompte(legacy.numero) === "7") return legacy;
   }
+  return undefined;
+}
+
+export function estCompteGeneriqueProduit(compte: CompteComptable | undefined) {
+  if (!compte) return false;
+  if (compte.id === ID_COMPTE_DEFAUT_CHARGE || compte.id === ID_COMPTE_DEFAUT_VENTE) {
+    return true;
+  }
+  if (
+    compte.roleCompte === "defaut_charge" ||
+    compte.roleCompte === "defaut_vente"
+  ) {
+    return true;
+  }
   return (
-    comptes.find((c) => c.roleCompte === "defaut_vente") ??
-    comptesParClasse(comptes, "7")[0]
+    compte.libelle === LIBELLE_COMPTE_DEFAUT_CHARGE ||
+    compte.libelle === LIBELLE_COMPTE_DEFAUT_VENTE
   );
+}
+
+/** Champs exigés selon la catégorie d'achat de la fiche produit. */
+export function champsComptesProduitRequis(type: TypeAchat | undefined): {
+  charge: boolean;
+  vente: boolean;
+} {
+  const t = type ?? "marchandises";
+  if (t === "fournitures" || t === "immobilisation" || t === "service_general") {
+    return { charge: true, vente: false };
+  }
+  return { charge: true, vente: true };
+}
+
+export function motifComptesProduitInvalides(
+  produit: Pick<
+    Produit,
+    "typeAchat" | "compteChargeId" | "compteVenteId" | "compteComptableId"
+  >,
+  comptes: CompteComptable[],
+) {
+  const requis = champsComptesProduitRequis(produit.typeAchat);
+  const categorie = TYPE_ACHAT_LABELS[produit.typeAchat ?? "marchandises"];
+  const manquants: string[] = [];
+  if (requis.charge) {
+    const charge = compteChargeProduit(produit, comptes);
+    if (!charge) {
+      manquants.push("le compte de charge (achat)");
+    } else if (estCompteGeneriqueProduit(charge)) {
+      manquants.push(
+        "le compte de charge (achat) — le compte générique « Compte de charge à définir » n'est plus accepté",
+      );
+    } else if (classeNumeroCompte(charge.numero) !== "6") {
+      manquants.push("un compte de charge de classe 6");
+    }
+  }
+  if (requis.vente) {
+    const vente = compteVenteProduit(produit, comptes);
+    if (!vente) {
+      manquants.push("le compte de vente");
+    } else if (estCompteGeneriqueProduit(vente)) {
+      manquants.push(
+        "le compte de vente — le compte générique « Compte de produits à définir » n'est plus accepté",
+      );
+    } else if (classeNumeroCompte(vente.numero) !== "7") {
+      manquants.push("un compte de vente de classe 7");
+    }
+  }
+  if (manquants.length === 0) return null;
+  if (manquants.length === 1) {
+    return `Renseignez ${manquants[0]} pour la catégorie « ${categorie} ».`;
+  }
+  return `Renseignez ${manquants.join(" et ")} pour la catégorie « ${categorie} ».`;
+}
+
+export function produitNecessiteMigrationComptes(
+  produit: Produit,
+  comptes: CompteComptable[],
+) {
+  return motifComptesProduitInvalides(produit, comptes) != null;
+}
+
+export function produitsAMigrerComptes(
+  produits: Produit[],
+  comptes: CompteComptable[],
+) {
+  return produits.filter((p) => produitNecessiteMigrationComptes(p, comptes));
 }
 
 export function idsComptesUtilisesEnEcriture(ecritures: EcritureComptable[]) {
@@ -197,6 +258,178 @@ export function motifNumeroCompteInvalide(
     return `Le numéro doit comporter exactement ${longueur} chiffres.`;
   }
   return null;
+}
+
+/** Saisie manuelle : le numéro peut être plus court, il sera complété par des zéros. */
+export function motifNumeroCompteSaisie(
+  numero: string,
+  longueur: number | undefined,
+) {
+  if (longueur == null) {
+    return "Fixez d'abord la longueur des numéros de compte (6 à 9 chiffres).";
+  }
+  const digits = chiffresNumeroCompte(numero);
+  if (!digits) return "Le numéro de compte est obligatoire.";
+  if (digits.length > longueur) {
+    return `Le numéro ne peut pas dépasser ${longueur} chiffres.`;
+  }
+  return null;
+}
+
+export type PrefixeCompteTiers =
+  | typeof PREFIXE_COMPTE_CLIENT
+  | typeof PREFIXE_COMPTE_FOURNISSEUR;
+
+export function estCompteFamilleTiers(
+  numero: string,
+  prefixe: PrefixeCompteTiers,
+) {
+  return chiffresNumeroCompte(numero).startsWith(prefixe);
+}
+
+export function comptesFamilleTiers(
+  comptes: CompteComptable[],
+  prefixe: PrefixeCompteTiers,
+) {
+  return comptes
+    .filter((c) => estCompteFamilleTiers(c.numero, prefixe))
+    .sort((a, b) => a.numero.localeCompare(b.numero));
+}
+
+export function prochainNumeroSousCompteTiers(
+  prefixe: PrefixeCompteTiers,
+  comptes: CompteComptable[],
+  longueur: number,
+): string | null {
+  const racine = completerNumeroCompte(prefixe, longueur);
+  const used = new Set(
+    comptes
+      .map((c) => chiffresNumeroCompte(c.numero))
+      .filter((n) => n.length === longueur && n.startsWith(prefixe)),
+  );
+  const start = Number(racine) + 1;
+  const plafondClasse = Number(prefixe + "9".repeat(longueur - prefixe.length));
+  for (let i = start; i <= plafondClasse; i++) {
+    const num = String(i).padStart(longueur, "0");
+    if (!num.startsWith(prefixe)) break;
+    if (!used.has(num)) return num;
+  }
+  return null;
+}
+
+export function libelleCompteTiersAuto(
+  prefixe: PrefixeCompteTiers,
+  nomTiers: string,
+) {
+  const role = prefixe === PREFIXE_COMPTE_CLIENT ? "Client" : "Fournisseur";
+  const nom = nomTiers.trim() || "Tiers";
+  return `${role} — ${nom}`;
+}
+
+export function tiersUtilisantCompte(
+  compteId: string | undefined,
+  tiers: Array<Pick<Tiers, "id" | "nom" | "compteClientId" | "compteFournisseurId">>,
+  ignoreId?: string,
+) {
+  if (!compteId || compteId === VALEUR_COMPTE_TIERS_AUTO) return undefined;
+  return tiers.find(
+    (t) =>
+      t.id !== ignoreId &&
+      (t.compteClientId === compteId || t.compteFournisseurId === compteId),
+  );
+}
+
+export function motifCompteTiersIndisponible(
+  compteId: string | undefined,
+  prefixe: PrefixeCompteTiers,
+  comptes: CompteComptable[],
+  tiers: Array<Pick<Tiers, "id" | "nom" | "compteClientId" | "compteFournisseurId">>,
+  ignoreId?: string,
+) {
+  if (!compteId || compteId === VALEUR_COMPTE_TIERS_AUTO) return null;
+  const compte = comptes.find((c) => c.id === compteId);
+  if (!compte) return "Le compte comptable sélectionné est introuvable.";
+  if (!estCompteFamilleTiers(compte.numero, prefixe)) {
+    return prefixe === PREFIXE_COMPTE_CLIENT
+      ? "Le compte client doit être un compte 411 ou un de ses sous-comptes."
+      : "Le compte fournisseur doit être un compte 401 ou un de ses sous-comptes.";
+  }
+  const autre = tiersUtilisantCompte(compteId, tiers, ignoreId);
+  if (autre) {
+    return `Le compte ${compte.numero} est déjà rattaché au tiers « ${autre.nom} ». Un compte 401/411 ne peut être associé qu'à un seul tiers.`;
+  }
+  return null;
+}
+
+export function motifComptesTiersInvalides(
+  data: Pick<Tiers, "roles" | "compteClientId" | "compteFournisseurId">,
+  comptes: CompteComptable[],
+  tiers: Array<Pick<Tiers, "id" | "nom" | "compteClientId" | "compteFournisseurId">>,
+  ignoreId?: string,
+  opts?: { exigerClient?: boolean; exigerFournisseur?: boolean },
+) {
+  const roles = data.roles ?? [];
+  const exigerClient = opts?.exigerClient ?? roles.includes("client");
+  const exigerFournisseur =
+    opts?.exigerFournisseur ?? roles.includes("fournisseur");
+  if (roles.includes("client")) {
+    if (exigerClient && !data.compteClientId) {
+      return "Le compte comptable 411 (clients) est obligatoire pour le rôle Client.";
+    }
+    const motif = motifCompteTiersIndisponible(
+      data.compteClientId,
+      PREFIXE_COMPTE_CLIENT,
+      comptes,
+      tiers,
+      ignoreId,
+    );
+    if (motif) return motif;
+  }
+  if (roles.includes("fournisseur")) {
+    if (exigerFournisseur && !data.compteFournisseurId) {
+      return "Le compte comptable 401 (fournisseurs) est obligatoire pour le rôle Fournisseur.";
+    }
+    const motif = motifCompteTiersIndisponible(
+      data.compteFournisseurId,
+      PREFIXE_COMPTE_FOURNISSEUR,
+      comptes,
+      tiers,
+      ignoreId,
+    );
+    if (motif) return motif;
+  }
+  return null;
+}
+
+export function compteClientDuTiers(
+  tiers: Pick<Tiers, "compteClientId"> | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!tiers?.compteClientId) return undefined;
+  const compte = comptes.find((c) => c.id === tiers.compteClientId);
+  if (!compte || !estCompteFamilleTiers(compte.numero, PREFIXE_COMPTE_CLIENT)) {
+    return undefined;
+  }
+  return compte;
+}
+
+export function compteFournisseurDuTiers(
+  tiers: Pick<Tiers, "compteFournisseurId"> | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!tiers?.compteFournisseurId) return undefined;
+  const compte = comptes.find((c) => c.id === tiers.compteFournisseurId);
+  if (
+    !compte ||
+    !estCompteFamilleTiers(compte.numero, PREFIXE_COMPTE_FOURNISSEUR)
+  ) {
+    return undefined;
+  }
+  return compte;
+}
+
+export function prefixeComptePourRole(role: RoleTiers): PrefixeCompteTiers {
+  return role === "client" ? PREFIXE_COMPTE_CLIENT : PREFIXE_COMPTE_FOURNISSEUR;
 }
 
 export function compteParNumero(
@@ -473,6 +706,7 @@ export function ecritureDepuisFactureVente(opts: {
   comptes: CompteComptable[];
   parametres: Parametres;
   clients: Client[];
+  tiers?: Tiers[];
 }): EcritureComptable | null {
   const { facture } = opts;
   if (!factureEstFiscale(facture) || facture.statut === "annulee") return null;
@@ -480,7 +714,11 @@ export function ecritureDepuisFactureVente(opts: {
   const assujetti = appliqueTVA(opts.parametres);
   const avoir = facture.type === "avoir";
   const client = opts.clients.find((c) => c.id === facture.clientId);
+  const ficheTiers = opts.tiers?.find((t) => t.id === facture.clientId);
   const nomClient = client ? libelleClient(client) : "Client";
+  const compteClient =
+    compteClientDuTiers(ficheTiers, opts.comptes) ??
+    compteClientDuTiers(client, opts.comptes);
   const ventilations = ventilerFacture(facture, opts.produits, opts.parametres);
   const prefix = `ecr-fac-${facture.id}`;
   const lignesProduits = ventilerVersComptes({
@@ -497,7 +735,7 @@ export function ecritureDepuisFactureVente(opts: {
   });
   const lignes = equilibrer(lignesProduits, {
     id: `${prefix}-ctp`,
-    compte: undefined,
+    compte: compteClient,
     fallbackLibelle: avoir
       ? `Contrepartie clients — ${nomClient}`
       : `Clients — ${nomClient}`,
@@ -525,12 +763,17 @@ export function ecritureDepuisAchat(opts: {
   comptes: CompteComptable[];
   parametres: Parametres;
   fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
 }): EcritureComptable | null {
   const { achat } = opts;
   if (achat.statut !== "valide") return null;
   const assujetti = appliqueTVA(opts.parametres);
   const fournisseur = opts.fournisseurs.find((f) => f.id === achat.fournisseurId);
+  const ficheTiers = opts.tiers?.find((t) => t.id === achat.fournisseurId);
   const nom = fournisseur?.nom ?? "Fournisseur";
+  const compteFournisseur =
+    compteFournisseurDuTiers(ficheTiers, opts.comptes) ??
+    compteFournisseurDuTiers(fournisseur, opts.comptes);
   const ventilations = ventilerAchat(achat.lignes, opts.produits, opts.parametres);
   const prefix = `ecr-ach-${achat.id}`;
   const lignesProduits = ventilerVersComptes({
@@ -547,7 +790,7 @@ export function ecritureDepuisAchat(opts: {
   });
   const lignes = equilibrer(lignesProduits, {
     id: `${prefix}-ctp`,
-    compte: undefined,
+    compte: compteFournisseur,
     fallbackLibelle: `Fournisseurs — ${nom}`,
     debitSiPositif: false,
   });
@@ -571,12 +814,17 @@ export function ecritureDepuisAvoirAchat(opts: {
   comptes: CompteComptable[];
   parametres: Parametres;
   fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
 }): EcritureComptable | null {
   const { achat, avoir } = opts;
   if (achat.statut !== "valide" || avoir.statut !== "valide") return null;
   const assujetti = appliqueTVA(opts.parametres);
   const fournisseur = opts.fournisseurs.find((f) => f.id === achat.fournisseurId);
+  const ficheTiers = opts.tiers?.find((t) => t.id === achat.fournisseurId);
   const nom = fournisseur?.nom ?? "Fournisseur";
+  const compteFournisseur =
+    compteFournisseurDuTiers(ficheTiers, opts.comptes) ??
+    compteFournisseurDuTiers(fournisseur, opts.comptes);
   const ventilations = ventilerAchat(avoir.lignes, opts.produits, opts.parametres);
   const prefix = `ecr-avr-${avoir.id}`;
   const lignesProduits = ventilerVersComptes({
@@ -593,7 +841,7 @@ export function ecritureDepuisAvoirAchat(opts: {
   });
   const lignes = equilibrer(lignesProduits, {
     id: `${prefix}-ctp`,
-    compte: undefined,
+    compte: compteFournisseur,
     fallbackLibelle: `Fournisseurs — ${nom}`,
     debitSiPositif: true,
   });
@@ -642,6 +890,7 @@ export function regenererEcrituresComptables(opts: {
   parametres: Parametres;
   clients: Client[];
   fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
   existantes?: EcritureComptable[];
 }): EcritureComptable[] {
   const generees: EcritureComptable[] = [];
@@ -652,6 +901,7 @@ export function regenererEcrituresComptables(opts: {
       comptes: opts.comptesComptables,
       parametres: opts.parametres,
       clients: opts.clients,
+      tiers: opts.tiers,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
   }
@@ -662,6 +912,7 @@ export function regenererEcrituresComptables(opts: {
       comptes: opts.comptesComptables,
       parametres: opts.parametres,
       fournisseurs: opts.fournisseurs,
+      tiers: opts.tiers,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
     for (const avoir of achat.avoirs ?? []) {
@@ -672,6 +923,7 @@ export function regenererEcrituresComptables(opts: {
         comptes: opts.comptesComptables,
         parametres: opts.parametres,
         fournisseurs: opts.fournisseurs,
+        tiers: opts.tiers,
       });
       if (ev && ecritureEstEquilibree(ev)) generees.push(ev);
     }
@@ -856,16 +1108,6 @@ export function migrerProduitComptes(
   let venteId = produit.compteVenteId;
   if (!chargeId && classeLegacy === "6" && legacy) chargeId = legacy.id;
   if (!venteId && classeLegacy === "7" && legacy) venteId = legacy.id;
-
-  const defautCharge =
-    comptes.find((c) => c.roleCompte === "defaut_charge") ??
-    comptesParClasse(comptes, "6")[0];
-  const defautVente =
-    comptes.find((c) => c.roleCompte === "defaut_vente") ??
-    comptesParClasse(comptes, "7")[0];
-
-  if (!chargeId) chargeId = defautCharge?.id;
-  if (!venteId) venteId = defautVente?.id;
   const typeAchat = produit.typeAchat ?? "marchandises";
 
   if (

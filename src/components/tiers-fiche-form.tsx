@@ -1,9 +1,14 @@
 "use client";
 
 import type { FormEvent } from "react";
+import { CompteTiersSelect } from "@/components/compte-tiers-select";
 import { CLIENT_TYPES } from "@/lib/commercial";
+import {
+  PREFIXE_COMPTE_CLIENT,
+  PREFIXE_COMPTE_FOURNISSEUR,
+} from "@/lib/comptabilite";
 import { ROLE_TIERS_LABELS } from "@/lib/tiers";
-import type { Client, RoleTiers, Tiers } from "@/lib/types";
+import type { Client, CompteComptable, RoleTiers, Tiers } from "@/lib/types";
 
 export type TiersFormState = {
   code: string;
@@ -22,6 +27,8 @@ export type TiersFormState = {
   plafondCredit: string;
   delaiPaiementFournisseurJours: string;
   remiseHabituelleFournisseurPercent: string;
+  compteClientId: string;
+  compteFournisseurId: string;
 };
 
 export const TIERS_FORM_VIDE: TiersFormState = {
@@ -41,6 +48,8 @@ export const TIERS_FORM_VIDE: TiersFormState = {
   plafondCredit: "",
   delaiPaiementFournisseurJours: "30",
   remiseHabituelleFournisseurPercent: "",
+  compteClientId: "",
+  compteFournisseurId: "",
 };
 
 export function tiersVersForm(t: Tiers): TiersFormState {
@@ -71,6 +80,8 @@ export function tiersVersForm(t: Tiers): TiersFormState {
       t.remiseHabituelleFournisseurPercent != null
         ? String(t.remiseHabituelleFournisseurPercent)
         : "",
+    compteClientId: t.compteClientId ?? "",
+    compteFournisseurId: t.compteFournisseurId ?? "",
   };
 }
 
@@ -107,6 +118,12 @@ export function payloadTiers(
     remiseHabituelleFournisseurPercent: roles.includes("fournisseur")
       ? Math.max(0, Number(form.remiseHabituelleFournisseurPercent) || 0)
       : undefined,
+    compteClientId: roles.includes("client")
+      ? form.compteClientId || undefined
+      : undefined,
+    compteFournisseurId: roles.includes("fournisseur")
+      ? form.compteFournisseurId || undefined
+      : undefined,
   };
 }
 
@@ -122,6 +139,11 @@ type Props = {
   onSubmit: (e: FormEvent) => void;
   onCancel: () => void;
   submitLabel: string;
+  comptes?: CompteComptable[];
+  tiers?: Tiers[];
+  ignoreTiersId?: string;
+  compteClientVerrouille?: boolean;
+  compteFournisseurVerrouille?: boolean;
 };
 
 export function TiersFicheForm({
@@ -130,6 +152,11 @@ export function TiersFicheForm({
   onSubmit,
   onCancel,
   submitLabel,
+  comptes = [],
+  tiers = [],
+  ignoreTiersId,
+  compteClientVerrouille,
+  compteFournisseurVerrouille,
 }: Props) {
   const estClient = form.roles.includes("client");
   const estFournisseur = form.roles.includes("fournisseur");
@@ -332,6 +359,41 @@ export function TiersFicheForm({
             />
           </label>
         </>
+      )}
+
+      {(estClient || estFournisseur) && (
+        <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
+          {estClient && (
+            <CompteTiersSelect
+              label="Compte comptable client (411)"
+              prefixe={PREFIXE_COMPTE_CLIENT}
+              value={form.compteClientId}
+              required
+              verrouille={compteClientVerrouille}
+              comptes={comptes}
+              tiers={tiers}
+              ignoreTiersId={ignoreTiersId}
+              onChange={(compteClientId) =>
+                setForm({ ...form, compteClientId })
+              }
+            />
+          )}
+          {estFournisseur && (
+            <CompteTiersSelect
+              label="Compte comptable fournisseur (401)"
+              prefixe={PREFIXE_COMPTE_FOURNISSEUR}
+              value={form.compteFournisseurId}
+              required
+              verrouille={compteFournisseurVerrouille}
+              comptes={comptes}
+              tiers={tiers}
+              ignoreTiersId={ignoreTiersId}
+              onChange={(compteFournisseurId) =>
+                setForm({ ...form, compteFournisseurId })
+              }
+            />
+          )}
+        </div>
       )}
 
       <div className="flex gap-2 sm:col-span-2 lg:col-span-3">

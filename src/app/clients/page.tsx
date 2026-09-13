@@ -26,6 +26,7 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useAffichageTable } from "@/lib/use-affichage-table";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import type { Client } from "@/lib/types";
 
 export default function ClientsPage() {
@@ -41,6 +42,9 @@ export default function ClientsPage() {
     addClient,
     updateClient,
     deleteClient,
+    comptesComptables,
+    ecrituresComptables,
+    tiers,
   } = useStore();
   const { visible } = useAffichageTable("clients");
   const [open, setOpen] = useState(false);
@@ -81,10 +85,12 @@ export default function ClientsPage() {
       return;
     }
     const payload = payloadClient(form);
-    if (editingId) {
-      updateClient(editingId, payload);
-    } else {
-      addClient({ ...payload, actif: true });
+    const res = editingId
+      ? updateClient(editingId, payload)
+      : addClient({ ...payload, actif: true });
+    if (!res.ok) {
+      alert(res.reason);
+      return;
     }
     fermerForm();
   }
@@ -134,6 +140,13 @@ export default function ClientsPage() {
           onSubmit={onSubmit}
           onCancel={fermerForm}
           submitLabel={editingId ? "Enregistrer les modifications" : "Enregistrer"}
+          comptes={comptesComptables}
+          tiers={tiers}
+          ignoreTiersId={editingId ?? undefined}
+          compteVerrouille={compteUtiliseEnEcriture(
+            form.compteClientId,
+            ecrituresComptables,
+          )}
         />
       )}
 

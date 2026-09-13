@@ -10,6 +10,7 @@ import {
   RotateCcw,
   ShoppingCart,
   Boxes,
+  BookOpen,
   ScrollText,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -30,12 +31,14 @@ const FILTRES: { id: Filtre; label: string }[] = [
   { id: "achat", label: LABEL_CATEGORIE_ALERTE.achat },
   { id: "vente", label: LABEL_CATEGORIE_ALERTE.vente },
   { id: "stock", label: LABEL_CATEGORIE_ALERTE.stock },
+  { id: "comptabilite", label: LABEL_CATEGORIE_ALERTE.comptabilite },
   { id: "traitees", label: "Traitées" },
 ];
 
 function iconeCategorie(cat: CategorieAlerte) {
   if (cat === "achat") return ShoppingCart;
   if (cat === "vente") return ScrollText;
+  if (cat === "comptabilite") return BookOpen;
   return Boxes;
 }
 

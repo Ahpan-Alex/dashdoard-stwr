@@ -80,16 +80,27 @@ import {
   compteVenteProduit,
   chiffresNumeroCompte,
   completerNumeroCompte,
+  estCompteGeneriqueProduit,
+  libelleCompteTiersAuto,
   longueurNumeroCompteEffective,
   LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
   migrerProduitComptes,
+  motifComptesProduitInvalides,
+  motifComptesTiersInvalides,
+  motifCompteTiersIndisponible,
   motifLignesAchatInvalides,
   motifNumeroCompteInvalide,
+  motifNumeroCompteSaisie,
   MSG_COMPTE_VERROUILLE,
   parserCsvPlanComptable,
+  PREFIXE_COMPTE_CLIENT,
+  PREFIXE_COMPTE_FOURNISSEUR,
+  prochainNumeroSousCompteTiers,
   regenererEcrituresComptables,
+  VALEUR_COMPTE_TIERS_AUTO,
   validerImportPlanComptable,
+  type PrefixeCompteTiers,
 } from "./comptabilite";
 import { PLAN_PCG_2005 } from "./pcg-2005";
 import {
@@ -361,12 +372,14 @@ type Store = {
   updateCategorieProduit: (id: string, data: Partial<CategorieProduit>) => void;
   deleteCategorieProduit: (id: string) => { ok: boolean; reason?: string };
 
-  addProduit: (produit: Omit<Produit, "id">) => void;
+  addProduit: (
+    produit: Omit<Produit, "id">,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
   updateProduit: (
     id: string,
     data: Partial<Produit>,
     opts?: { motifPrix?: string },
-  ) => void;
+  ) => { ok: boolean; reason?: string };
   /** Désactive le produit ; suppression physique refusée si référencé. */
   desactiverProduit: (id: string) => void;
   deleteProduit: (id: string) => { ok: boolean; reason?: string };
@@ -388,12 +401,22 @@ type Store = {
   ) => void;
   deleteMouvementCompteCourant: (id: string) => void;
 
-  addClient: (client: Omit<Client, "id">) => void;
-  updateClient: (id: string, data: Partial<Client>) => void;
+  addClient: (
+    client: Omit<Client, "id">,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  updateClient: (
+    id: string,
+    data: Partial<Client>,
+  ) => { ok: boolean; reason?: string };
   deleteClient: (id: string) => { ok: boolean; reason?: string };
 
-  addFournisseur: (frn: Omit<Fournisseur, "id">) => void;
-  updateFournisseur: (id: string, data: Partial<Fournisseur>) => void;
+  addFournisseur: (
+    frn: Omit<Fournisseur, "id">,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  updateFournisseur: (
+    id: string,
+    data: Partial<Fournisseur>,
+  ) => { ok: boolean; reason?: string };
   deleteFournisseur: (id: string) => { ok: boolean; reason?: string };
 
   addTiers: (data: Omit<Tiers, "id">) => { ok: true; id: string } | { ok: false; reason: string };
@@ -645,6 +668,7 @@ function journalDepuis(state: {
   parametres: Parametres;
   clients: Client[];
   fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
   ecrituresComptables?: EcritureComptable[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
@@ -655,6 +679,7 @@ function journalDepuis(state: {
     parametres: state.parametres,
     clients: state.clients,
     fournisseurs: state.fournisseurs,
+    tiers: state.tiers,
     existantes: state.ecrituresComptables,
   });
 }
@@ -668,6 +693,7 @@ function avecJournal<T extends Record<string, unknown>>(
     parametres: Parametres;
     clients: Client[];
     fournisseurs: Fournisseur[];
+    tiers?: Tiers[];
     ecrituresComptables?: EcritureComptable[];
   },
   patch: T,
@@ -776,6 +802,54 @@ function syncTiersState(state: {
     tiers: state.tiers ?? [],
   });
   return { tiers, ...synchroniserApresTiers(tiers) };
+}
+
+function resoudreCompteTiersAuto(opts: {
+  valeur: string | undefined;
+  prefixe: PrefixeCompteTiers;
+  nomTiers: string;
+  comptes: CompteComptable[];
+  parametres: Parametres;
+  tiers: Tiers[];
+  ignoreId?: string;
+}):
+  | { ok: true; compteId?: string; comptes: CompteComptable[] }
+  | { ok: false; reason: string } {
+  const { valeur, prefixe, nomTiers, parametres, tiers, ignoreId } = opts;
+  let comptes = opts.comptes;
+  if (!valeur) return { ok: true, compteId: undefined, comptes };
+  if (valeur !== VALEUR_COMPTE_TIERS_AUTO) {
+    const motif = motifCompteTiersIndisponible(
+      valeur,
+      prefixe,
+      comptes,
+      tiers,
+      ignoreId,
+    );
+    if (motif) return { ok: false, reason: motif };
+    return { ok: true, compteId: valeur, comptes };
+  }
+  const longueur = longueurNumeroCompteEffective(parametres);
+  if (longueur == null) {
+    return {
+      ok: false,
+      reason: "Fixez d'abord la longueur des numéros de compte (6 à 9 chiffres).",
+    };
+  }
+  const numero = prochainNumeroSousCompteTiers(prefixe, comptes, longueur);
+  if (!numero) {
+    return {
+      ok: false,
+      reason: `Impossible de créer un sous-compte ${prefixe} : plus de numéro disponible.`,
+    };
+  }
+  const nouveau: CompteComptable = {
+    id: uid("cpt"),
+    numero,
+    libelle: libelleCompteTiersAuto(prefixe, nomTiers),
+  };
+  comptes = [nouveau, ...comptes];
+  return { ok: true, compteId: nouveau.id, comptes };
 }
 
 function utilisateurCourantPeutAgirSurSite(siteId: string) {
@@ -1002,22 +1076,26 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }
         const longueur = longueurNumeroCompteEffective(get().parametres);
-        const motif = motifNumeroCompteInvalide(data.numero, longueur);
-        if (motif || longueur == null) {
-          return { ok: false as const, reason: motif ?? "Longueur non définie." };
+        const motifSaisie = motifNumeroCompteSaisie(data.numero, longueur);
+        if (motifSaisie || longueur == null) {
+          return { ok: false as const, reason: motifSaisie ?? "Longueur non définie." };
+        }
+        const numero = completerNumeroCompte(data.numero, longueur);
+        const motif = motifNumeroCompteInvalide(numero, longueur);
+        if (motif) {
+          return { ok: false as const, reason: motif };
         }
         const libelle = data.libelle.trim();
         if (!libelle) {
           return { ok: false as const, reason: "Le libellé est obligatoire." };
         }
-        if (compteParNumero(get().comptesComptables, data.numero)) {
+        if (compteParNumero(get().comptesComptables, numero)) {
           return {
             ok: false as const,
             reason: "Un compte porte déjà ce numéro.",
           };
         }
         const id = uid("cpt");
-        const numero = completerNumeroCompte(data.numero, longueur);
         set((state) => {
           const nouveau: CompteComptable = {
             id,
@@ -1061,11 +1139,16 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const longueur = longueurNumeroCompteEffective(get().parametres);
         const numeroRaw = data.numero ?? prev.numero;
-        const motif = motifNumeroCompteInvalide(numeroRaw, longueur);
-        if (motif || longueur == null) {
-          return { ok: false as const, reason: motif ?? "Longueur non définie." };
+        const motifSaisie = motifNumeroCompteSaisie(numeroRaw, longueur);
+        if (motifSaisie || longueur == null) {
+          return { ok: false as const, reason: motifSaisie ?? "Longueur non définie." };
         }
-        if (compteParNumero(get().comptesComptables, numeroRaw, id)) {
+        const numero = completerNumeroCompte(numeroRaw, longueur);
+        const motif = motifNumeroCompteInvalide(numero, longueur);
+        if (motif) {
+          return { ok: false as const, reason: motif };
+        }
+        if (compteParNumero(get().comptesComptables, numero, id)) {
           return {
             ok: false as const,
             reason: "Un compte porte déjà ce numéro.",
@@ -1075,7 +1158,6 @@ export const useStore = create<Store>()((set, get) => ({
         if (!libelle) {
           return { ok: false as const, reason: "Le libellé est obligatoire." };
         }
-        const numero = completerNumeroCompte(numeroRaw, longueur);
         set((state) => {
           const role =
             data.roleCompte !== undefined ? data.roleCompte : prev.roleCompte;
@@ -1112,8 +1194,31 @@ export const useStore = create<Store>()((set, get) => ({
         if (compteUtiliseEnEcriture(id, get().ecrituresComptables)) {
           return { ok: false as const, reason: MSG_COMPTE_VERROUILLE };
         }
-        set((state) =>
-          avecJournal(state, {
+        set((state) => {
+          const tiers = (state.tiers ?? []).map((t) => ({
+            ...t,
+            compteClientId:
+              t.compteClientId === id ? undefined : t.compteClientId,
+            compteFournisseurId:
+              t.compteFournisseurId === id ? undefined : t.compteFournisseurId,
+          }));
+          const sync = syncTiersState({
+            clients: state.clients.map((c) => ({
+              ...c,
+              compteClientId:
+                c.compteClientId === id ? undefined : c.compteClientId,
+            })),
+            fournisseurs: state.fournisseurs.map((f) => ({
+              ...f,
+              compteFournisseurId:
+                f.compteFournisseurId === id
+                  ? undefined
+                  : f.compteFournisseurId,
+            })),
+            tiers,
+          });
+          return avecJournal(state, {
+            ...sync,
             comptesComptables: state.comptesComptables.filter((c) => c.id !== id),
             produits: state.produits.map((p) => ({
               ...p,
@@ -1139,8 +1244,8 @@ export const useStore = create<Store>()((set, get) => ({
               }),
               ...state.journalActivites,
             ],
-          }),
-        );
+          });
+        });
         return { ok: true as const };
       },
       importerComptesComptablesCsv: (texte) => {
@@ -2315,112 +2420,157 @@ export const useStore = create<Store>()((set, get) => ({
           ),
         })),
 
-      addProduit: (produit) =>
-        set((state) => {
-          const seeded = seedComptesDefautState(state);
-          const nouveau = assignerComptesProduit(
-            { ...produit, id: uid("prod") },
-            seeded.comptesComptables,
+      addProduit: (produit) => {
+        const state = get();
+        const seeded = seedComptesDefautState(state);
+        const nouveau = assignerComptesProduit(
+          { ...produit, id: uid("prod") },
+          seeded.comptesComptables,
+        );
+        const motif = motifComptesProduitInvalides(
+          nouveau,
+          seeded.comptesComptables,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        set((s) => ({
+          ...seeded,
+          produits: [nouveau, ...s.produits],
+          journalActivites: [
+            entreeActivite("creation", "produit", {
+              entiteId: nouveau.id,
+              libelle: nouveau.libelleCourt || nouveau.libelleLong,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id: nouveau.id };
+      },
+      updateProduit: (id, data, opts) => {
+        const state = get();
+        const prev = state.produits.find((p) => p.id === id);
+        if (!prev) return { ok: false, reason: "Produit introuvable." };
+        const seeded = seedComptesDefautState(state);
+        const auth = useAuthStore.getState();
+        const patch: Partial<Produit> = { ...data };
+        if (!auth.hasPermission("parametres.gerer")) {
+          delete patch.compteChargeId;
+          delete patch.compteVenteId;
+          delete patch.compteComptableId;
+        }
+        const chargeEffective = compteChargeProduit(
+          prev,
+          seeded.comptesComptables,
+        );
+        const venteEffective = compteVenteProduit(
+          prev,
+          seeded.comptesComptables,
+        );
+        if (
+          patch.compteChargeId !== undefined &&
+          patch.compteChargeId !== (prev.compteChargeId ?? chargeEffective?.id) &&
+          compteUtiliseEnEcriture(
+            chargeEffective?.id,
+            state.ecrituresComptables,
+          )
+        ) {
+          delete patch.compteChargeId;
+        }
+        if (
+          patch.compteVenteId !== undefined &&
+          patch.compteVenteId !== (prev.compteVenteId ?? venteEffective?.id) &&
+          compteUtiliseEnEcriture(
+            venteEffective?.id,
+            state.ecrituresComptables,
+          )
+        ) {
+          delete patch.compteVenteId;
+        }
+        const next = assignerComptesProduit(
+          { ...prev, ...patch },
+          seeded.comptesComptables,
+        );
+        const motif = motifComptesProduitInvalides(
+          next,
+          seeded.comptesComptables,
+        );
+        if (motif) {
+          const cles = Object.keys(data);
+          const patchComptaSeul = cles.every((k) =>
+            (
+              [
+                "compteChargeId",
+                "compteVenteId",
+                "compteComptableId",
+                "typeAchat",
+                "taxable",
+              ] as string[]
+            ).includes(k),
           );
-          return {
+          if (!patchComptaSeul) return { ok: false, reason: motif };
+          if (
+            data.compteChargeId !== undefined &&
+            estCompteGeneriqueProduit(
+              seeded.comptesComptables.find((c) => c.id === data.compteChargeId),
+            )
+          ) {
+            return { ok: false, reason: motif };
+          }
+          if (
+            data.compteVenteId !== undefined &&
+            estCompteGeneriqueProduit(
+              seeded.comptesComptables.find((c) => c.id === data.compteVenteId),
+            )
+          ) {
+            return { ok: false, reason: motif };
+          }
+        }
+        const hist: HistoriquePrix[] = [];
+        const push = (
+          champ: HistoriquePrix["champ"],
+          ancien: number,
+          nouveau: number,
+        ) => {
+          if (ancien === nouveau) return;
+          hist.push({
+            id: uid("hprix"),
+            ...creerEntreeHistorique({
+              produitId: id,
+              champ,
+              ancienMontant: ancien,
+              nouveauMontant: nouveau,
+              motif: opts?.motifPrix,
+            }),
+          });
+        };
+        if (data.prixAchat != null) {
+          push("achat", prev.prixAchat, next.prixAchat);
+        }
+        if (data.prixVenteHT != null) {
+          push("vente_ht", prev.prixVenteHT, next.prixVenteHT);
+        }
+        if (data.prixVenteGrosHT != null) {
+          push(
+            "gros_ht",
+            prev.prixVenteGrosHT ?? 0,
+            next.prixVenteGrosHT ?? 0,
+          );
+        }
+        set((s) =>
+          avecJournal(s, {
             ...seeded,
-            produits: [nouveau, ...state.produits],
-            journalActivites: [
-              entreeActivite("creation", "produit", {
-                entiteId: nouveau.id,
-                libelle: nouveau.libelleCourt || nouveau.libelleLong,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      updateProduit: (id, data, opts) =>
-        set((state) => {
-          const prev = state.produits.find((p) => p.id === id);
-          if (!prev) return state;
-          const seeded = seedComptesDefautState(state);
-          const auth = useAuthStore.getState();
-          const patch: Partial<Produit> = { ...data };
-          if (!auth.hasPermission("parametres.gerer")) {
-            delete patch.compteChargeId;
-            delete patch.compteVenteId;
-            delete patch.compteComptableId;
-          }
-          const chargeEffective = compteChargeProduit(
-            prev,
-            seeded.comptesComptables,
-          );
-          const venteEffective = compteVenteProduit(
-            prev,
-            seeded.comptesComptables,
-          );
-          if (
-            patch.compteChargeId !== undefined &&
-            patch.compteChargeId !== (prev.compteChargeId ?? chargeEffective?.id) &&
-            compteUtiliseEnEcriture(
-              chargeEffective?.id,
-              state.ecrituresComptables,
-            )
-          ) {
-            delete patch.compteChargeId;
-          }
-          if (
-            patch.compteVenteId !== undefined &&
-            patch.compteVenteId !== (prev.compteVenteId ?? venteEffective?.id) &&
-            compteUtiliseEnEcriture(
-              venteEffective?.id,
-              state.ecrituresComptables,
-            )
-          ) {
-            delete patch.compteVenteId;
-          }
-          const next = assignerComptesProduit(
-            { ...prev, ...patch },
-            seeded.comptesComptables,
-          );
-          const hist: HistoriquePrix[] = [];
-          const push = (
-            champ: HistoriquePrix["champ"],
-            ancien: number,
-            nouveau: number,
-          ) => {
-            if (ancien === nouveau) return;
-            hist.push({
-              id: uid("hprix"),
-              ...creerEntreeHistorique({
-                produitId: id,
-                champ,
-                ancienMontant: ancien,
-                nouveauMontant: nouveau,
-                motif: opts?.motifPrix,
-              }),
-            });
-          };
-          if (data.prixAchat != null) {
-            push("achat", prev.prixAchat, next.prixAchat);
-          }
-          if (data.prixVenteHT != null) {
-            push("vente_ht", prev.prixVenteHT, next.prixVenteHT);
-          }
-          if (data.prixVenteGrosHT != null) {
-            push(
-              "gros_ht",
-              prev.prixVenteGrosHT ?? 0,
-              next.prixVenteGrosHT ?? 0,
-            );
-          }
-          return avecJournal(state, {
-            produits: state.produits.map((p) => (p.id === id ? next : p)),
-            historiquesPrix: [...hist, ...state.historiquesPrix],
+            produits: s.produits.map((p) => (p.id === id ? next : p)),
+            historiquesPrix: [...hist, ...s.historiquesPrix],
             journalActivites: [
               entreeActivite("modification", "produit", {
                 entiteId: id,
                 libelle: next.libelleCourt || next.libelleLong,
               }),
-              ...state.journalActivites,
+              ...s.journalActivites,
             ],
-          });
-        }),
+          }),
+        );
+        return { ok: true };
+      },
       desactiverProduit: (id) =>
         set((state) => {
           const prev = state.produits.find((p) => p.id === id);
@@ -2697,61 +2847,60 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
 
-      addClient: (client) =>
-        set((state) => {
-          const nouveau = {
-            ...client,
-            code:
-              client.code && client.code.trim()
-                ? client.code.trim()
-                : nextCodeClient(state.clients),
-            id: uid("cli"),
-          };
-          const sync = syncTiersState({
-            clients: [...state.clients, nouveau],
-            fournisseurs: state.fournisseurs,
-            tiers: upsertTiersDansListe(state.tiers ?? [], tiersDepuisClient(nouveau)),
+      addClient: (client) => {
+        const fromClient = tiersDepuisClient({
+          ...client,
+          id: "tmp",
+          code:
+            client.code && client.code.trim()
+              ? client.code.trim()
+              : undefined,
+        });
+        return get().addTiers({
+          ...fromClient,
+          actif: client.actif,
+        });
+      },
+      updateClient: (id, data) => {
+        const state = get();
+        const prevTiers = (state.tiers ?? []).find((t) => t.id === id);
+        const prevClient = state.clients.find((c) => c.id === id);
+        if (!prevTiers && !prevClient) {
+          return { ok: false, reason: "Client introuvable." };
+        }
+        const patch: Partial<Tiers> = {
+          nom: data.nom,
+          code: data.code,
+          telephone: data.telephone,
+          email: data.email,
+          adresse: data.adresse,
+          ville: data.ville,
+          nif: data.nif,
+          stat: data.stat,
+          type: data.type,
+          actif: data.actif,
+          contacts: data.contacts,
+          delaiPaiementClientJours: data.delaiPaiementJours,
+          remiseHabituelleClientPercent: data.remiseHabituellePercent,
+          plafondCredit: data.plafondCredit,
+          compteClientId: data.compteClientId,
+        };
+        const cleaned = Object.fromEntries(
+          Object.entries(patch).filter(([, v]) => v !== undefined),
+        ) as Partial<Tiers>;
+        if (prevTiers) {
+          return get().updateTiers(id, {
+            ...cleaned,
+            roles: prevTiers.roles.includes("client")
+              ? prevTiers.roles
+              : [...prevTiers.roles, "client"],
           });
-          return {
-            ...sync,
-            journalActivites: [
-              entreeActivite("creation", "client", {
-                entiteId: nouveau.id,
-                libelle: nouveau.nom,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      updateClient: (id, data) =>
-        set((state) => {
-          const prev = state.clients.find((c) => c.id === id);
-          const detail =
-            "actif" in data && Object.keys(data).length === 1
-              ? data.actif
-                ? "Réactivation"
-                : "Désactivation"
-              : undefined;
-          const clients = state.clients.map((c) =>
-            c.id === id ? { ...c, ...data } : c,
-          );
-          const sync = syncTiersState({
-            clients,
-            fournisseurs: state.fournisseurs,
-            tiers: state.tiers,
-          });
-          return {
-            ...sync,
-            journalActivites: [
-              entreeActivite("modification", "client", {
-                entiteId: id,
-                libelle: prev?.nom,
-                detail,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
+        }
+        return get().updateTiers(id, {
+          ...tiersDepuisClient({ ...prevClient!, ...data }),
+          roles: ["client"],
+        });
+      },
       deleteClient: (id) => {
         const state = get();
         const client = state.clients.find((c) => c.id === id);
@@ -2795,50 +2944,53 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
-      addFournisseur: (frn) =>
-        set((state) => {
-          const nouveau = { ...frn, id: uid("frn") };
-          const sync = syncTiersState({
-            clients: state.clients,
-            fournisseurs: [...state.fournisseurs, nouveau],
-            tiers: upsertTiersDansListe(
-              state.tiers ?? [],
-              tiersDepuisFournisseur(nouveau),
-            ),
+      addFournisseur: (frn) => {
+        const fromFrn = tiersDepuisFournisseur({
+          ...frn,
+          id: "tmp",
+        });
+        return get().addTiers({
+          ...fromFrn,
+          actif: frn.actif,
+        });
+      },
+      updateFournisseur: (id, data) => {
+        const state = get();
+        const prevTiers = (state.tiers ?? []).find((t) => t.id === id);
+        const prevFrn = state.fournisseurs.find((f) => f.id === id);
+        if (!prevTiers && !prevFrn) {
+          return { ok: false, reason: "Fournisseur introuvable." };
+        }
+        const patch: Partial<Tiers> = {
+          nom: data.nom,
+          telephone: data.telephone,
+          email: data.email,
+          adresse: data.adresse,
+          ville: data.ville,
+          nif: data.nif,
+          stat: data.stat,
+          specialite: data.specialite,
+          actif: data.actif,
+          delaiPaiementFournisseurJours: data.delaiPaiementJours,
+          remiseHabituelleFournisseurPercent: data.remiseHabituellePercent,
+          compteFournisseurId: data.compteFournisseurId,
+        };
+        const cleaned = Object.fromEntries(
+          Object.entries(patch).filter(([, v]) => v !== undefined),
+        ) as Partial<Tiers>;
+        if (prevTiers) {
+          return get().updateTiers(id, {
+            ...cleaned,
+            roles: prevTiers.roles.includes("fournisseur")
+              ? prevTiers.roles
+              : [...prevTiers.roles, "fournisseur"],
           });
-          return {
-            ...sync,
-            journalActivites: [
-              entreeActivite("creation", "fournisseur", {
-                entiteId: nouveau.id,
-                libelle: nouveau.nom,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      updateFournisseur: (id, data) =>
-        set((state) => {
-          const prev = state.fournisseurs.find((f) => f.id === id);
-          const fournisseurs = state.fournisseurs.map((f) =>
-            f.id === id ? { ...f, ...data } : f,
-          );
-          const sync = syncTiersState({
-            clients: state.clients,
-            fournisseurs,
-            tiers: state.tiers,
-          });
-          return {
-            ...sync,
-            journalActivites: [
-              entreeActivite("modification", "fournisseur", {
-                entiteId: id,
-                libelle: prev?.nom,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
+        }
+        return get().updateTiers(id, {
+          ...tiersDepuisFournisseur({ ...prevFrn!, ...data }),
+          roles: ["fournisseur"],
+        });
+      },
       deleteFournisseur: (id) => {
         const state = get();
         const frn = state.fournisseurs.find((f) => f.id === id);
@@ -2889,12 +3041,53 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Le nom du tiers est obligatoire." };
         }
         const state = get();
+        let comptes = state.comptesComptables;
+        let compteClientId = roles.includes("client")
+          ? data.compteClientId
+          : undefined;
+        let compteFournisseurId = roles.includes("fournisseur")
+          ? data.compteFournisseurId
+          : undefined;
+        if (roles.includes("client")) {
+          const auto = resoudreCompteTiersAuto({
+            valeur: compteClientId,
+            prefixe: PREFIXE_COMPTE_CLIENT,
+            nomTiers: data.nom,
+            comptes,
+            parametres: state.parametres,
+            tiers: state.tiers ?? [],
+          });
+          if (!auto.ok) return auto;
+          comptes = auto.comptes;
+          compteClientId = auto.compteId;
+        }
+        if (roles.includes("fournisseur")) {
+          const auto = resoudreCompteTiersAuto({
+            valeur: compteFournisseurId,
+            prefixe: PREFIXE_COMPTE_FOURNISSEUR,
+            nomTiers: data.nom,
+            comptes,
+            parametres: state.parametres,
+            tiers: state.tiers ?? [],
+          });
+          if (!auto.ok) return auto;
+          comptes = auto.comptes;
+          compteFournisseurId = auto.compteId;
+        }
+        const motifComptes = motifComptesTiersInvalides(
+          { roles, compteClientId, compteFournisseurId },
+          comptes,
+          state.tiers ?? [],
+        );
+        if (motifComptes) return { ok: false, reason: motifComptes };
         const id = uid(roles.includes("client") ? "cli" : "frn");
         const nouveau: Tiers = {
           ...data,
           id,
           nom: data.nom.trim(),
           roles,
+          compteClientId,
+          compteFournisseurId,
           code:
             data.code?.trim() ||
             (roles.includes("client") ? nextCodeClient(state.clients) : undefined),
@@ -2905,16 +3098,19 @@ export const useStore = create<Store>()((set, get) => ({
           fournisseurs: state.fournisseurs,
           tiers: upsertTiersDansListe(state.tiers ?? [], nouveau),
         });
-        set((s) => ({
-          ...sync,
-          journalActivites: [
-            entreeActivite("creation", "tiers", {
-              entiteId: id,
-              libelle: nouveau.nom,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            ...sync,
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("creation", "tiers", {
+                entiteId: id,
+                libelle: nouveau.nom,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true, id };
       },
 
@@ -2955,22 +3151,130 @@ export const useStore = create<Store>()((set, get) => ({
             };
           }
         }
-        const next: Tiers = { ...prev, ...data, id, roles };
+        let comptes = state.comptesComptables;
+        let compteClientId =
+          data.compteClientId !== undefined
+            ? data.compteClientId
+            : prev.compteClientId;
+        let compteFournisseurId =
+          data.compteFournisseurId !== undefined
+            ? data.compteFournisseurId
+            : prev.compteFournisseurId;
+
+        if (
+          prev.compteClientId &&
+          compteClientId !== prev.compteClientId &&
+          compteUtiliseEnEcriture(prev.compteClientId, state.ecrituresComptables)
+        ) {
+          return { ok: false, reason: MSG_COMPTE_VERROUILLE };
+        }
+        if (
+          prev.compteFournisseurId &&
+          compteFournisseurId !== prev.compteFournisseurId &&
+          compteUtiliseEnEcriture(
+            prev.compteFournisseurId,
+            state.ecrituresComptables,
+          )
+        ) {
+          return { ok: false, reason: MSG_COMPTE_VERROUILLE };
+        }
+
+        if (!roles.includes("client")) {
+          if (
+            prev.compteClientId &&
+            compteUtiliseEnEcriture(prev.compteClientId, state.ecrituresComptables)
+          ) {
+            compteClientId = prev.compteClientId;
+          } else {
+            compteClientId = undefined;
+          }
+        } else {
+          const auto = resoudreCompteTiersAuto({
+            valeur: compteClientId,
+            prefixe: PREFIXE_COMPTE_CLIENT,
+            nomTiers: data.nom ?? prev.nom,
+            comptes,
+            parametres: state.parametres,
+            tiers: state.tiers ?? [],
+            ignoreId: id,
+          });
+          if (!auto.ok) return auto;
+          comptes = auto.comptes;
+          compteClientId = auto.compteId;
+        }
+        if (!roles.includes("fournisseur")) {
+          if (
+            prev.compteFournisseurId &&
+            compteUtiliseEnEcriture(
+              prev.compteFournisseurId,
+              state.ecrituresComptables,
+            )
+          ) {
+            compteFournisseurId = prev.compteFournisseurId;
+          } else {
+            compteFournisseurId = undefined;
+          }
+        } else {
+          const auto = resoudreCompteTiersAuto({
+            valeur: compteFournisseurId,
+            prefixe: PREFIXE_COMPTE_FOURNISSEUR,
+            nomTiers: data.nom ?? prev.nom,
+            comptes,
+            parametres: state.parametres,
+            tiers: state.tiers ?? [],
+            ignoreId: id,
+          });
+          if (!auto.ok) return auto;
+          comptes = auto.comptes;
+          compteFournisseurId = auto.compteId;
+        }
+
+        const motifComptes = motifComptesTiersInvalides(
+          { roles, compteClientId, compteFournisseurId },
+          comptes,
+          state.tiers ?? [],
+          id,
+          {
+            exigerClient:
+              roles.includes("client") &&
+              (!prev.roles.includes("client") ||
+                data.compteClientId !== undefined ||
+                Boolean(prev.compteClientId)),
+            exigerFournisseur:
+              roles.includes("fournisseur") &&
+              (!prev.roles.includes("fournisseur") ||
+                data.compteFournisseurId !== undefined ||
+                Boolean(prev.compteFournisseurId)),
+          },
+        );
+        if (motifComptes) return { ok: false, reason: motifComptes };
+
+        const next: Tiers = {
+          ...prev,
+          ...data,
+          id,
+          roles,
+          compteClientId,
+          compteFournisseurId,
+        };
         const sync = syncTiersState({
           clients: state.clients,
           fournisseurs: state.fournisseurs,
           tiers: upsertTiersDansListe(state.tiers ?? [], next),
         });
-        set((s) => ({
-          ...sync,
-          journalActivites: [
-            entreeActivite("modification", "tiers", {
-              entiteId: id,
-              libelle: next.nom,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            ...sync,
+            comptesComptables: comptes,
+            journalActivites: [
+              entreeActivite("modification", "tiers", {
+                entiteId: id,
+                libelle: next.nom,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
 

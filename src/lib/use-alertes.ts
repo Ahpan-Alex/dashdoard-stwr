@@ -24,6 +24,7 @@ export function useAlertes() {
   const clients = useStore((s) => s.clients);
   const fournisseurs = useStore((s) => s.fournisseurs);
   const produits = useStore((s) => s.produits);
+  const comptesComptables = useStore((s) => s.comptesComptables);
   const entrees = useStore((s) => s.entrees);
   const ventes = useStore((s) => s.ventes);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
@@ -43,6 +44,7 @@ export function useAlertes() {
         clients,
         fournisseurs,
         produits,
+        comptesComptables,
         entrees,
         ventes,
         pointsDeVente,
@@ -58,6 +60,7 @@ export function useAlertes() {
       clients,
       fournisseurs,
       produits,
+      comptesComptables,
       entrees,
       ventes,
       pointsDeVente,

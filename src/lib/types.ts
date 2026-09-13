@@ -366,6 +366,8 @@ export type Client = {
   remiseHabituellePercent?: number;
   /** Encours / plafond de crédit autorisé (Ar). 0 ou absent = pas de plafond. */
   plafondCredit?: number;
+  /** Compte 411 (ou sous-compte) rattaché à ce client. Unique parmi les tiers. */
+  compteClientId?: string;
 };
 
 export type Fournisseur = {
@@ -381,6 +383,8 @@ export type Fournisseur = {
   actif: boolean;
   delaiPaiementJours?: number;
   remiseHabituellePercent?: number;
+  /** Compte 401 (ou sous-compte) rattaché à ce fournisseur. Unique parmi les tiers. */
+  compteFournisseurId?: string;
 };
 
 export type RoleTiers = "client" | "fournisseur";
@@ -406,6 +410,10 @@ export type Tiers = {
   plafondCredit?: number;
   delaiPaiementFournisseurJours?: number;
   remiseHabituelleFournisseurPercent?: number;
+  /** Compte 411 (ou sous-compte) si rôle Client. Unique parmi les tiers. */
+  compteClientId?: string;
+  /** Compte 401 (ou sous-compte) si rôle Fournisseur. Unique parmi les tiers. */
+  compteFournisseurId?: string;
 };
 
 export type AchatStatut = "brouillon" | "valide" | "annule";

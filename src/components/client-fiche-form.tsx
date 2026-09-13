@@ -1,8 +1,10 @@
 "use client";
 
 import type { FormEvent } from "react";
+import { CompteTiersSelect } from "@/components/compte-tiers-select";
 import { CLIENT_TYPES } from "@/lib/commercial";
-import type { Client } from "@/lib/types";
+import { PREFIXE_COMPTE_CLIENT } from "@/lib/comptabilite";
+import type { Client, CompteComptable, Tiers } from "@/lib/types";
 
 export type ClientFormState = {
   code: string;
@@ -13,6 +15,7 @@ export type ClientFormState = {
   ville: string;
   nif: string;
   type: Client["type"];
+  compteClientId: string;
 };
 
 export const CLIENT_FORM_VIDE: ClientFormState = {
@@ -24,6 +27,7 @@ export const CLIENT_FORM_VIDE: ClientFormState = {
   ville: "",
   nif: "",
   type: "restaurant",
+  compteClientId: "",
 };
 
 export function clientVersForm(c: Client): ClientFormState {
@@ -36,6 +40,7 @@ export function clientVersForm(c: Client): ClientFormState {
     ville: c.ville ?? "",
     nif: c.nif ?? "",
     type: c.type,
+    compteClientId: c.compteClientId ?? "",
   };
 }
 
@@ -51,6 +56,7 @@ export function payloadClient(
     ville: form.ville.trim() || undefined,
     nif: form.nif.trim() || undefined,
     type: form.type,
+    compteClientId: form.compteClientId || undefined,
   };
 }
 
@@ -60,6 +66,10 @@ type Props = {
   onSubmit: (e: FormEvent) => void;
   onCancel: () => void;
   submitLabel: string;
+  comptes?: CompteComptable[];
+  tiers?: Tiers[];
+  ignoreTiersId?: string;
+  compteVerrouille?: boolean;
 };
 
 export function ClientFicheForm({
@@ -68,6 +78,10 @@ export function ClientFicheForm({
   onSubmit,
   onCancel,
   submitLabel,
+  comptes = [],
+  tiers = [],
+  ignoreTiersId,
+  compteVerrouille,
 }: Props) {
   return (
     <form
@@ -150,6 +164,17 @@ export function ClientFicheForm({
           placeholder="Si professionnel"
         />
       </label>
+      <CompteTiersSelect
+        label="Compte comptable client (411)"
+        prefixe={PREFIXE_COMPTE_CLIENT}
+        value={form.compteClientId}
+        required
+        verrouille={compteVerrouille}
+        comptes={comptes}
+        tiers={tiers}
+        ignoreTiersId={ignoreTiersId}
+        onChange={(compteClientId) => setForm({ ...form, compteClientId })}
+      />
       <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
         <button type="submit" className="btn btn-primary">
           {submitLabel}
