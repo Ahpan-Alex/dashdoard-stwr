@@ -6,6 +6,7 @@ import {
 } from "./commercial";
 import { montantHTLigne } from "./achats";
 import { factureEstFiscale } from "./facturation-mg";
+import { createId } from "./id";
 import type {
   Achat,
   AchatLigne,
@@ -95,7 +96,10 @@ export function compteChargeProduit(
   comptes: CompteComptable[],
 ) {
   if (produit.compteChargeId) {
-    return comptes.find((c) => c.id === produit.compteChargeId);
+    const matches = comptes.filter((c) => c.id === produit.compteChargeId);
+    return (
+      matches.find((c) => classeNumeroCompte(c.numero) === "6") ?? matches[0]
+    );
   }
   if (produit.compteComptableId) {
     const legacy = comptes.find((c) => c.id === produit.compteComptableId);
@@ -109,7 +113,10 @@ export function compteVenteProduit(
   comptes: CompteComptable[],
 ) {
   if (produit.compteVenteId) {
-    return comptes.find((c) => c.id === produit.compteVenteId);
+    const matches = comptes.filter((c) => c.id === produit.compteVenteId);
+    return (
+      matches.find((c) => classeNumeroCompte(c.numero) === "7") ?? matches[0]
+    );
   }
   if (produit.compteComptableId) {
     const legacy = comptes.find((c) => c.id === produit.compteComptableId);
@@ -120,9 +127,6 @@ export function compteVenteProduit(
 
 export function estCompteGeneriqueProduit(compte: CompteComptable | undefined) {
   if (!compte) return false;
-  if (compte.id === ID_COMPTE_DEFAUT_CHARGE || compte.id === ID_COMPTE_DEFAUT_VENTE) {
-    return true;
-  }
   if (
     compte.roleCompte === "defaut_charge" ||
     compte.roleCompte === "defaut_vente"
@@ -133,6 +137,28 @@ export function estCompteGeneriqueProduit(compte: CompteComptable | undefined) {
     compte.libelle === LIBELLE_COMPTE_DEFAUT_CHARGE ||
     compte.libelle === LIBELLE_COMPTE_DEFAUT_VENTE
   );
+}
+
+/**
+ * L'ancien générateur d'IDs tronquait l'entropie : un import PCG/CSV
+ * pouvait attribuer le même id à des centaines de comptes. On réassigne.
+ */
+export function dedupliquerIdsComptes(comptes: CompteComptable[]): CompteComptable[] {
+  const seen = new Set<string>();
+  let changed = false;
+  const next = comptes.map((c) => {
+    const id = String(c?.id ?? "").trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      return c.id === id ? c : { ...c, id };
+    }
+    changed = true;
+    let nouveau = createId("cpt");
+    while (seen.has(nouveau)) nouveau = createId("cpt");
+    seen.add(nouveau);
+    return { ...c, id: nouveau };
+  });
+  return changed ? next : comptes;
 }
 
 /** Champs exigés selon la catégorie d'achat de la fiche produit. */

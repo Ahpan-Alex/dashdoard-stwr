@@ -100,6 +100,7 @@ import {
   regenererEcrituresComptables,
   VALEUR_COMPTE_TIERS_AUTO,
   validerImportPlanComptable,
+  dedupliquerIdsComptes,
   type PrefixeCompteTiers,
 } from "./comptabilite";
 import { PLAN_PCG_2005 } from "./pcg-2005";
@@ -551,11 +552,11 @@ function etatApresMigrationComptes(state: {
   produits: Produit[];
 }) {
   const seeded = seedComptesDefautState(state);
+  const comptes = dedupliquerIdsComptes(seeded.comptesComptables);
   return {
     ...seeded,
-    produits: state.produits.map((p) =>
-      migrerProduitComptes(p, seeded.comptesComptables),
-    ),
+    comptesComptables: comptes,
+    produits: state.produits.map((p) => migrerProduitComptes(p, comptes)),
   };
 }
 
@@ -632,7 +633,7 @@ function importerLignesPlanAtomique(
       );
       return !existant || !absorbIds.has(existant.id);
     });
-    const comptes = [
+    const comptes = dedupliquerIdsComptes([
       ...restants.map((row) => ({
         id: uid("cpt"),
         numero: row.numero,
@@ -646,7 +647,7 @@ function importerLignesPlanAtomique(
         if (!row) return c;
         return { ...c, numero: row.numero, libelle: row.libelle, roleCompte: undefined };
       }),
-    ];
+    ]);
     return avecJournal(prev, {
       comptesComptables: comptes,
       journalActivites: [
