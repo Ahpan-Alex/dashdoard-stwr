@@ -164,9 +164,16 @@ function FormulaireOf({
     dateCloturePrevue?: string;
   }) => void;
 }) {
-  const produits = useStore((s) => s.produits.filter((p) => p.actif && produitEstFabrique(p)));
-  const commandes = useStore((s) =>
-    s.commandes.filter((c) => c.statut !== "annulee" && c.statut !== "livree"),
+  const catalogue = useStore((s) => s.produits);
+  const commandesBrutes = useStore((s) => s.commandes);
+  const produits = useMemo(
+    () => (catalogue ?? []).filter((p) => p?.actif && produitEstFabrique(p)),
+    [catalogue],
+  );
+  const commandes = useMemo(
+    () =>
+      (commandesBrutes ?? []).filter((c) => c.statut !== "annulee" && c.statut !== "livree"),
+    [commandesBrutes],
   );
   const [atelierId, setAtelierId] = useState(defautAtelier);
   const [produitId, setProduitId] = useState(produits[0]?.id ?? "");

@@ -118,14 +118,16 @@ export function pickAppState(state: AppState): AppState {
     missionsAchat: state.missionsAchat ?? [],
     demandesPrix: state.demandesPrix ?? [],
     pointsDeVente: state.pointsDeVente,
-    categoriesProduits: state.categoriesProduits,
+    categoriesProduits: Array.isArray(state.categoriesProduits)
+      ? state.categoriesProduits
+      : seedCategoriesProduits(),
     unitesMesure: fusionnerUnitesMesure(state.unitesMesure, state.produits ?? []),
     typesClients: fusionnerTypesClients(
       state.typesClients,
       state.clients ?? [],
       state.tiers ?? [],
     ),
-    produits: state.produits,
+    produits: state.produits ?? [],
     tarifsClients: state.tarifsClients,
     historiquesPrix: state.historiquesPrix,
     journalAudit: state.journalAudit,

@@ -20,24 +20,30 @@ export function SelecteurArticle({
   allowEmpty?: boolean;
   emptyLabel?: string;
 }) {
-  const categories = useStore((s) => s.categoriesProduits);
+  const categoriesBrutes = useStore((s) => s.categoriesProduits);
+  const categories = Array.isArray(categoriesBrutes) ? categoriesBrutes : [];
+  const catalogue = Array.isArray(produits) ? produits : [];
   const [familleId, setFamilleId] = useState("");
   const [recherche, setRecherche] = useState("");
 
   const racines = useMemo(
     () =>
       categories
-        .filter((c) => c.actif && !c.parentId)
-        .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle, "fr")),
+        .filter((c) => c && c.actif && !c.parentId)
+        .sort(
+          (a, b) =>
+            (Number(a.ordre) || 0) - (Number(b.ordre) || 0) ||
+            String(a.libelle ?? "").localeCompare(String(b.libelle ?? ""), "fr"),
+        ),
     [categories],
   );
 
   const filtrees = useMemo(
-    () => filtrerCatalogue(produits, { familleId, recherche, categories }),
-    [produits, familleId, recherche, categories],
+    () => filtrerCatalogue(catalogue, { familleId, recherche, categories }),
+    [catalogue, familleId, recherche, categories],
   );
 
-  const courant = produits.find((p) => p.id === value);
+  const courant = catalogue.find((p) => p?.id === value);
   const options =
     courant && !filtrees.some((p) => p.id === courant.id)
       ? [courant, ...filtrees]
@@ -81,7 +87,7 @@ export function SelecteurArticle({
         {allowEmpty && <option value="">{emptyLabel}</option>}
         {options.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.code} — {libelleProduit(p)}
+            {p.code || "Sans code"} — {libelleProduit(p) || "Sans libellé"}
           </option>
         ))}
       </select>

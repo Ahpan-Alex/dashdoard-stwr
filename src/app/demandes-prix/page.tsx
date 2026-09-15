@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { Component, FormEvent, useMemo, useState, type ReactNode } from "react";
 import { Plus, Scale } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,19 +68,21 @@ export default function DemandesPrixPage() {
       />
 
       {creer && (
-        <FormulaireDp
-          fournisseurs={fournisseurs.map((f) => ({ id: f.id, nom: f.nom }))}
-          onClose={() => setCreer(false)}
-          onSubmit={(payload) => {
-            const res = creerDemandePrix(payload);
-            if (!res.ok) {
-              alert(res.reason);
-              return;
-            }
-            setCreer(false);
-            router.push(`/demandes-prix/${res.id}`);
-          }}
-        />
+        <FormulaireDpGuard onClose={() => setCreer(false)}>
+          <FormulaireDp
+            fournisseurs={fournisseurs.map((f) => ({ id: f.id, nom: f.nom }))}
+            onClose={() => setCreer(false)}
+            onSubmit={(payload) => {
+              const res = creerDemandePrix(payload);
+              if (!res.ok) {
+                alert(res.reason);
+                return;
+              }
+              setCreer(false);
+              router.push(`/demandes-prix/${res.id}`);
+            }}
+          />
+        </FormulaireDpGuard>
       )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -132,6 +134,46 @@ export default function DemandesPrixPage() {
   );
 }
 
+function FormulaireDpGuard({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <FormulaireDpBoundary onClose={onClose}>{children}</FormulaireDpBoundary>
+  );
+}
+
+class FormulaireDpBoundary extends Component<
+  { children: ReactNode; onClose: () => void },
+  { erreur: string | null }
+> {
+  state: { erreur: string | null } = { erreur: null };
+
+  static getDerivedStateFromError(erreur: Error) {
+    return { erreur: erreur.message || "Erreur d’affichage du formulaire." };
+  }
+
+  render() {
+    if (this.state.erreur) {
+      return (
+        <div className="mb-6 rounded-[var(--radius)] border border-red-200 bg-red-50 p-5">
+          <p className="text-sm font-semibold text-red-900">
+            Impossible d’ouvrir le formulaire de nouvelle DP.
+          </p>
+          <p className="mt-1 text-sm text-red-800">{this.state.erreur}</p>
+          <button type="button" className="btn btn-secondary mt-3" onClick={this.props.onClose}>
+            Fermer
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function FormulaireDp({
   fournisseurs,
   onClose,
@@ -145,7 +187,11 @@ function FormulaireDp({
     fournisseurIds: string[];
   }) => void;
 }) {
-  const articles = useStore((s) => s.produits.filter((p) => p.actif && produitEstAchetable(p)));
+  const produits = useStore((s) => s.produits);
+  const articles = useMemo(
+    () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
+    [produits],
+  );
   const [date, setDate] = useState(jourLocalISO());
   const [lignes, setLignes] = useState([{ produitId: "", quantite: "1" }]);
   const [frns, setFrns] = useState<string[]>([]);
@@ -154,7 +200,11 @@ function FormulaireDp({
   const frnsFiltres = useMemo(() => {
     const q = rechercheFrn.trim().toLowerCase();
     if (!q) return fournisseurs;
-    return fournisseurs.filter((f) => f.nom.toLowerCase().includes(q));
+    return fournisseurs.filter((f) =>
+      String(f.nom ?? "")
+        .toLowerCase()
+        .includes(q),
+    );
   }, [fournisseurs, rechercheFrn]);
 
   function toggleFrn(id: string) {

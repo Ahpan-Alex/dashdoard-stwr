@@ -254,7 +254,11 @@ function FormulaireMission({
     lignesPrevisionnelles: { produitId: string; quantiteSouhaitee: number }[];
   }) => void;
 }) {
-  const produits = useStore((s) => s.produits.filter((p) => p.actif && produitEstAchetable(p)));
+  const catalogue = useStore((s) => s.produits);
+  const produits = useMemo(
+    () => (catalogue ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
+    [catalogue],
+  );
   const [acheteurId, setAcheteurId] = useState(acheteurs[0]?.id ?? "");
   const [date, setDate] = useState(jourLocalISO());
   const [siteId, setSiteId] = useState(defautSite || sites[0]?.id || "");

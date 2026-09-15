@@ -28,7 +28,7 @@ export function isCodeProduitValide(code: string) {
 }
 
 export function libelleProduit(p: Pick<Produit, "libelleCourt" | "libelleLong">) {
-  return p.libelleCourt || p.libelleLong;
+  return p?.libelleCourt || p?.libelleLong || "";
 }
 
 export function designationFacture(p: Produit) {
@@ -165,28 +165,33 @@ export function produitAppartientFamille(
   return false;
 }
 
+function texteProduit(value: unknown) {
+  return String(value ?? "");
+}
+
 export function filtrerCatalogue(
-  produits: Produit[],
+  produits: Produit[] | undefined | null,
   opts: {
     familleId?: string;
     recherche?: string;
-    categories: CategorieProduit[];
+    categories?: CategorieProduit[] | null;
   },
 ) {
   const q = (opts.recherche ?? "").trim().toLowerCase();
-  return produits
-    .filter((p) =>
-      produitAppartientFamille(p, opts.familleId, opts.categories),
-    )
+  const categories = opts.categories ?? [];
+  return (produits ?? [])
+    .filter((p) => p && produitAppartientFamille(p, opts.familleId, categories))
     .filter((p) => {
       if (!q) return true;
       return (
-        p.code.toLowerCase().includes(q) ||
-        p.libelleCourt.toLowerCase().includes(q) ||
-        p.libelleLong.toLowerCase().includes(q)
+        texteProduit(p.code).toLowerCase().includes(q) ||
+        texteProduit(p.libelleCourt).toLowerCase().includes(q) ||
+        texteProduit(p.libelleLong).toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => a.code.localeCompare(b.code, "fr"));
+    .sort((a, b) =>
+      texteProduit(a.code).localeCompare(texteProduit(b.code), "fr"),
+    );
 }
 
 /** Résolution prix HT : tarif client → gros → détail */

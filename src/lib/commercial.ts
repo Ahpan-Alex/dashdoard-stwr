@@ -681,6 +681,7 @@ export function nextNumero(prefix: string, existing: string[]) {
   const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
   let max = 0;
   for (const n of existing) {
+    if (typeof n !== "string") continue;
     const m = n.match(re);
     if (m) max = Math.max(max, Number(m[1]));
   }

@@ -24,7 +24,7 @@ export function offreLigneFournisseur(
   ligneId: string,
   fournisseurId: string,
 ) {
-  return dp.offres.find((o) => o.ligneId === ligneId && o.fournisseurId === fournisseurId);
+  return (dp.offres ?? []).find((o) => o.ligneId === ligneId && o.fournisseurId === fournisseurId);
 }
 
 export function offresPricéesLigne(

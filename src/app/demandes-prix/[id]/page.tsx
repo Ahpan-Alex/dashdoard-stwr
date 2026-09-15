@@ -34,12 +34,13 @@ export default function DemandePrixDetailPage() {
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
   const dp = useStore((s) => (s.demandesPrix ?? []).find((d) => d.id === id));
-  const produits = useStore((s) => s.produits);
+  const produits = useStore((s) => s.produits ?? []);
   const clients = useStore((s) => s.clients);
   const fournisseursLegacy = useStore((s) => s.fournisseurs);
   const tiers = useStore((s) => s.tiers);
-  const { modifierDemandePrix, changerStatutDemandePrix, patchOffreDemandePrix } =
-    useStore();
+  const modifierDemandePrix = useStore((s) => s.modifierDemandePrix);
+  const changerStatutDemandePrix = useStore((s) => s.changerStatutDemandePrix);
+  const patchOffreDemandePrix = useStore((s) => s.patchOffreDemandePrix);
   const [triPrix, setTriPrix] = useState<"asc" | "desc">("asc");
   const [nouvelArticleId, setNouvelArticleId] = useState("");
   const [nouvelleQte, setNouvelleQte] = useState("1");
@@ -66,7 +67,7 @@ export default function DemandePrixDetailPage() {
     "Fournisseur";
 
   const articles = useMemo(
-    () => produits.filter((p) => p.actif && produitEstAchetable(p)),
+    () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
     [produits],
   );
 
@@ -103,13 +104,13 @@ export default function DemandePrixDetailPage() {
       alert("Indiquez une quantité positive.");
       return;
     }
-    if (dp!.lignes.some((l) => l.produitId === nouvelArticleId)) {
+    if ((dp!.lignes ?? []).some((l) => l.produitId === nouvelArticleId)) {
       alert("Cet article est déjà dans la demande.");
       return;
     }
     const res = modifierDemandePrix(dp!.id, {
       lignes: [
-        ...dp!.lignes,
+        ...(dp!.lignes ?? []),
         { id: createId("dpl"), produitId: nouvelArticleId, quantite: qte },
       ],
     });
@@ -123,15 +124,16 @@ export default function DemandePrixDetailPage() {
 
   function retirerArticle(ligneId: string) {
     const res = modifierDemandePrix(dp!.id, {
-      lignes: dp!.lignes.filter((l) => l.id !== ligneId),
+      lignes: (dp!.lignes ?? []).filter((l) => l.id !== ligneId),
     });
     if (!res.ok) alert(res.reason);
   }
 
   function toggleFrn(fid: string) {
-    const next = dp!.fournisseurIds.includes(fid)
-      ? dp!.fournisseurIds.filter((x) => x !== fid)
-      : [...dp!.fournisseurIds, fid];
+    const actuel = dp!.fournisseurIds ?? [];
+    const next = actuel.includes(fid)
+      ? actuel.filter((x) => x !== fid)
+      : [...actuel, fid];
     const res = modifierDemandePrix(dp!.id, { fournisseurIds: next });
     if (!res.ok) alert(res.reason);
   }
@@ -199,7 +201,7 @@ export default function DemandePrixDetailPage() {
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-3 font-display text-lg font-semibold">Articles et fournisseurs</h2>
           <div className="mb-4 space-y-2">
-            {dp.lignes.map((ligne) => {
+            {(dp.lignes ?? []).map((ligne) => {
               const p = produits.find((x) => x.id === ligne.produitId);
               return (
                 <div key={ligne.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -247,7 +249,7 @@ export default function DemandePrixDetailPage() {
               <label key={f.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm">
                 <input
                   type="checkbox"
-                  checked={dp.fournisseurIds.includes(f.id)}
+                  checked={(dp.fournisseurIds ?? []).includes(f.id)}
                   onChange={() => toggleFrn(f.id)}
                 />
                 {f.nom}
@@ -274,15 +276,15 @@ export default function DemandePrixDetailPage() {
           article. Le prix le plus bas est mis en évidence.
         </p>
 
-        {dp.lignes.length === 0 || dp.fournisseurIds.length === 0 ? (
+        {(dp.lignes ?? []).length === 0 || (dp.fournisseurIds ?? []).length === 0 ? (
           <p className="text-sm text-muted">
             Ajoutez au moins un article et un fournisseur (en brouillon) pour saisir les prix.
           </p>
         ) : (
           <div className="space-y-6">
-            {dp.lignes.map((ligne) => {
+            {(dp.lignes ?? []).map((ligne) => {
               const p = produits.find((x) => x.id === ligne.produitId);
-              const rows: DemandePrixOffre[] = dp.fournisseurIds.map((fid) => {
+              const rows: DemandePrixOffre[] = (dp.fournisseurIds ?? []).map((fid) => {
                 const exist = offreLigneFournisseur(dp, ligne.id, fid);
                 return (
                   exist ?? {
