@@ -15,7 +15,6 @@ import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import {
-  CLIENT_TYPES,
   codeClientDejaUtilise,
   creancesDunClient,
   motifLienClient,
@@ -23,6 +22,7 @@ import {
   totalAcomptesClient,
   totalFacture,
 } from "@/lib/commercial";
+import { codeTypeClientDefaut, libelleTypeClient } from "@/lib/types-clients";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useAffichageTable } from "@/lib/use-affichage-table";
@@ -38,6 +38,7 @@ export default function ClientsPage() {
     bonsDeLivraison,
     acomptes,
     tarifsClients,
+    typesClients,
     parametres,
     addClient,
     updateClient,
@@ -61,7 +62,11 @@ export default function ClientsPage() {
 
   function ouvrirCreation() {
     setEditingId(null);
-    setForm({ ...CLIENT_FORM_VIDE, code: nextCodeClient(clients) });
+    setForm({
+      ...CLIENT_FORM_VIDE,
+      code: nextCodeClient(clients),
+      type: codeTypeClientDefaut(typesClients),
+    });
     setOpen(true);
   }
 
@@ -164,7 +169,7 @@ export default function ClientsPage() {
           return {
             code: c.code ?? "",
             nom: c.nom,
-            type: CLIENT_TYPES[c.type] ?? c.type,
+            type: libelleTypeClient(typesClients, c.type),
             contact: [c.telephone, c.email].filter(Boolean).join(" · "),
             ca: formatCurrency(ca),
             acomptes: formatCurrency(totalAcomptesClient(c.id, acomptes)),
@@ -237,7 +242,7 @@ export default function ClientsPage() {
                   </TdCol>
                   <TdCol id="type" show={visible}>
                     <span className="badge badge-sea">
-                      {CLIENT_TYPES[c.type]}
+                      {libelleTypeClient(typesClients, c.type)}
                     </span>
                   </TdCol>
                   <TdCol id="contact" show={visible} className="text-sm">
@@ -296,7 +301,7 @@ export default function ClientsPage() {
         <LigneInfo label="Code client" value={apercu?.code} />
         <LigneInfo
           label="Type"
-          value={apercu ? CLIENT_TYPES[apercu.type] : undefined}
+          value={apercu ? libelleTypeClient(typesClients, apercu.type) : undefined}
         />
         <LigneInfo label="Téléphone" value={apercu?.telephone} />
         <LigneInfo label="Email" value={apercu?.email} />

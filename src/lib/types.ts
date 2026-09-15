@@ -36,6 +36,25 @@ export type CategorieProduit = {
   actif: boolean;
 };
 
+/** Unité de mesure catalogue (article acheté / stocké / vendu). */
+export type UniteMesure = {
+  id: string;
+  /** Symbole affiché (kg, pce, m²…). Unique. */
+  symbole: string;
+  libelle: string;
+  ordre: number;
+  actif: boolean;
+};
+
+/** Type de client paramétrable (particulier, hôtel, collectivité…). */
+export type TypeClient = {
+  id: string;
+  code: string;
+  libelle: string;
+  ordre: number;
+  actif: boolean;
+};
+
 export type TypeAchat =
   | "marchandises"
   | "matieres_premieres"
@@ -414,7 +433,7 @@ export type Client = {
   ville?: string;
   nif?: string;
   stat?: string;
-  type: "particulier" | "restaurant" | "hotel" | "grossiste" | "autre";
+  type: string;
   actif: boolean;
   /** Interlocuteurs rattachés au client (fiche contacts). */
   contacts?: ClientContact[];
@@ -1034,6 +1053,8 @@ export type ActiviteEntite =
   | "client"
   | "produit"
   | "categorie"
+  | "unite_mesure"
+  | "type_client"
   | "fournisseur"
   | "achat"
   | "point_de_vente"
@@ -1334,6 +1355,8 @@ export type AppState = {
   demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
+  unitesMesure: UniteMesure[];
+  typesClients: TypeClient[];
   produits: Produit[];
   tarifsClients: TarifClient[];
   historiquesPrix: HistoriquePrix[];

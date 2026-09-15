@@ -697,13 +697,7 @@ export function splitTTC(montantTTC: number, tauxTVA: number, assujetti: boolean
   return { ht, tva, ttc: montantTTC };
 }
 
-export const CLIENT_TYPES: Record<string, string> = {
-  particulier: "Particulier",
-  restaurant: "Restaurant",
-  hotel: "Hôtel",
-  grossiste: "Grossiste",
-  autre: "Autre",
-};
+export { CLIENT_TYPES_DEFAUT as CLIENT_TYPES } from "./types-clients";
 
 /** Préfixe des codes clients générés automatiquement. */
 export const CODE_CLIENT_PREFIX = "CLI";

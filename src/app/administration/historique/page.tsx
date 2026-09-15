@@ -13,6 +13,8 @@ const ENTITE_LABELS: Record<ActiviteEntite, string> = {
   client: "Client",
   produit: "Produit",
   categorie: "Catégorie",
+  unite_mesure: "Unité de mesure",
+  type_client: "Type de client",
   fournisseur: "Fournisseur",
   point_de_vente: "Point de vente",
   charge: "Charge",

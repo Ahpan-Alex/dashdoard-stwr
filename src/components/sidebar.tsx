@@ -303,6 +303,16 @@ const sections: { title: string; links: NavLink[] }[] = [
             permission: "produits.lire",
           },
           {
+            href: "/parametres/unites",
+            label: "Unités de mesure",
+            permission: "produits.lire",
+          },
+          {
+            href: "/parametres/types-clients",
+            label: "Types de clients",
+            permission: "clients.lire",
+          },
+          {
             href: "/parametres/points-de-vente",
             label: "Sites",
           },

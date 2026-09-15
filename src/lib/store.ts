@@ -162,6 +162,16 @@ import {
   natureStockDuProduit,
   produitEstFabrique,
 } from "./nature-stock";
+import {
+  motifSymboleUniteInvalide,
+  nbProduitsParUnite,
+  normalizeSymboleUnite,
+} from "./unites-mesure";
+import {
+  motifTypeClientInvalide,
+  nbTiersParTypeClient,
+  normalizeCodeTypeClient,
+} from "./types-clients";
 import { createId } from "./id";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
@@ -214,6 +224,8 @@ import type {
   TransfertStock,
   TransfertStockLigne,
   TransformationCommerciale,
+  TypeClient,
+  UniteMesure,
   Vente,
   OrdreFabrication,
   TypeNomenclature,
@@ -251,6 +263,8 @@ type Store = {
   demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
+  unitesMesure: UniteMesure[];
+  typesClients: TypeClient[];
   produits: Produit[];
   tarifsClients: TarifClient[];
   historiquesPrix: HistoriquePrix[];
@@ -548,6 +562,26 @@ type Store = {
   addCategorieProduit: (cat: Omit<CategorieProduit, "id">) => void;
   updateCategorieProduit: (id: string, data: Partial<CategorieProduit>) => void;
   deleteCategorieProduit: (id: string) => { ok: boolean; reason?: string };
+
+  addUniteMesure: (data: {
+    symbole: string;
+    libelle: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateUniteMesure: (
+    id: string,
+    data: Partial<Pick<UniteMesure, "symbole" | "libelle" | "actif" | "ordre">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteUniteMesure: (id: string) => { ok: true } | { ok: false; reason: string };
+
+  addTypeClient: (data: {
+    code: string;
+    libelle: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateTypeClient: (
+    id: string,
+    data: Partial<Pick<TypeClient, "code" | "libelle" | "actif" | "ordre">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteTypeClient: (id: string) => { ok: true } | { ok: false; reason: string };
 
   addProduit: (
     produit: Omit<Produit, "id">,
@@ -3901,6 +3935,205 @@ export const useStore = create<Store>()((set, get) => ({
           ],
         }));
         return { ok: true };
+      },
+
+      addUniteMesure: (data) => {
+        const state = get();
+        const symbole = data.symbole.trim();
+        const libelle = data.libelle.trim();
+        const motif = motifSymboleUniteInvalide(
+          symbole,
+          libelle,
+          state.unitesMesure,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("um");
+        const ordre =
+          state.unitesMesure.reduce((m, u) => Math.max(m, u.ordre), 0) + 1;
+        set((s) => ({
+          unitesMesure: [
+            ...s.unitesMesure,
+            { id, symbole, libelle, ordre, actif: true },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "unite_mesure", {
+              entiteId: id,
+              libelle: `${symbole} — ${libelle}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateUniteMesure: (id, data) => {
+        const state = get();
+        const prev = state.unitesMesure.find((u) => u.id === id);
+        if (!prev) return { ok: false as const, reason: "Unité introuvable." };
+        const symbole = (data.symbole ?? prev.symbole).trim();
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifSymboleUniteInvalide(
+          symbole,
+          libelle,
+          state.unitesMesure,
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const symboleChange =
+          normalizeSymboleUnite(symbole) !==
+          normalizeSymboleUnite(prev.symbole);
+        set((s) => ({
+          unitesMesure: s.unitesMesure.map((u) =>
+            u.id === id
+              ? {
+                  ...u,
+                  symbole,
+                  libelle,
+                  actif: data.actif ?? u.actif,
+                  ordre: data.ordre ?? u.ordre,
+                }
+              : u,
+          ),
+          produits: symboleChange
+            ? s.produits.map((p) =>
+                normalizeSymboleUnite(p.unite) ===
+                normalizeSymboleUnite(prev.symbole)
+                  ? { ...p, unite: symbole }
+                  : p,
+              )
+            : s.produits,
+          journalActivites: [
+            entreeActivite("modification", "unite_mesure", {
+              entiteId: id,
+              libelle: `${symbole} — ${libelle}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteUniteMesure: (id) => {
+        const state = get();
+        const prev = state.unitesMesure.find((u) => u.id === id);
+        if (!prev) return { ok: false as const, reason: "Unité introuvable." };
+        const n = nbProduitsParUnite(state.produits, prev.symbole);
+        if (n > 0) {
+          return {
+            ok: false as const,
+            reason: `${n} article(s) utilisent « ${prev.symbole} ». Réassignez-les avant de supprimer.`,
+          };
+        }
+        set((s) => ({
+          unitesMesure: s.unitesMesure.filter((u) => u.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "unite_mesure", {
+              entiteId: id,
+              libelle: `${prev.symbole} — ${prev.libelle}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+
+      addTypeClient: (data) => {
+        const state = get();
+        const code = normalizeCodeTypeClient(data.code);
+        const libelle = data.libelle.trim();
+        const motif = motifTypeClientInvalide(code, libelle, state.typesClients);
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("tc");
+        const ordre =
+          state.typesClients.reduce((m, t) => Math.max(m, t.ordre), 0) + 1;
+        set((s) => ({
+          typesClients: [
+            ...s.typesClients,
+            { id, code, libelle, ordre, actif: true },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "type_client", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateTypeClient: (id, data) => {
+        const state = get();
+        const prev = state.typesClients.find((t) => t.id === id);
+        if (!prev) return { ok: false as const, reason: "Type introuvable." };
+        const code = normalizeCodeTypeClient(data.code ?? prev.code);
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifTypeClientInvalide(
+          code,
+          libelle,
+          state.typesClients,
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const codeChange =
+          normalizeCodeTypeClient(code) !== normalizeCodeTypeClient(prev.code);
+        set((s) => ({
+          typesClients: s.typesClients.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  code,
+                  libelle,
+                  actif: data.actif ?? t.actif,
+                  ordre: data.ordre ?? t.ordre,
+                }
+              : t,
+          ),
+          clients: codeChange
+            ? s.clients.map((c) =>
+                normalizeCodeTypeClient(c.type) ===
+                normalizeCodeTypeClient(prev.code)
+                  ? { ...c, type: code }
+                  : c,
+              )
+            : s.clients,
+          tiers: codeChange
+            ? (s.tiers ?? []).map((t) =>
+                normalizeCodeTypeClient(t.type) ===
+                normalizeCodeTypeClient(prev.code)
+                  ? { ...t, type: code }
+                  : t,
+              )
+            : s.tiers,
+          journalActivites: [
+            entreeActivite("modification", "type_client", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteTypeClient: (id) => {
+        const state = get();
+        const prev = state.typesClients.find((t) => t.id === id);
+        if (!prev) return { ok: false as const, reason: "Type introuvable." };
+        const n = nbTiersParTypeClient(state.clients, state.tiers ?? [], prev.code);
+        if (n > 0) {
+          return {
+            ok: false as const,
+            reason: `${n} client(s) sont de type « ${prev.libelle} ». Réassignez-les avant de supprimer.`,
+          };
+        }
+        set((s) => ({
+          typesClients: s.typesClients.filter((t) => t.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "type_client", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
       },
 
       addTarifClient: (tarif) =>

@@ -2,12 +2,12 @@
 
 import type { FormEvent } from "react";
 import { CompteTiersSelect } from "@/components/compte-tiers-select";
+import { SelectTypeClient } from "@/components/select-type-client";
 import {
   adressePrincipaleEffective,
   adresseTiersVide,
   synchroniserAdresseLegacy,
 } from "@/lib/adresse-tiers";
-import { CLIENT_TYPES } from "@/lib/commercial";
 import {
   PREFIXE_COMPTE_CLIENT,
   PREFIXE_COMPTE_FOURNISSEUR,
@@ -64,7 +64,7 @@ export const TIERS_FORM_VIDE: TiersFormState = {
   stat: "",
   rcs: "",
   siteRattachementId: "",
-  type: "restaurant",
+  type: "particulier",
   specialite: "",
   roles: ["client"],
   delaiPaiementClientJours: "30",
@@ -382,22 +382,10 @@ export function TiersFicheForm({
 
       {estClient && (
         <>
-          <label className="block text-xs font-semibold text-muted">
-            Type client
-            <select
-              className="select mt-1"
-              value={form.type}
-              onChange={(e) =>
-                setForm({ ...form, type: e.target.value as Client["type"] })
-              }
-            >
-              {Object.entries(CLIENT_TYPES).map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectTypeClient
+            value={form.type}
+            onChange={(type) => setForm({ ...form, type })}
+          />
           <label className="block text-xs font-semibold text-muted">
             Délai de paiement client (j)
             <input

@@ -17,6 +17,14 @@ export const PARAMETRES_MENUS = [
     label: "Catalogue produits",
   },
   {
+    href: "/parametres/unites",
+    label: "Unités de mesure",
+  },
+  {
+    href: "/parametres/types-clients",
+    label: "Types de clients",
+  },
+  {
     href: "/parametres/points-de-vente",
     label: "Sites",
   },

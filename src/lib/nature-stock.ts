@@ -25,6 +25,16 @@ export function produitEstVendable(_produit: Pick<Produit, "natureStock">) {
   return true;
 }
 
+/** Matière première : achetée, le tarif de vente n'est pas exigé. */
+export function prixAchatEstObligatoire(nature: NatureStock) {
+  return nature === "matiere_premiere";
+}
+
+/** Semi-fini / fini : fabriqués, le tarif d'achat n'est pas exigé. */
+export function prixVenteEstObligatoire(nature: NatureStock) {
+  return nature === "semi_fini" || nature === "fini";
+}
+
 export function peutServirDeComposantBom(produit: Pick<Produit, "natureStock">) {
   const n = natureStockDuProduit(produit);
   return n === "matiere_premiere" || n === "semi_fini";

@@ -13,12 +13,12 @@ import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import {
-  CLIENT_TYPES,
   codeClientDejaUtilise,
   motifLienClient,
   nextCodeClient,
   totalFacture,
 } from "@/lib/commercial";
+import { libelleTypeClient, codeTypeClientDefaut } from "@/lib/types-clients";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
@@ -33,6 +33,7 @@ export default function ParametresClientsPage() {
     bonsDeLivraison,
     acomptes,
     tarifsClients,
+    typesClients,
     addClient,
     updateClient,
     deleteClient,
@@ -54,7 +55,11 @@ export default function ParametresClientsPage() {
 
   function ouvrirCreation() {
     setEditingId(null);
-    setForm({ ...CLIENT_FORM_VIDE, code: nextCodeClient(clients) });
+    setForm({
+      ...CLIENT_FORM_VIDE,
+      code: nextCodeClient(clients),
+      type: codeTypeClientDefaut(typesClients),
+    });
     setOpen(true);
   }
 
@@ -203,7 +208,7 @@ export default function ParametresClientsPage() {
                   </td>
                   <td>
                     <span className="badge badge-sea">
-                      {CLIENT_TYPES[c.type]}
+                      {libelleTypeClient(typesClients, c.type)}
                     </span>
                   </td>
                   <td className="text-sm">
@@ -252,7 +257,7 @@ export default function ParametresClientsPage() {
         <LigneInfo label="Code client" value={apercu?.code} />
         <LigneInfo
           label="Type"
-          value={apercu ? CLIENT_TYPES[apercu.type] : undefined}
+          value={apercu ? libelleTypeClient(typesClients, apercu.type) : undefined}
         />
         <LigneInfo label="Téléphone" value={apercu?.telephone} />
         <LigneInfo label="Email" value={apercu?.email} />

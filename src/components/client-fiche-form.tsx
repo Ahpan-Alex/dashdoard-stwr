@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { CompteTiersSelect } from "@/components/compte-tiers-select";
-import { CLIENT_TYPES } from "@/lib/commercial";
+import { SelectTypeClient } from "@/components/select-type-client";
 import { PREFIXE_COMPTE_CLIENT } from "@/lib/comptabilite";
 import type { Client, CompteComptable, Tiers } from "@/lib/types";
 
@@ -26,7 +26,7 @@ export const CLIENT_FORM_VIDE: ClientFormState = {
   adresse: "",
   ville: "",
   nif: "",
-  type: "restaurant",
+  type: "particulier",
   compteClientId: "",
 };
 
@@ -106,22 +106,10 @@ export function ClientFicheForm({
           required
         />
       </label>
-      <label className="block text-xs font-semibold text-muted">
-        Type
-        <select
-          className="select mt-1"
-          value={form.type}
-          onChange={(e) =>
-            setForm({ ...form, type: e.target.value as Client["type"] })
-          }
-        >
-          {Object.entries(CLIENT_TYPES).map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectTypeClient
+        value={form.type}
+        onChange={(type) => setForm({ ...form, type })}
+      />
       <label className="block text-xs font-semibold text-muted">
         Téléphone
         <input

@@ -5,6 +5,8 @@ import {
 import { createDefaultModeles } from "./document-templates";
 import { ficheTiersDiversMarche } from "./missions";
 import { seedCategoriesProduits } from "./produits";
+import { fusionnerUnitesMesure, seedUnitesMesure } from "./unites-mesure";
+import { fusionnerTypesClients, seedTypesClients } from "./types-clients";
 import type { AppState } from "./types";
 
 /** État métier vide — plus de données fake côté client. */
@@ -71,6 +73,8 @@ export function emptyAppState(): AppState {
     demandesPrix: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
+    unitesMesure: seedUnitesMesure(),
+    typesClients: seedTypesClients(),
     produits: [],
     tarifsClients: [],
     historiquesPrix: [],
@@ -115,6 +119,12 @@ export function pickAppState(state: AppState): AppState {
     demandesPrix: state.demandesPrix ?? [],
     pointsDeVente: state.pointsDeVente,
     categoriesProduits: state.categoriesProduits,
+    unitesMesure: fusionnerUnitesMesure(state.unitesMesure, state.produits ?? []),
+    typesClients: fusionnerTypesClients(
+      state.typesClients,
+      state.clients ?? [],
+      state.tiers ?? [],
+    ),
     produits: state.produits,
     tarifsClients: state.tarifsClients,
     historiquesPrix: state.historiquesPrix,

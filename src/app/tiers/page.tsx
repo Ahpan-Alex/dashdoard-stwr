@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency } from "@/lib/format";
 import { REGIONS_MADAGASCAR } from "@/lib/madagascar";
+import { codeTypeClientDefaut } from "@/lib/types-clients";
 import { useStore } from "@/lib/store";
 import {
   assurerTiers,
@@ -54,6 +55,7 @@ function TiersListe() {
     deleteTiers,
     comptesComptables,
     ecrituresComptables,
+    typesClients,
   } = useStore();
   const liste = useMemo(
     () => assurerTiers({ clients, fournisseurs, tiers }),
@@ -143,7 +145,10 @@ function TiersListe() {
             className="btn btn-primary"
             onClick={() => {
               setEditingId(null);
-              setForm(TIERS_FORM_VIDE);
+              setForm({
+                ...TIERS_FORM_VIDE,
+                type: codeTypeClientDefaut(typesClients),
+              });
               setOpen(true);
             }}
           >

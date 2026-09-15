@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Ban, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
@@ -42,8 +43,13 @@ import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeA
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
-import { natureStockDuProduit, NATURE_STOCK_LABELS } from "@/lib/nature-stock";
+import { natureStockDuProduit, NATURE_STOCK_LABELS, prixAchatEstObligatoire, prixVenteEstObligatoire } from "@/lib/nature-stock";
 import { nomenclaturesDuProduit } from "@/lib/nomenclature";
+import {
+  libelleUniteMesure,
+  symboleUniteDefaut,
+  unitesMesureActives,
+} from "@/lib/unites-mesure";
 
 type ProduitFormState = {
   code: string;
@@ -104,6 +110,7 @@ export default function ParametresProduitsPage() {
   const {
     produits,
     categoriesProduits,
+    unitesMesure,
     clients,
     tarifsClients,
     historiquesPrix,
@@ -166,7 +173,7 @@ export default function ParametresProduitsPage() {
       libelleCourt: "",
       libelleLong: "",
       categorieId: feuilles[0]?.id ?? "",
-      unite: "kg",
+      unite: symboleUniteDefaut(unitesMesure),
       prixAchat: "",
       prixVenteHT: "",
       prixVenteGrosHT: "",
@@ -362,9 +369,22 @@ export default function ParametresProduitsPage() {
       alert("Choisissez une famille (feuille) pour le produit.");
       return;
     }
-    const achat = Number(form.prixAchat);
-    const vente = Number(form.prixVenteHT);
-    if (achat < 0 || vente < 0) return;
+    const achatSaisi = form.prixAchat.trim();
+    const venteSaisie = form.prixVenteHT.trim();
+    const achat = achatSaisi === "" ? 0 : Number(achatSaisi);
+    const vente = venteSaisie === "" ? 0 : Number(venteSaisie);
+    if (!Number.isFinite(achat) || achat < 0 || !Number.isFinite(vente) || vente < 0) {
+      alert("Les prix doivent être des montants positifs ou nuls.");
+      return;
+    }
+    if (prixAchatEstObligatoire(form.natureStock) && achatSaisi === "") {
+      alert("Le prix d'achat est obligatoire pour une matière première / article acheté.");
+      return;
+    }
+    if (prixVenteEstObligatoire(form.natureStock) && venteSaisie === "") {
+      alert("Le prix de vente est obligatoire pour un produit semi-fini ou fini.");
+      return;
+    }
 
     if (!editingId) {
       const doublons = trouverDoublonsPotentiels(libelleLong, produits);
@@ -392,7 +412,7 @@ export default function ParametresProduitsPage() {
       libelleCourt: libelleCourt.slice(0, 40),
       libelleLong,
       categorieId: form.categorieId,
-      unite: form.unite.trim() || "kg",
+      unite: form.unite.trim() || symboleUniteDefaut(unitesMesure),
       prixAchat: achat,
       prixVenteHT: vente,
       prixVenteGrosHT: form.prixVenteGrosHT
@@ -873,11 +893,31 @@ export default function ParametresProduitsPage() {
             )}
             <label className="block text-xs font-semibold text-muted">
               Unité
-              <input
-                className="input mt-1"
+              <select
+                className="select mt-1"
                 value={form.unite}
                 onChange={(e) => setForm({ ...form, unite: e.target.value })}
-              />
+              >
+                {unitesMesureActives(unitesMesure).map((u) => (
+                  <option key={u.id} value={u.symbole}>
+                    {libelleUniteMesure([u], u.symbole)}
+                  </option>
+                ))}
+                {form.unite &&
+                  !unitesMesureActives(unitesMesure).some(
+                    (u) => u.symbole === form.unite,
+                  ) && (
+                    <option value={form.unite}>
+                      {libelleUniteMesure(unitesMesure, form.unite)}
+                    </option>
+                  )}
+              </select>
+              <Link
+                href="/parametres/unites"
+                className="mt-1 inline-block text-[11px] font-semibold text-sea-700 underline"
+              >
+                Gérer les unités (ajouter / supprimer)
+              </Link>
             </label>
             {avecTVA && (
               <label className="block text-xs font-semibold text-muted">
@@ -894,6 +934,9 @@ export default function ParametresProduitsPage() {
             )}
             <label className="block text-xs font-semibold text-muted">
               Prix d&apos;achat HT
+              {!prixAchatEstObligatoire(form.natureStock) && (
+                <span className="font-normal"> (facultatif)</span>
+              )}
               <input
                 type="number"
                 className="input mt-1"
@@ -901,11 +944,19 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixAchat: e.target.value })
                 }
-                required
+                required={prixAchatEstObligatoire(form.natureStock)}
+                placeholder={
+                  prixAchatEstObligatoire(form.natureStock)
+                    ? undefined
+                    : "Issu de la fabrication"
+                }
               />
             </label>
             <label className="block text-xs font-semibold text-muted">
               Prix vente détail HT
+              {!prixVenteEstObligatoire(form.natureStock) && (
+                <span className="font-normal"> (facultatif)</span>
+              )}
               <input
                 type="number"
                 className="input mt-1"
@@ -913,7 +964,12 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixVenteHT: e.target.value })
                 }
-                required
+                required={prixVenteEstObligatoire(form.natureStock)}
+                placeholder={
+                  prixVenteEstObligatoire(form.natureStock)
+                    ? undefined
+                    : "Non vendu tel quel"
+                }
               />
             </label>
             <label className="block text-xs font-semibold text-muted">
@@ -1049,6 +1105,7 @@ export default function ParametresProduitsPage() {
                 <th>Code</th>
                 <th>Libellé</th>
                 <th>Catégorie</th>
+                <th>Unité</th>
                 <th>Nature</th>
                 <th>Vente HT</th>
                 {avecTVA && <th>TVA</th>}
@@ -1087,6 +1144,7 @@ export default function ParametresProduitsPage() {
                   <td className="text-xs">
                     {cheminCategorie(p.categorieId, categoriesProduits)}
                   </td>
+                  <td className="font-mono text-xs">{p.unite}</td>
                   <td className="text-xs">
                     {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
                   </td>
