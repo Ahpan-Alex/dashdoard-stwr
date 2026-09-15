@@ -17,6 +17,15 @@ export const USAGE_COMMERCIAL_LABELS: Record<UsageCommercialProduit, string> = {
   achat_vente: "Acheté et vendu",
 };
 
+export const USAGE_COMMERCIAL_FAMILLE_LABELS: Record<
+  UsageCommercialProduit,
+  string
+> = {
+  achat: "Achetés",
+  vente: "Vendus",
+  achat_vente: "Achetés et vendus",
+};
+
 export const USAGES_COMMERCIAUX: UsageCommercialProduit[] = [
   "achat",
   "vente",

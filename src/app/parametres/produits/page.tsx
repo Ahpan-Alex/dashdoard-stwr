@@ -54,6 +54,7 @@ import {
   produitEstVendable,
   usageCommercialDeLaFamille,
   usageCommercialDuProduit,
+  USAGE_COMMERCIAL_FAMILLE_LABELS,
   USAGE_COMMERCIAL_LABELS,
   USAGES_COMMERCIAUX,
 } from "@/lib/nature-stock";
@@ -661,30 +662,30 @@ export default function ParametresProduitsPage() {
               ))}
             </select>
           </label>
-          <fieldset className="sm:col-span-4">
-            <legend className="mb-2 text-xs font-semibold text-muted">
-              Circuit commercial
-            </legend>
-            <div className="flex flex-wrap gap-2">
+          <label className="block text-xs font-semibold text-muted sm:col-span-2">
+            Articles de la famille *
+            <select
+              className="select mt-1"
+              value={catForm.usageCommercial}
+              required
+              onChange={(e) =>
+                setCatForm({
+                  ...catForm,
+                  usageCommercial: e.target.value as UsageCommercialProduit,
+                })
+              }
+            >
               {USAGES_COMMERCIAUX.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  className={`btn ${catForm.usageCommercial === u ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() =>
-                    setCatForm({ ...catForm, usageCommercial: u })
-                  }
-                >
-                  {USAGE_COMMERCIAL_LABELS[u]}
-                </button>
+                <option key={u} value={u}>
+                  {USAGE_COMMERCIAL_FAMILLE_LABELS[u]}
+                </option>
               ))}
-            </div>
-            <p className="mt-1 text-[11px] font-normal text-muted">
-              Une famille vendue uniquement n&apos;apparaît pas à l&apos;achat ;
-              une famille achetée uniquement n&apos;apparaît pas à la vente. Les
-              produits rattachés sont mis à jour.
-            </p>
-          </fieldset>
+            </select>
+            <span className="mt-1 block text-[11px] font-normal">
+              Indique si la famille contient des articles achetés, vendus, ou
+              les deux. Les produits rattachés suivent ce choix.
+            </span>
+          </label>
           <div className="flex flex-wrap items-end gap-2 sm:col-span-4">
             <button type="submit" className="btn btn-secondary">
               {editingCatId ? (
@@ -719,7 +720,7 @@ export default function ParametresProduitsPage() {
                 <th>Niveau</th>
                 <th>Code</th>
                 <th>Libellé / chemin</th>
-                <th>Circuit</th>
+                <th>Articles</th>
                 <th>Produits</th>
                 <th>Statut</th>
                 <th />
@@ -772,7 +773,7 @@ export default function ParametresProduitsPage() {
                         </span>
                       </td>
                       <td className="text-xs">
-                        {USAGE_COMMERCIAL_LABELS[usageFamilleForm(cat.id)]}
+                        {USAGE_COMMERCIAL_FAMILLE_LABELS[usageFamilleForm(cat.id)]}
                         {!estUsageCommercial(cat.usageCommercial) &&
                         cat.parentId ? (
                           <span className="mt-0.5 block text-[11px] text-muted">
