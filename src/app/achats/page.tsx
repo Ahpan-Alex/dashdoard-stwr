@@ -103,6 +103,7 @@ function AchatsListe() {
     achats,
     fournisseurs,
     produits,
+    categoriesProduits,
     demandesPrix,
     pointsDeVente,
     pointDeVenteActifId,
@@ -299,7 +300,7 @@ function AchatsListe() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="sm:col-span-2">
               <SelecteurArticle
-                produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
+                produits={produits.filter((p) => p.actif && produitEstAchetable(p, categoriesProduits))}
                 value={form.produitRefId}
                 onChange={(produitRefId) => {
                   const p = produits.find((x) => x.id === produitRefId);
@@ -454,7 +455,7 @@ function AchatsListe() {
         </label>
         <div className="min-w-[18rem] flex-1">
           <SelecteurArticle
-            produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
+            produits={produits.filter((p) => p.actif && produitEstAchetable(p, categoriesProduits))}
             value={filtreProduit}
             onChange={setFiltreProduit}
             label="Article"
@@ -552,6 +553,7 @@ function AchatEditor({
 }) {
   const {
     produits,
+    categoriesProduits,
     updateAchat,
     validerAchat,
     annulerAchat,
@@ -978,6 +980,7 @@ function CommandePanel({
   onSave: () => void;
 }) {
   const produits = useStore((s) => s.produits);
+  const categoriesProduits = useStore((s) => s.categoriesProduits);
   const achats = useStore((s) => s.achats);
   const demandesPrix = useStore((s) => s.demandesPrix ?? []);
   const fournisseurs = useStore((s) => s.fournisseurs);
@@ -987,7 +990,7 @@ function CommandePanel({
   const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
   const [typeNouveau, setTypeNouveau] = useState<TypeAchat>("marchandises");
   const [produitId, setProduitId] = useState(
-    () => produits.find((p) => p.actif && produitEstAchetable(p))?.id ?? "",
+    () => produits.find((p) => p.actif && produitEstAchetable(p, categoriesProduits))?.id ?? "",
   );
   const [designationLibre, setDesignationLibre] = useState("");
   const [compteLibreId, setCompteLibreId] = useState("");
@@ -1035,7 +1038,7 @@ function CommandePanel({
       return;
     }
     const p = produits.find((x) => x.id === produitId);
-    if (p && !produitEstAchetable(p)) {
+    if (p && !produitEstAchetable(p, categoriesProduits)) {
       alert(
         "Les semi-finis et finis n'entrent pas par achat : utilisez un ordre de fabrication.",
       );
@@ -1247,7 +1250,7 @@ function CommandePanel({
           ) : (
             <div className="min-w-[16rem] flex-1">
               <SelecteurArticle
-                produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
+                produits={produits.filter((p) => p.actif && produitEstAchetable(p, categoriesProduits))}
                 value={produitId}
                 onChange={setProduitId}
                 label="Article catalogue"

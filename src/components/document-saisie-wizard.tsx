@@ -44,6 +44,7 @@ import type {
 } from "@/lib/types";
 import {
   designationFacture,
+  categoriesPresentesDansCatalogue,
   produitsVendablesActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
@@ -183,7 +184,7 @@ export function DocumentSaisieWizard({
   acomptesDetail = [],
 }: Props) {
   const inventaires = useStore((s) => s.inventaires);
-  const produitsDispo = produitsVendablesActifs(produits);
+  const produitsDispo = produitsVendablesActifs(produits, categoriesProduits);
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
   const previewSheetRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<DraftLigne[]>(initialLignes);
@@ -201,10 +202,10 @@ export function DocumentSaisieWizard({
 
   const categoriesActives = useMemo(
     () =>
-      [...categoriesProduits]
-        .filter((c) => c.actif)
-        .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle)),
-    [categoriesProduits],
+      [...categoriesPresentesDansCatalogue(categoriesProduits, produitsDispo)].sort(
+        (a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle),
+      ),
+    [categoriesProduits, produitsDispo],
   );
 
   const lignesProduitParId = useMemo(() => {

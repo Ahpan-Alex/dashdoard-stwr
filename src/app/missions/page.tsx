@@ -255,9 +255,13 @@ function FormulaireMission({
   }) => void;
 }) {
   const catalogue = useStore((s) => s.produits);
+  const categoriesProduits = useStore((s) => s.categoriesProduits);
   const produits = useMemo(
-    () => (catalogue ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
-    [catalogue],
+    () =>
+      (catalogue ?? []).filter(
+        (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
+      ),
+    [catalogue, categoriesProduits],
   );
   const [acheteurId, setAcheteurId] = useState(acheteurs[0]?.id ?? "");
   const [date, setDate] = useState(jourLocalISO());

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { filtrerCatalogue, libelleProduit } from "@/lib/produits";
+import { categoriesPresentesDansCatalogue, filtrerCatalogue, libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
 import type { Produit } from "@/lib/types";
 
@@ -28,14 +28,14 @@ export function SelecteurArticle({
 
   const racines = useMemo(
     () =>
-      categories
-        .filter((c) => c && c.actif && !c.parentId)
+      categoriesPresentesDansCatalogue(categories, catalogue)
+        .filter((c) => !c.parentId)
         .sort(
           (a, b) =>
             (Number(a.ordre) || 0) - (Number(b.ordre) || 0) ||
             String(a.libelle ?? "").localeCompare(String(b.libelle ?? ""), "fr"),
         ),
-    [categories],
+    [categories, catalogue],
   );
 
   const filtrees = useMemo(

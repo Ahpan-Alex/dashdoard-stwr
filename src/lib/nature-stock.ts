@@ -1,4 +1,9 @@
-import type { NatureStock, Produit, UsageCommercialProduit } from "./types";
+import type {
+  CategorieProduit,
+  NatureStock,
+  Produit,
+  UsageCommercialProduit,
+} from "./types";
 
 export const NATURE_STOCK_LABELS: Record<NatureStock, string> = {
   matiere_premiere: "Matière première / article acheté",
@@ -18,23 +23,68 @@ export const USAGES_COMMERCIAUX: UsageCommercialProduit[] = [
   "achat_vente",
 ];
 
+export function estUsageCommercial(
+  value: unknown,
+): value is UsageCommercialProduit {
+  return value === "achat" || value === "vente" || value === "achat_vente";
+}
+
 export function natureStockDuProduit(
   produit: Pick<Produit, "natureStock"> | undefined | null,
 ): NatureStock {
   return produit?.natureStock ?? "matiere_premiere";
 }
 
-export function usageCommercialDuProduit(
-  produit:
-    | Pick<Produit, "natureStock" | "usageCommercial">
-    | undefined
-    | null,
+type ProduitUsage = Pick<Produit, "natureStock" | "usageCommercial"> & {
+  categorieId?: string;
+};
+
+export function usageCommercialDeLaFamille(
+  categorieId: string | undefined,
+  categories: CategorieProduit[] | undefined | null,
+): UsageCommercialProduit {
+  if (!categorieId || !categories?.length) return "achat_vente";
+  const guard = new Set<string>();
+  let current = categories.find((c) => c.id === categorieId);
+  while (current && !guard.has(current.id)) {
+    if (estUsageCommercial(current.usageCommercial)) return current.usageCommercial;
+    guard.add(current.id);
+    current = current.parentId
+      ? categories.find((c) => c.id === current!.parentId)
+      : undefined;
+  }
+  return "achat_vente";
+}
+
+export function contraindreUsageParFamille(
+  usageProduit: UsageCommercialProduit,
+  usageFamille: UsageCommercialProduit,
+): UsageCommercialProduit {
+  if (usageFamille === "achat_vente") return usageProduit;
+  return usageFamille;
+}
+
+function usagePropreProduit(
+  produit: Pick<Produit, "natureStock" | "usageCommercial"> | undefined | null,
 ): UsageCommercialProduit {
   const raw = produit?.usageCommercial;
-  if (raw === "achat" || raw === "vente" || raw === "achat_vente") return raw;
+  if (estUsageCommercial(raw)) return raw;
   return natureStockDuProduit(produit) === "matiere_premiere"
     ? "achat_vente"
     : "vente";
+}
+
+export function usageCommercialDuProduit(
+  produit: ProduitUsage | undefined | null,
+  categories?: CategorieProduit[] | null,
+): UsageCommercialProduit {
+  const propre = usagePropreProduit(produit);
+  const categorieId = produit?.categorieId;
+  if (!categories?.length || !categorieId) return propre;
+  return contraindreUsageParFamille(
+    propre,
+    usageCommercialDeLaFamille(categorieId, categories),
+  );
 }
 
 export function produitEstFabrique(produit: Pick<Produit, "natureStock">) {
@@ -43,29 +93,49 @@ export function produitEstFabrique(produit: Pick<Produit, "natureStock">) {
 }
 
 export function produitEstAchetable(
-  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+  produit: ProduitUsage,
+  categories?: CategorieProduit[] | null,
 ) {
-  const u = usageCommercialDuProduit(produit);
+  const u = usageCommercialDuProduit(produit, categories);
   return u === "achat" || u === "achat_vente";
 }
 
 export function produitEstVendable(
-  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+  produit: ProduitUsage,
+  categories?: CategorieProduit[] | null,
 ) {
-  const u = usageCommercialDuProduit(produit);
+  const u = usageCommercialDuProduit(produit, categories);
+  return u === "vente" || u === "achat_vente";
+}
+
+export function familleEstAchetable(
+  categorieId: string | undefined,
+  categories: CategorieProduit[] | undefined | null,
+) {
+  const u = usageCommercialDeLaFamille(categorieId, categories);
+  return u === "achat" || u === "achat_vente";
+}
+
+export function familleEstVendable(
+  categorieId: string | undefined,
+  categories: CategorieProduit[] | undefined | null,
+) {
+  const u = usageCommercialDeLaFamille(categorieId, categories);
   return u === "vente" || u === "achat_vente";
 }
 
 export function prixAchatEstObligatoire(
-  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+  produit: ProduitUsage,
+  categories?: CategorieProduit[] | null,
 ) {
-  return produitEstAchetable(produit);
+  return produitEstAchetable(produit, categories);
 }
 
 export function prixVenteEstObligatoire(
-  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+  produit: ProduitUsage,
+  categories?: CategorieProduit[] | null,
 ) {
-  return produitEstVendable(produit);
+  return produitEstVendable(produit, categories);
 }
 
 export function peutServirDeComposantBom(produit: Pick<Produit, "natureStock">) {

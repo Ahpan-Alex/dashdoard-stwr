@@ -36,6 +36,7 @@ import {
 } from "@/lib/facturation-mg";
 import {
   designationFacture,
+  categoriesPresentesDansCatalogue,
   produitsVendablesActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
@@ -104,13 +105,13 @@ export default function FacturesPage() {
     useAvertissementCompteProduit("vente");
 
   const avecTVA = appliqueTVA(parametres);
-  const produitsDispo = produitsVendablesActifs(produits);
+  const produitsDispo = produitsVendablesActifs(produits, categoriesProduits);
   const categoriesActives = useMemo(
     () =>
-      [...categoriesProduits]
-        .filter((c) => c.actif)
-        .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle)),
-    [categoriesProduits],
+      [...categoriesPresentesDansCatalogue(categoriesProduits, produitsDispo)].sort(
+        (a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle),
+      ),
+    [categoriesProduits, produitsDispo],
   );
 
   const [open, setOpen] = useState(true);

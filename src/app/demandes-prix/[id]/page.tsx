@@ -39,6 +39,7 @@ export default function DemandePrixDetailPage() {
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
   const dp = useStore((s) => (s.demandesPrix ?? []).find((d) => d.id === id));
   const produits = useStore((s) => s.produits ?? []);
+  const categoriesProduits = useStore((s) => s.categoriesProduits);
   const clients = useStore((s) => s.clients);
   const fournisseursLegacy = useStore((s) => s.fournisseurs);
   const tiers = useStore((s) => s.tiers);
@@ -89,8 +90,11 @@ export default function DemandePrixDetailPage() {
   };
 
   const articles = useMemo(
-    () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
-    [produits],
+    () =>
+      (produits ?? []).filter(
+        (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
+      ),
+    [produits, categoriesProduits],
   );
 
   if (!dp) {

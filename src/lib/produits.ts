@@ -11,7 +11,7 @@ import type {
   TarifClient,
   Vente,
 } from "./types";
-import { produitEstVendable } from "./nature-stock";
+import { produitEstAchetable, produitEstVendable } from "./nature-stock";
 
 const CODE_REGEX = /^[A-Z0-9][A-Z0-9-]{1,30}[A-Z0-9]$|^[A-Z0-9]{2,32}$/;
 
@@ -164,6 +164,34 @@ export function produitAppartientFamille(
       : undefined;
   }
   return false;
+}
+
+export function idsCategorieEtDescendants(
+  categorieId: string,
+  categories: CategorieProduit[],
+  guard = new Set<string>(),
+): string[] {
+  if (guard.has(categorieId)) return [];
+  guard.add(categorieId);
+  const out = [categorieId];
+  for (const c of categories) {
+    if (c.parentId === categorieId) {
+      out.push(...idsCategorieEtDescendants(c.id, categories, guard));
+    }
+  }
+  return out;
+}
+
+/** Familles qui ont au moins un article du catalogue (y compris via un descendant). */
+export function categoriesPresentesDansCatalogue(
+  categories: CategorieProduit[],
+  produits: Produit[],
+) {
+  return categories.filter(
+    (c) =>
+      c.actif &&
+      produits.some((p) => produitAppartientFamille(p, c.id, categories)),
+  );
 }
 
 function texteProduit(value: unknown) {
@@ -360,8 +388,18 @@ export function produitsActifs(produits: Produit[]) {
   return produits.filter((p) => p.actif);
 }
 
-export function produitsVendablesActifs(produits: Produit[]) {
-  return produits.filter((p) => p.actif && produitEstVendable(p));
+export function produitsVendablesActifs(
+  produits: Produit[],
+  categories?: CategorieProduit[],
+) {
+  return produits.filter((p) => p.actif && produitEstVendable(p, categories));
+}
+
+export function produitsAchetablesActifs(
+  produits: Produit[],
+  categories?: CategorieProduit[],
+) {
+  return produits.filter((p) => p.actif && produitEstAchetable(p, categories));
 }
 
 /** Migration depuis l'ancien format { nom, categorie, prixAchatMoyen, prixVente } */

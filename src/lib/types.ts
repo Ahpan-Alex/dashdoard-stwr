@@ -9,6 +9,9 @@ export type RoleSite =
   | "atelier"
   | "atelier_final";
 
+/** Circuit commercial de la fiche article / famille. */
+export type UsageCommercialProduit = "achat" | "vente" | "achat_vente";
+
 export type PointDeVente = {
   id: string;
   nom: string;
@@ -38,6 +41,11 @@ export type CategorieProduit = {
   parentId?: string;
   ordre: number;
   actif: boolean;
+  /**
+   * Circuit commercial de la famille (acheté, vendu, ou les deux).
+   * Absent = héritage du parent, sinon acheté et vendu.
+   */
+  usageCommercial?: UsageCommercialProduit;
 };
 
 /** Unité de mesure catalogue (article acheté / stocké / vendu). */
@@ -179,9 +187,6 @@ export type ProduitFournisseurRang = {
 
 /** Classification logistique du produit — distincte du type d'achat (classe 6). */
 export type NatureStock = "matiere_premiere" | "semi_fini" | "fini";
-
-/** Circuit commercial de la fiche article. */
-export type UsageCommercialProduit = "achat" | "vente" | "achat_vente";
 
 export type TypeNomenclature = "automatique" | "alternative";
 

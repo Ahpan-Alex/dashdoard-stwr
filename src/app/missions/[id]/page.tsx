@@ -58,6 +58,7 @@ function MissionDetail() {
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
   const mission = useStore((s) => (s.missionsAchat ?? []).find((m) => m.id === id));
   const produits = useStore((s) => s.produits);
+  const categoriesProduits = useStore((s) => s.categoriesProduits);
   const tiers = useStore((s) => s.tiers ?? []);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const {
@@ -88,7 +89,9 @@ function MissionDetail() {
   const doc = mission;
   const verrouille = missionEstVerrouillee(doc);
   const saisie = peutSaisirMission(doc, { gerer, userId: user?.id });
-  const achetable = produits.filter((p) => p.actif && produitEstAchetable(p));
+  const achetable = produits.filter((p) =>
+    p.actif && produitEstAchetable(p, categoriesProduits),
+  );
   const fournisseurs = tiers.filter((t) => t.actif !== false && estFournisseur(t));
   const nomSite =
     pointsDeVente.find((s) => s.id === doc.siteDestinataireId)?.nom ?? "Site";

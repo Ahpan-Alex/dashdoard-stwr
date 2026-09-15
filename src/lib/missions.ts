@@ -12,6 +12,7 @@ import type {
   MissionDepenseDiverse,
   MissionReglementStatut,
   MissionValidationEtape,
+  CategorieProduit,
   Produit,
   Tiers,
   TransfertStock,
@@ -281,10 +282,11 @@ export function messageAnnulationMissionRefusee(mouvements: MouvementBloquantMis
 export function motifLigneMissionInvalide(
   ligne: MissionAchatRealise,
   produits: Produit[],
+  categories?: CategorieProduit[],
 ) {
   const p = produits.find((x) => x.id === ligne.produitId);
   if (!p) return "Article introuvable.";
-  if (!produitEstAchetable(p)) {
+  if (!produitEstAchetable(p, categories)) {
     return `« ${p.libelleCourt || p.code} » n'est pas un article achetable.`;
   }
   if (ligne.quantite < 0) return "La quantité ne peut pas être négative.";

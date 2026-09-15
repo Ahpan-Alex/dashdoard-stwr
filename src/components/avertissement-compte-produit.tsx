@@ -221,6 +221,7 @@ function EditionCompteProduit({
   onEnregistre: () => void;
 }) {
   const comptes = useStore((s) => s.comptesComptables);
+  const categories = useStore((s) => s.categoriesProduits);
   const ecritures = useStore((s) => s.ecrituresComptables);
   const updateProduit = useStore((s) => s.updateProduit);
   const charge = compteChargeProduit(produit, comptes);
@@ -247,10 +248,10 @@ function EditionCompteProduit({
 
   function enregistrer() {
     const res = updateProduit(produit.id, {
-      compteChargeId: produitEstAchetable(produit)
+      compteChargeId: produitEstAchetable(produit, categories)
         ? compteChargeId || undefined
         : undefined,
-      compteVenteId: produitEstVendable(produit)
+      compteVenteId: produitEstVendable(produit, categories)
         ? compteVenteId || undefined
         : undefined,
     });
@@ -273,7 +274,7 @@ function EditionCompteProduit({
         La saisie de la facture en cours est conservée.
       </p>
       <div className="mt-4 space-y-3">
-        {produitEstAchetable(produit) && (
+        {produitEstAchetable(produit, categories) && (
         <label className="block text-xs font-semibold text-muted">
           Compte de charge (achat)
           <select
@@ -292,10 +293,10 @@ function EditionCompteProduit({
           </select>
         </label>
         )}
-        {chargeVerrouille && produitEstAchetable(produit) && (
+        {chargeVerrouille && produitEstAchetable(produit, categories) && (
           <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
         )}
-        {produitEstVendable(produit) && (
+        {produitEstVendable(produit, categories) && (
         <label className="block text-xs font-semibold text-muted">
           Compte de vente
           <select
@@ -314,7 +315,7 @@ function EditionCompteProduit({
           </select>
         </label>
         )}
-        {venteVerrouille && produitEstVendable(produit) && (
+        {venteVerrouille && produitEstVendable(produit, categories) && (
           <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
         )}
       </div>

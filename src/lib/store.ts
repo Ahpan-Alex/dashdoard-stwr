@@ -25,6 +25,7 @@ import {
 } from "./document-templates";
 import {
   creerEntreeHistorique,
+  idsCategorieEtDescendants,
   produitEstReference,
 } from "./produits";
 import { creerEntreeJournal, factureEstFiscale, nextNumeroDocumentCommercial } from "./facturation-mg";
@@ -161,6 +162,7 @@ import {
   normaliserNomenclatures,
 } from "./nomenclature";
 import {
+  estUsageCommercial,
   natureStockDuProduit,
   produitEstFabrique,
   usageCommercialDuProduit,
@@ -1979,7 +1981,11 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const motifRep = motifRepartitionInvalide(prev.lignes);
         if (motifRep) return { ok: false, reason: motifRep };
-        const motifNat = motifAchatNatureInterdite(get().produits, prev.lignes);
+        const motifNat = motifAchatNatureInterdite(
+          get().produits,
+          prev.lignes,
+          get().categoriesProduits,
+        );
         if (motifNat) return { ok: false, reason: motifNat };
         if (moduleComptabiliteActif(get().parametres)) {
           const motifCompta = motifLignesAchatInvalides(
@@ -3174,6 +3180,7 @@ export const useStore = create<Store>()((set, get) => ({
           const motif = motifLigneMissionInvalide(
             { id: "tmp", produitId: l.produitId, quantite: 0, prixUnitaire: 0, fournisseurId: TIERS_DIVERS_MARCHE_ID },
             state.produits,
+            state.categoriesProduits,
           );
           if (motif) return { ok: false, reason: motif };
           prevus.push({
@@ -3265,6 +3272,7 @@ export const useStore = create<Store>()((set, get) => ({
             const motif = motifLigneMissionInvalide(
               { id: l.id, produitId: l.produitId, quantite: 0, prixUnitaire: 0, fournisseurId: TIERS_DIVERS_MARCHE_ID },
               state.produits,
+              state.categoriesProduits,
             );
             if (motif) return { ok: false, reason: motif };
           }
@@ -3272,7 +3280,11 @@ export const useStore = create<Store>()((set, get) => ({
         let achatsRealises = data.achatsRealises ?? prev.achatsRealises;
         if (data.achatsRealises) {
           for (const l of data.achatsRealises) {
-            const motif = motifLigneMissionInvalide(l, state.produits);
+            const motif = motifLigneMissionInvalide(
+              l,
+              state.produits,
+              state.categoriesProduits,
+            );
             if (motif) return { ok: false, reason: motif };
             if (!l.fournisseurId) {
               return { ok: false, reason: "Chaque achat réalisé doit être rattaché à un tiers." };
@@ -3340,7 +3352,11 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Seule une mission en cours peut être clôturée." };
         }
         for (const l of prev.achatsRealises) {
-          const motif = motifLigneMissionInvalide(l, state.produits);
+          const motif = motifLigneMissionInvalide(
+            l,
+            state.produits,
+            state.categoriesProduits,
+          );
           if (motif) return { ok: false, reason: motif };
         }
         const actor = getActiviteActor();
@@ -3710,7 +3726,11 @@ export const useStore = create<Store>()((set, get) => ({
             prixAchatUnitaire: l.prixAchatUnitaire,
             typeAchat: produits.find((p) => p.id === l.produitId)?.typeAchat,
           }));
-          const motifNat = motifAchatNatureInterdite(produits, lignesAchat);
+          const motifNat = motifAchatNatureInterdite(
+            produits,
+            lignesAchat,
+            state.categoriesProduits,
+          );
           if (motifNat) return { ok: false, reason: motifNat };
           const achatId = uid("ach");
           const numero = nextNumeroAchat(
@@ -3879,10 +3899,13 @@ export const useStore = create<Store>()((set, get) => ({
           );
           if (cycle) return { ok: false, reason: cycle };
         }
-        const usage = usageCommercialDuProduit({
-          ...produit,
-          natureStock: nature,
-        });
+        const usage = usageCommercialDuProduit(
+          {
+            ...produit,
+            natureStock: nature,
+          },
+          state.categoriesProduits,
+        );
         const seeded = seedComptesDefautState(state);
         const nouveau = assignerComptesProduit(
           {
@@ -3957,11 +3980,14 @@ export const useStore = create<Store>()((set, get) => ({
           ...data,
           natureStock: natureCible,
           nomenclatures,
-          usageCommercial: usageCommercialDuProduit({
-            ...prev,
-            ...data,
-            natureStock: natureCible,
-          }),
+          usageCommercial: usageCommercialDuProduit(
+            {
+              ...prev,
+              ...data,
+              natureStock: natureCible,
+            },
+            state.categoriesProduits,
+          ),
         };
         const seeded = seedComptesDefautState(state);
         const auth = useAuthStore.getState();
@@ -4124,17 +4150,57 @@ export const useStore = create<Store>()((set, get) => ({
       updateCategorieProduit: (id, data) =>
         set((state) => {
           const prev = state.categoriesProduits.find((c) => c.id === id);
+          const categoriesProduits = state.categoriesProduits.map((c) =>
+            c.id === id ? { ...c, ...data } : c,
+          );
+          const journal = [
+            entreeActivite("modification", "categorie", {
+              entiteId: id,
+              libelle: data.libelle ?? prev?.libelle,
+            }),
+            ...state.journalActivites,
+          ];
+          const usageChange =
+            data.usageCommercial !== undefined &&
+            data.usageCommercial !== prev?.usageCommercial;
+          if (!usageChange) {
+            return { categoriesProduits, journalActivites: journal };
+          }
+          const seeded = seedComptesDefautState(state);
+          const sousArbre = new Set(
+            idsCategorieEtDescendants(id, categoriesProduits),
+          );
+          const exclus = new Set<string>();
+          for (const c of categoriesProduits) {
+            if (c.id === id || !sousArbre.has(c.id)) continue;
+            if (!estUsageCommercial(c.usageCommercial)) continue;
+            for (const d of idsCategorieEtDescendants(
+              c.id,
+              categoriesProduits,
+            )) {
+              exclus.add(d);
+            }
+          }
+          const usage = estUsageCommercial(data.usageCommercial)
+            ? data.usageCommercial
+            : "achat_vente";
           return {
-            categoriesProduits: state.categoriesProduits.map((c) =>
-              c.id === id ? { ...c, ...data } : c,
-            ),
-            journalActivites: [
-              entreeActivite("modification", "categorie", {
-                entiteId: id,
-                libelle: prev?.libelle,
-              }),
-              ...state.journalActivites,
-            ],
+            ...seeded,
+            categoriesProduits,
+            produits: state.produits.map((p) => {
+              if (
+                !p.categorieId ||
+                !sousArbre.has(p.categorieId) ||
+                exclus.has(p.categorieId)
+              ) {
+                return p;
+              }
+              return assignerComptesProduit(
+                { ...p, usageCommercial: usage },
+                seeded.comptesComptables,
+              );
+            }),
+            journalActivites: journal,
           };
         }),
       deleteCategorieProduit: (id) => {

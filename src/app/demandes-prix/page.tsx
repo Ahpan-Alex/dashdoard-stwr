@@ -203,9 +203,13 @@ function FormulaireDp({
   }) => void;
 }) {
   const produits = useStore((s) => s.produits);
+  const categoriesProduits = useStore((s) => s.categoriesProduits);
   const articles = useMemo(
-    () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
-    [produits],
+    () =>
+      (produits ?? []).filter(
+        (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
+      ),
+    [produits, categoriesProduits],
   );
   const [date, setDate] = useState(jourLocalISO());
   const [validiteJours, setValiditeJours] = useState("15");

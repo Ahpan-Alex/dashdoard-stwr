@@ -43,7 +43,20 @@ import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeA
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
-import { natureStockDuProduit, NATURE_STOCK_LABELS, prixAchatEstObligatoire, prixVenteEstObligatoire, produitEstAchetable, produitEstVendable, usageCommercialDuProduit, USAGE_COMMERCIAL_LABELS, USAGES_COMMERCIAUX } from "@/lib/nature-stock";
+import {
+  contraindreUsageParFamille,
+  estUsageCommercial,
+  natureStockDuProduit,
+  NATURE_STOCK_LABELS,
+  prixAchatEstObligatoire,
+  prixVenteEstObligatoire,
+  produitEstAchetable,
+  produitEstVendable,
+  usageCommercialDeLaFamille,
+  usageCommercialDuProduit,
+  USAGE_COMMERCIAL_LABELS,
+  USAGES_COMMERCIAUX,
+} from "@/lib/nature-stock";
 import { nomenclaturesDuProduit } from "@/lib/nomenclature";
 import {
   libelleUniteMesure,
@@ -80,7 +93,10 @@ function parseSeuilOptionnel(raw: string): number | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
-function formDepuisProduit(p: Produit): ProduitFormState {
+function formDepuisProduit(
+  p: Produit,
+  categories?: CategorieProduit[],
+): ProduitFormState {
   return {
     code: p.code,
     libelleCourt: p.libelleCourt,
@@ -103,7 +119,7 @@ function formDepuisProduit(p: Produit): ProduitFormState {
     compteChargeId: p.compteChargeId ?? "",
     compteVenteId: p.compteVenteId ?? "",
     natureStock: natureStockDuProduit(p),
-    usageCommercial: usageCommercialDuProduit(p),
+    usageCommercial: usageCommercialDuProduit(p, categories),
     nomenclatures: nomenclaturesDuProduit(p),
   };
 }
@@ -167,14 +183,20 @@ export default function ParametresProduitsPage() {
     code: "",
     libelle: "",
     parentId: "",
+    usageCommercial: "achat_vente" as UsageCommercialProduit,
   });
 
   function formVide(): ProduitFormState {
+    const categorieId = feuilles[0]?.id ?? "";
+    const usageFamille = usageCommercialDeLaFamille(
+      categorieId,
+      categoriesProduits,
+    );
     return {
       code: "",
       libelleCourt: "",
       libelleLong: "",
-      categorieId: feuilles[0]?.id ?? "",
+      categorieId,
       unite: symboleUniteDefaut(unitesMesure),
       prixAchat: "",
       prixVenteHT: "",
@@ -189,7 +211,7 @@ export default function ParametresProduitsPage() {
       compteChargeId: "",
       compteVenteId: "",
       natureStock: "matiere_premiere",
-      usageCommercial: "achat_vente",
+      usageCommercial: usageFamille,
       nomenclatures: [],
     };
   }
@@ -258,23 +280,44 @@ export default function ParametresProduitsPage() {
     return produits.some((p) => p.categorieId === categorieId);
   }
 
+  function usageFamilleForm(categorieId: string) {
+    return usageCommercialDeLaFamille(categorieId, categoriesProduits);
+  }
+
+  function appliquerFamilleAuProduit(
+    next: ProduitFormState,
+    usageSouhaite?: UsageCommercialProduit,
+  ): ProduitFormState {
+    const usageFamille = usageFamilleForm(next.categorieId);
+    const usage = contraindreUsageParFamille(
+      usageSouhaite ?? next.usageCommercial,
+      usageFamille,
+    );
+    return {
+      ...next,
+      usageCommercial: usage,
+      compteChargeId: usage === "vente" ? "" : next.compteChargeId,
+      compteVenteId: usage === "achat" ? "" : next.compteVenteId,
+    };
+  }
+
   function annulerEditionFamille() {
     setEditingCatId(null);
-    setCatForm({ code: "", libelle: "", parentId: "" });
+    setCatForm({
+      code: "",
+      libelle: "",
+      parentId: "",
+      usageCommercial: "achat_vente",
+    });
   }
 
   function demarrerEditionFamille(cat: CategorieProduit) {
-    if (familleLieeAProduit(cat.id)) {
-      alert(
-        "Cette famille est liée à au moins un produit : modification impossible. Réassignez les produits d'abord.",
-      );
-      return;
-    }
     setEditingCatId(cat.id);
     setCatForm({
       code: cat.code,
       libelle: cat.libelle,
       parentId: cat.parentId ?? "",
+      usageCommercial: usageFamilleForm(cat.id),
     });
     document
       .getElementById("fiche-famille")
@@ -303,18 +346,20 @@ export default function ParametresProduitsPage() {
     }
 
     if (editingCatId) {
-      if (familleLieeAProduit(editingCatId)) {
-        alert(
-          "Cette famille est devenue liée à un produit : modification refusée.",
-        );
-        annulerEditionFamille();
-        return;
+      const liee = familleLieeAProduit(editingCatId);
+      if (liee) {
+        updateCategorieProduit(editingCatId, {
+          libelle,
+          usageCommercial: catForm.usageCommercial,
+        });
+      } else {
+        updateCategorieProduit(editingCatId, {
+          code,
+          libelle,
+          parentId: catForm.parentId || undefined,
+          usageCommercial: catForm.usageCommercial,
+        });
       }
-      updateCategorieProduit(editingCatId, {
-        code,
-        libelle,
-        parentId: catForm.parentId || undefined,
-      });
       annulerEditionFamille();
       return;
     }
@@ -325,8 +370,14 @@ export default function ParametresProduitsPage() {
       parentId: catForm.parentId || undefined,
       ordre: categoriesProduits.length + 1,
       actif: true,
+      usageCommercial: catForm.usageCommercial,
     });
-    setCatForm({ code: "", libelle: "", parentId: "" });
+    setCatForm({
+      code: "",
+      libelle: "",
+      parentId: "",
+      usageCommercial: "achat_vente",
+    });
   }
 
   function annulerEdition() {
@@ -339,7 +390,7 @@ export default function ParametresProduitsPage() {
     setEditingId(produit.id);
     setSelectedId(produit.id);
     setAlertDoublons(null);
-    const base = formDepuisProduit(produit);
+    const base = formDepuisProduit(produit, categoriesProduits);
     setForm({
       ...base,
       compteChargeId:
@@ -380,11 +431,11 @@ export default function ParametresProduitsPage() {
       alert("Les prix doivent être des montants positifs ou nuls.");
       return;
     }
-    if (prixAchatEstObligatoire(form) && achatSaisi === "") {
+    if (prixAchatEstObligatoire(form, categoriesProduits) && achatSaisi === "") {
       alert("Le prix d'achat est obligatoire pour un article achetable.");
       return;
     }
-    if (prixVenteEstObligatoire(form) && venteSaisie === "") {
+    if (prixVenteEstObligatoire(form, categoriesProduits) && venteSaisie === "") {
       alert("Le prix de vente est obligatoire pour un article vendable.");
       return;
     }
@@ -431,10 +482,10 @@ export default function ParametresProduitsPage() {
       natureStock: form.natureStock,
       usageCommercial: form.usageCommercial,
       nomenclatures: form.nomenclatures,
-      compteChargeId: produitEstAchetable(form)
+      compteChargeId: produitEstAchetable(form, categoriesProduits)
         ? form.compteChargeId || undefined
         : undefined,
-      compteVenteId: produitEstVendable(form)
+      compteVenteId: produitEstVendable(form, categoriesProduits)
         ? form.compteVenteId || undefined
         : undefined,
     };
@@ -500,6 +551,11 @@ export default function ParametresProduitsPage() {
   const ventesReelles = comptesParClasse(comptesComptables, "7").filter(
     (c) => !estCompteGeneriqueProduit(c) || c.id === form.compteVenteId,
   );
+  const structureFamilleVerrouillee = Boolean(
+    editingCatId && familleLieeAProduit(editingCatId),
+  );
+  const circuitProduitVerrouille =
+    usageFamilleForm(form.categorieId) !== "achat_vente";
 
   return (
     <div>
@@ -544,8 +600,9 @@ export default function ParametresProduitsPage() {
         </div>
         <p className="mb-4 text-xs text-muted">
           Jusqu&apos;à 3 niveaux : famille › sous-famille › sous-sous-famille.
-          Modification possible uniquement tant qu&apos;aucun produit n&apos;y
-          est rattaché.
+          Le circuit commercial (acheté / vendu / les deux) s&apos;applique aux
+          produits de la famille et de ses descendants. Code et parent ne sont
+          plus modifiables une fois un produit rattaché.
         </p>
 
         <form
@@ -559,6 +616,7 @@ export default function ParametresProduitsPage() {
               placeholder="ex. POI"
               value={catForm.code}
               onChange={(e) => setCatForm({ ...catForm, code: e.target.value })}
+              disabled={structureFamilleVerrouillee}
               required
             />
           </label>
@@ -579,9 +637,18 @@ export default function ParametresProduitsPage() {
             <select
               className="select mt-1"
               value={catForm.parentId}
-              onChange={(e) =>
-                setCatForm({ ...catForm, parentId: e.target.value })
-              }
+              disabled={structureFamilleVerrouillee}
+              onChange={(e) => {
+                const parentId = e.target.value;
+                setCatForm({
+                  ...catForm,
+                  parentId,
+                  usageCommercial: usageCommercialDeLaFamille(
+                    parentId || undefined,
+                    categoriesProduits,
+                  ),
+                });
+              }}
             >
               <option value="">— Aucun = famille racine —</option>
               {parentsPossibles.map((c) => (
@@ -594,6 +661,30 @@ export default function ParametresProduitsPage() {
               ))}
             </select>
           </label>
+          <fieldset className="sm:col-span-4">
+            <legend className="mb-2 text-xs font-semibold text-muted">
+              Circuit commercial
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              {USAGES_COMMERCIAUX.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  className={`btn ${catForm.usageCommercial === u ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() =>
+                    setCatForm({ ...catForm, usageCommercial: u })
+                  }
+                >
+                  {USAGE_COMMERCIAL_LABELS[u]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] font-normal text-muted">
+              Une famille vendue uniquement n&apos;apparaît pas à l&apos;achat ;
+              une famille achetée uniquement n&apos;apparaît pas à la vente. Les
+              produits rattachés sont mis à jour.
+            </p>
+          </fieldset>
           <div className="flex flex-wrap items-end gap-2 sm:col-span-4">
             <button type="submit" className="btn btn-secondary">
               {editingCatId ? (
@@ -628,6 +719,7 @@ export default function ParametresProduitsPage() {
                 <th>Niveau</th>
                 <th>Code</th>
                 <th>Libellé / chemin</th>
+                <th>Circuit</th>
                 <th>Produits</th>
                 <th>Statut</th>
                 <th />
@@ -636,7 +728,7 @@ export default function ParametresProduitsPage() {
             <tbody>
               {arbreCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-sm text-muted">
+                  <td colSpan={7} className="text-sm text-muted">
                     Aucune famille. Créez d&apos;abord une famille racine.
                   </td>
                 </tr>
@@ -679,6 +771,15 @@ export default function ParametresProduitsPage() {
                           {cheminCategorie(cat.id, categoriesProduits)}
                         </span>
                       </td>
+                      <td className="text-xs">
+                        {USAGE_COMMERCIAL_LABELS[usageFamilleForm(cat.id)]}
+                        {!estUsageCommercial(cat.usageCommercial) &&
+                        cat.parentId ? (
+                          <span className="mt-0.5 block text-[11px] text-muted">
+                            Hérité
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="text-xs text-muted">
                         {nbProduits > 0
                           ? `${nbProduits} prod.`
@@ -698,10 +799,9 @@ export default function ParametresProduitsPage() {
                           <IconButton
                             label={
                               nbProduits > 0
-                                ? "Modification impossible : famille liée à un produit"
+                                ? "Modifier le circuit (code et parent verrouillés)"
                                 : "Modifier cette famille"
                             }
-                            disabled={nbProduits > 0}
                             onClick={() => demarrerEditionFamille(cat)}
                           >
                             <Pencil className="h-4 w-4" />
@@ -792,7 +892,12 @@ export default function ParametresProduitsPage() {
                 className="select mt-1"
                 value={form.categorieId}
                 onChange={(e) =>
-                  setForm({ ...form, categorieId: e.target.value })
+                  setForm(
+                    appliquerFamilleAuProduit({
+                      ...form,
+                      categorieId: e.target.value,
+                    }),
+                  )
                 }
                 required
               >
@@ -854,15 +959,12 @@ export default function ParametresProduitsPage() {
                   <button
                     key={u}
                     type="button"
+                    disabled={circuitProduitVerrouille && u !== form.usageCommercial}
                     className={`btn ${form.usageCommercial === u ? "btn-primary" : "btn-secondary"}`}
                     onClick={() =>
-                      setForm({
-                        ...form,
-                        usageCommercial: u,
-                        compteChargeId:
-                          u === "vente" ? "" : form.compteChargeId,
-                        compteVenteId: u === "achat" ? "" : form.compteVenteId,
-                      })
+                      setForm(
+                        appliquerFamilleAuProduit(form, u),
+                      )
                     }
                   >
                     {USAGE_COMMERCIAL_LABELS[u]}
@@ -870,8 +972,9 @@ export default function ParametresProduitsPage() {
                 ))}
               </div>
               <p className="mt-1 text-[11px] font-normal text-muted">
-                Détermine les listes d’achat / vente et les comptes comptables
-                affichés.
+                {circuitProduitVerrouille
+                  ? "Circuit imposé par la famille. Modifiez-le sur la famille pour le changer."
+                  : "Détermine les listes d’achat / vente et les comptes comptables affichés."}
               </p>
             </fieldset>
             <NomenclatureEditor
@@ -892,7 +995,7 @@ export default function ParametresProduitsPage() {
             />
             {moduleCompta && (
               <>
-                {produitEstAchetable(form) && (
+                {produitEstAchetable(form, categoriesProduits) && (
                 <label className="block text-xs font-semibold text-muted">
                   Compte de charge (achat)
                   <select
@@ -911,7 +1014,7 @@ export default function ParametresProduitsPage() {
                   </select>
                 </label>
                 )}
-                {produitEstVendable(form) && (
+                {produitEstVendable(form, categoriesProduits) && (
                 <label className="block text-xs font-semibold text-muted">
                   Compte de vente
                   <select
@@ -973,10 +1076,10 @@ export default function ParametresProduitsPage() {
                 />
               </label>
             )}
-            {produitEstAchetable(form) && (
+            {produitEstAchetable(form, categoriesProduits) && (
             <label className="block text-xs font-semibold text-muted">
               Prix d&apos;achat HT
-              {!prixAchatEstObligatoire(form) && (
+              {!prixAchatEstObligatoire(form, categoriesProduits) && (
                 <span className="font-normal"> (facultatif)</span>
               )}
               <input
@@ -986,20 +1089,20 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixAchat: e.target.value })
                 }
-                required={prixAchatEstObligatoire(form)}
+                required={prixAchatEstObligatoire(form, categoriesProduits)}
                 placeholder={
-                  prixAchatEstObligatoire(form)
+                  prixAchatEstObligatoire(form, categoriesProduits)
                     ? undefined
                     : "Issu de la fabrication"
                 }
               />
             </label>
             )}
-            {produitEstVendable(form) && (
+            {produitEstVendable(form, categoriesProduits) && (
             <>
             <label className="block text-xs font-semibold text-muted">
               Prix vente détail HT
-              {!prixVenteEstObligatoire(form) && (
+              {!prixVenteEstObligatoire(form, categoriesProduits) && (
                 <span className="font-normal"> (facultatif)</span>
               )}
               <input
@@ -1009,9 +1112,9 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixVenteHT: e.target.value })
                 }
-                required={prixVenteEstObligatoire(form)}
+                required={prixVenteEstObligatoire(form, categoriesProduits)}
                 placeholder={
-                  prixVenteEstObligatoire(form)
+                  prixVenteEstObligatoire(form, categoriesProduits)
                     ? undefined
                     : "Non vendu tel quel"
                 }
@@ -1197,7 +1300,7 @@ export default function ParametresProduitsPage() {
                     {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
                   </td>
                   <td className="text-xs">
-                    {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(p)]}
+                    {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(p, categoriesProduits)]}
                   </td>
                   <td>{formatCurrency(p.prixVenteHT)}</td>
                   {avecTVA && <td>{p.tauxTVA} %</td>}
@@ -1298,7 +1401,7 @@ export default function ParametresProduitsPage() {
                 </p>
                 <p className="text-xs text-muted">
                   {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]} ·{" "}
-                  {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(selected)]} ·
+                  {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(selected, categoriesProduits)]} ·
                   Achat {formatCurrency(selected.prixAchat)} · Détail{" "}
                   {formatCurrency(selected.prixVenteHT)}
                   {selected.prixVenteGrosHT != null
@@ -1312,6 +1415,7 @@ export default function ParametresProduitsPage() {
                     </p>
                     <ComptaProduitPanel
                       produit={selected}
+                      categories={categoriesProduits}
                       comptes={comptesComptables}
                       ecritures={ecrituresComptables}
                       avecTVA={avecTVA}
@@ -1346,11 +1450,11 @@ export default function ParametresProduitsPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                   {(
                     [
-                      ...(produitEstVendable(selected)
+                      ...(produitEstVendable(selected, categoriesProduits)
                         ? [{ id: "tarifs" as const, label: "Tarifs clients" }]
                         : []),
                       { id: "historique" as const, label: "Historique des prix" },
-                      ...(produitEstAchetable(selected)
+                      ...(produitEstAchetable(selected, categoriesProduits)
                         ? [{ id: "fournisseurs" as const, label: "Fournisseurs" }]
                         : []),
                     ]
@@ -1489,6 +1593,7 @@ function libelleCompte(
 
 function ComptaProduitPanel({
   produit,
+  categories,
   comptes,
   ecritures,
   avecTVA,
@@ -1496,6 +1601,7 @@ function ComptaProduitPanel({
   onChange,
 }: {
   produit: Produit;
+  categories: CategorieProduit[];
   comptes: import("@/lib/types").CompteComptable[];
   ecritures: import("@/lib/types").EcritureComptable[];
   avecTVA: boolean;
@@ -1519,10 +1625,10 @@ function ComptaProduitPanel({
     return (
       <p className="text-sm text-muted">
         {TYPE_ACHAT_LABELS[type]}.{" "}
-        {produitEstAchetable(produit)
+        {produitEstAchetable(produit, categories)
           ? `Charge : ${libelleCompte(charge)}. `
           : ""}
-        {produitEstVendable(produit)
+        {produitEstVendable(produit, categories)
           ? `Vente : ${libelleCompte(vente)}. `
           : ""}
         {produitEstTaxable(produit, avecTVA) ? "Taxable." : "Non taxable."} Seul
@@ -1554,7 +1660,7 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
-      {produitEstAchetable(produit) && (
+      {produitEstAchetable(produit, categories) && (
       <label className="block text-xs font-semibold text-muted">
         Compte de charge (achat)
         <select
@@ -1574,10 +1680,10 @@ function ComptaProduitPanel({
         </select>
       </label>
       )}
-      {chargeVerrouille && produitEstAchetable(produit) && (
+      {chargeVerrouille && produitEstAchetable(produit, categories) && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
-      {produitEstVendable(produit) && (
+      {produitEstVendable(produit, categories) && (
       <label className="block text-xs font-semibold text-muted">
         Compte de vente
         <select
@@ -1597,7 +1703,7 @@ function ComptaProduitPanel({
         </select>
       </label>
       )}
-      {venteVerrouille && produitEstVendable(produit) && (
+      {venteVerrouille && produitEstVendable(produit, categories) && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
       <label className="flex items-center gap-2 text-sm">
