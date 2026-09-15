@@ -80,14 +80,13 @@ import {
   compteVenteProduit,
   chiffresNumeroCompte,
   completerNumeroCompte,
-  estCompteGeneriqueProduit,
   libelleCompteTiersAuto,
   longueurNumeroCompteEffective,
   LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
   migrerProduitComptes,
-  motifComptesProduitInvalides,
   motifComptesTiersInvalides,
+  moduleComptabiliteActif,
   motifCompteTiersIndisponible,
   motifLignesAchatInvalides,
   motifNumeroCompteInvalide,
@@ -1681,11 +1680,13 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const motifRep = motifRepartitionInvalide(prev.lignes);
         if (motifRep) return { ok: false, reason: motifRep };
-        const motifCompta = motifLignesAchatInvalides(
-          prev.lignes,
-          get().comptesComptables,
-        );
-        if (motifCompta) return { ok: false, reason: motifCompta };
+        if (moduleComptabiliteActif(get().parametres)) {
+          const motifCompta = motifLignesAchatInvalides(
+            prev.lignes,
+            get().comptesComptables,
+          );
+          if (motifCompta) return { ok: false, reason: motifCompta };
+        }
         set((s) =>
           avecJournal(s, {
             achats: s.achats.map((a) =>
@@ -2431,11 +2432,6 @@ export const useStore = create<Store>()((set, get) => ({
           { ...produit, id: uid("prod") },
           seeded.comptesComptables,
         );
-        const motif = motifComptesProduitInvalides(
-          nouveau,
-          seeded.comptesComptables,
-        );
-        if (motif) return { ok: false as const, reason: motif };
         set((s) => ({
           ...seeded,
           produits: [nouveau, ...s.produits],
@@ -2493,41 +2489,6 @@ export const useStore = create<Store>()((set, get) => ({
           { ...prev, ...patch },
           seeded.comptesComptables,
         );
-        const motif = motifComptesProduitInvalides(
-          next,
-          seeded.comptesComptables,
-        );
-        if (motif) {
-          const cles = Object.keys(data);
-          const patchComptaSeul = cles.every((k) =>
-            (
-              [
-                "compteChargeId",
-                "compteVenteId",
-                "compteComptableId",
-                "typeAchat",
-                "taxable",
-              ] as string[]
-            ).includes(k),
-          );
-          if (!patchComptaSeul) return { ok: false, reason: motif };
-          if (
-            data.compteChargeId !== undefined &&
-            estCompteGeneriqueProduit(
-              seeded.comptesComptables.find((c) => c.id === data.compteChargeId),
-            )
-          ) {
-            return { ok: false, reason: motif };
-          }
-          if (
-            data.compteVenteId !== undefined &&
-            estCompteGeneriqueProduit(
-              seeded.comptesComptables.find((c) => c.id === data.compteVenteId),
-            )
-          ) {
-            return { ok: false, reason: motif };
-          }
-        }
         const hist: HistoriquePrix[] = [];
         const push = (
           champ: HistoriquePrix["champ"],

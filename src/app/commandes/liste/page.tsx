@@ -44,6 +44,7 @@ import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
+import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import {
   avancementLivraisonCommande,
@@ -103,6 +104,8 @@ export default function ListeCommandesPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
+  const { confirmerSiBesoin, modal: modalCompteProduit } =
+    useAvertissementCompteProduit("vente");
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
@@ -293,6 +296,7 @@ export default function ListeCommandesPage() {
       );
       return;
     }
+    confirmerSiBesoin(c.lignes, () => {
     const echeance = new Date();
     echeance.setDate(echeance.getDate() + 30);
     const t = totauxCommande(c, parametres, acomptes);
@@ -361,6 +365,7 @@ export default function ListeCommandesPage() {
       });
     }
     setPending(null);
+    });
   }
 
   const pendingCmd = commandes.find((c) => c.id === pending?.commandeId);
@@ -389,6 +394,8 @@ export default function ListeCommandesPage() {
       />
 
       <CommandesSubnav />
+
+      {modalCompteProduit}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {(

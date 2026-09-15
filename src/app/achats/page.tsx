@@ -45,8 +45,10 @@ import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
 import { createId } from "@/lib/id";
 import { libelleProduit } from "@/lib/produits";
+import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import {
   comptesParClasse,
+  moduleComptabiliteActif,
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_LIBRES,
   TYPES_ACHAT_PRODUIT,
@@ -102,10 +104,11 @@ function AchatsListe() {
     addAchat,
     assurerComptesComptablesDefaut,
   } = useStore();
+  const moduleCompta = moduleComptabiliteActif(parametres);
 
   useEffect(() => {
-    assurerComptesComptablesDefaut();
-  }, [assurerComptesComptablesDefaut]);
+    if (moduleCompta) assurerComptesComptablesDefaut();
+  }, [assurerComptesComptablesDefaut, moduleCompta]);
   const { visibles: sitesVisibles } = useSitesVisibles();
 
   const { visible } = useAffichageTable("achats");
@@ -489,6 +492,8 @@ function AchatEditor({
     validerAvoirAchat,
     supprimerAvoirAchat,
   } = useStore();
+  const { confirmerSiBesoin, modal: modalCompteProduit } =
+    useAvertissementCompteProduit("charge");
 
   const [onglet, setOnglet] = useState<Onglet>("commande");
   const [lignes, setLignes] = useState<AchatLigne[]>(achat.lignes);
@@ -543,8 +548,10 @@ function AchatEditor({
       alert(save.reason);
       return;
     }
-    const res = validerAchat(achat.id);
-    if (!res.ok) alert(res.reason);
+    confirmerSiBesoin(lignes, () => {
+      const res = validerAchat(achat.id);
+      if (!res.ok) alert(res.reason);
+    });
   };
 
   return (
@@ -557,6 +564,8 @@ function AchatEditor({
         <ArrowLeft className="h-4 w-4" />
         Retour aux achats
       </button>
+
+      {modalCompteProduit}
 
       <PageHeader
         title={achat.numero}
@@ -826,6 +835,7 @@ function CommandePanel({
   const produits = useStore((s) => s.produits);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const comptesComptables = useStore((s) => s.comptesComptables);
+  const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
   const [typeNouveau, setTypeNouveau] = useState<TypeAchat>("marchandises");
   const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
   const [designationLibre, setDesignationLibre] = useState("");
@@ -845,7 +855,7 @@ function CommandePanel({
         alert("Saisissez la désignation.");
         return;
       }
-      if (!compteLibreId) {
+      if (moduleCompta && !compteLibreId) {
         alert(
           typeNouveau === "immobilisation"
             ? "Sélectionnez un compte d'immobilisation (classe 2)."
@@ -964,6 +974,7 @@ function CommandePanel({
                   }
                 />
               </label>
+              {moduleCompta && (
               <label className="block text-xs font-semibold text-muted">
                 Compte
                 <select
@@ -985,6 +996,7 @@ function CommandePanel({
                   ))}
                 </select>
               </label>
+              )}
               {achat.tauxTVA > 0 && (
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -1048,7 +1060,7 @@ function CommandePanel({
                 <tr key={l.id}>
                   <td className="font-medium">
                     {libelleLigne(l)}
-                    {l.compteComptableId && !l.produitId && (
+                    {moduleCompta && l.compteComptableId && !l.produitId && (
                       <p className="text-xs font-normal text-muted">
                         {comptesComptables.find((c) => c.id === l.compteComptableId)
                           ?.numero}{" "}

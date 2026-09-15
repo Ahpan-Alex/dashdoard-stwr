@@ -161,16 +161,79 @@ export function dedupliquerIdsComptes(comptes: CompteComptable[]): CompteComptab
   return changed ? next : comptes;
 }
 
-/** Champs exigés selon la catégorie d'achat de la fiche produit. */
-export function champsComptesProduitRequis(type: TypeAchat | undefined): {
+/** Module Comptabilité actif pour l'entreprise (absent = actif, rétrocompat). */
+export function moduleComptabiliteActif(
+  parametres: Pick<Parametres, "moduleComptabilite"> | undefined,
+) {
+  return parametres?.moduleComptabilite !== false;
+}
+
+export const MSG_PRODUIT_SANS_COMPTE =
+  "Ce produit n'a pas de compte comptable associé. Voulez-vous continuer sans génération d'écriture, ou renseigner le compte maintenant ?";
+
+/**
+ * Les comptes produit ne sont plus obligatoires, quel que soit le type d'achat.
+ */
+export function champsComptesProduitRequis(_type?: TypeAchat): {
   charge: boolean;
   vente: boolean;
 } {
-  const t = type ?? "marchandises";
-  if (t === "fournitures" || t === "immobilisation" || t === "service_general") {
-    return { charge: true, vente: false };
+  return { charge: false, vente: false };
+}
+
+export function compteProduitEstRenseigne(
+  compte: CompteComptable | undefined,
+): compte is CompteComptable {
+  return Boolean(compte) && !estCompteGeneriqueProduit(compte);
+}
+
+export function produitSansCompteComptable(
+  produit: Pick<
+    Produit,
+    "compteChargeId" | "compteVenteId" | "compteComptableId"
+  >,
+  comptes: CompteComptable[],
+) {
+  return (
+    !compteProduitEstRenseigne(compteChargeProduit(produit, comptes)) ||
+    !compteProduitEstRenseigne(compteVenteProduit(produit, comptes))
+  );
+}
+
+export function produitSansComptePourNature(
+  produit: Pick<
+    Produit,
+    "compteChargeId" | "compteVenteId" | "compteComptableId"
+  >,
+  comptes: CompteComptable[],
+  nature: "charge" | "vente",
+) {
+  const compte =
+    nature === "vente"
+      ? compteVenteProduit(produit, comptes)
+      : compteChargeProduit(produit, comptes);
+  return !compteProduitEstRenseigne(compte);
+}
+
+export function produitsSansCompteSurLignes(
+  lignes: Array<{ produitId?: string; type?: string }>,
+  produits: Produit[],
+  comptes: CompteComptable[],
+  nature: "charge" | "vente",
+) {
+  const vus = new Set<string>();
+  const out: Produit[] = [];
+  for (const l of lignes) {
+    if (l.type && l.type !== "produit") continue;
+    if (!l.produitId || vus.has(l.produitId)) continue;
+    const produit = produits.find((p) => p.id === l.produitId);
+    if (!produit) continue;
+    if (produitSansComptePourNature(produit, comptes, nature)) {
+      vus.add(produit.id);
+      out.push(produit);
+    }
   }
-  return { charge: true, vente: true };
+  return out;
 }
 
 export function motifComptesProduitInvalides(
@@ -180,38 +243,24 @@ export function motifComptesProduitInvalides(
   >,
   comptes: CompteComptable[],
 ) {
-  const requis = champsComptesProduitRequis(produit.typeAchat);
-  const categorie = TYPE_ACHAT_LABELS[produit.typeAchat ?? "marchandises"];
   const manquants: string[] = [];
-  if (requis.charge) {
-    const charge = compteChargeProduit(produit, comptes);
-    if (!charge) {
-      manquants.push("le compte de charge (achat)");
-    } else if (estCompteGeneriqueProduit(charge)) {
-      manquants.push(
-        "le compte de charge (achat) — le compte générique « Compte de charge à définir » n'est plus accepté",
-      );
-    } else if (classeNumeroCompte(charge.numero) !== "6") {
-      manquants.push("un compte de charge de classe 6");
-    }
+  const charge = compteChargeProduit(produit, comptes);
+  if (!compteProduitEstRenseigne(charge)) {
+    manquants.push("le compte de charge (achat)");
+  } else if (classeNumeroCompte(charge!.numero) !== "6") {
+    manquants.push("un compte de charge de classe 6");
   }
-  if (requis.vente) {
-    const vente = compteVenteProduit(produit, comptes);
-    if (!vente) {
-      manquants.push("le compte de vente");
-    } else if (estCompteGeneriqueProduit(vente)) {
-      manquants.push(
-        "le compte de vente — le compte générique « Compte de produits à définir » n'est plus accepté",
-      );
-    } else if (classeNumeroCompte(vente.numero) !== "7") {
-      manquants.push("un compte de vente de classe 7");
-    }
+  const vente = compteVenteProduit(produit, comptes);
+  if (!compteProduitEstRenseigne(vente)) {
+    manquants.push("le compte de vente");
+  } else if (classeNumeroCompte(vente!.numero) !== "7") {
+    manquants.push("un compte de vente de classe 7");
   }
   if (manquants.length === 0) return null;
   if (manquants.length === 1) {
-    return `Renseignez ${manquants[0]} pour la catégorie « ${categorie} ».`;
+    return `Compte comptable manquant : ${manquants[0]}.`;
   }
-  return `Renseignez ${manquants.join(" et ")} pour la catégorie « ${categorie} ».`;
+  return `Comptes comptables manquants : ${manquants.join(" et ")}.`;
 }
 
 export function produitNecessiteMigrationComptes(
@@ -698,13 +747,11 @@ function ventilerVersComptes(opts: {
           ? compteVenteProduit(produit, opts.comptes)
           : compteChargeProduit(produit, opts.comptes)
         : undefined;
-    const libelle = compte
-      ? compte.libelle
-      : `${v.designation} (sans compte)`;
+    if (!compteProduitEstRenseigne(compte)) return;
     const debit = opts.produitsAuCredit ? 0 : v.ht;
     const credit = opts.produitsAuCredit ? v.ht : 0;
     lignes.push(
-      ligneEcriture(`${opts.prefix}-p${i}`, compte, libelle, debit, credit),
+      ligneEcriture(`${opts.prefix}-p${i}`, compte, compte.libelle, debit, credit),
     );
     if (opts.assujetti && v.taxable) {
       tva += arrondiAr(v.ht * (opts.tauxTVA / 100));
@@ -919,6 +966,9 @@ export function regenererEcrituresComptables(opts: {
   tiers?: Tiers[];
   existantes?: EcritureComptable[];
 }): EcritureComptable[] {
+  if (!moduleComptabiliteActif(opts.parametres)) {
+    return (opts.existantes ?? []).filter(ecritureEstTransferee);
+  }
   const generees: EcritureComptable[] = [];
   for (const facture of opts.factures) {
     const e = ecritureDepuisFactureVente({

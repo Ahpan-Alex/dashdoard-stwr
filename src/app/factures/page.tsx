@@ -48,6 +48,7 @@ import {
 } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
+import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import { useModelePourType } from "@/lib/use-modele";
 import { createId } from "@/lib/id";
 import {
@@ -99,6 +100,8 @@ export default function FacturesPage() {
     encaisserAcompte,
     pointDeVenteActifId,
   } = useStore();
+  const { confirmerSiBesoin, modal: modalCompteProduit } =
+    useAvertissementCompteProduit("vente");
 
   const avecTVA = appliqueTVA(parametres);
   const produitsDispo = produitsActifs(produits);
@@ -480,6 +483,7 @@ export default function FacturesPage() {
       return;
     }
 
+    const executer = () => {
     const remiseGlobale = Number(form.remiseGlobale) || 0;
     const champsRemise = persisterRemiseGlobale(
       remiseGlobale,
@@ -632,6 +636,13 @@ export default function FacturesPage() {
     } else if (mode === "proforma") {
       alert(`Proforma ${numero} enregistrée (hors série fiscale).`);
     }
+    };
+
+    if (mode === "validee") {
+      confirmerSiBesoin(lignes, executer);
+      return;
+    }
+    executer();
   }
 
   function confirmerEmission(e: FormEvent) {
@@ -674,6 +685,8 @@ export default function FacturesPage() {
       />
 
       <FacturesSubnav />
+
+      {modalCompteProduit}
 
       {open && (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">

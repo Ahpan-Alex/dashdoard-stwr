@@ -43,6 +43,7 @@ import {
 } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
+import { moduleComptabiliteActif } from "@/lib/comptabilite";
 import { AlertesCloche } from "./alertes-cloche";
 import { LogoNegoo, LogoNegooMark } from "./logo-negoo";
 import { useAlertes } from "@/lib/use-alertes";
@@ -480,6 +481,9 @@ export function Sidebar() {
   const acomptes = useStore((s) => s.acomptes);
   const factures = useStore((s) => s.factures);
   const identiteNavigation = useStore((s) => s.identiteNavigation);
+  const moduleCompta = useStore((s) =>
+    moduleComptabiliteActif(s.parametres),
+  );
 
   const pastillesParHref = useMemo(() => {
     return {
@@ -533,8 +537,9 @@ export function Sidebar() {
             children: link.children?.filter((c) => canSee(hasPermission, c)),
           })),
       }))
-      .filter((s) => s.links.length > 0);
-  }, [hasPermission, roleKey, currentSessionId, userState]);
+      .filter((s) => s.links.length > 0)
+      .filter((s) => moduleCompta || s.title !== "Comptabilité");
+  }, [hasPermission, roleKey, currentSessionId, userState, moduleCompta]);
 
   useEffect(() => {
     setOpenMenus((prev) => {

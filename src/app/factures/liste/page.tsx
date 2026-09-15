@@ -47,6 +47,7 @@ import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
+import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { useModelePourType } from "@/lib/use-modele";
 import type { Facture, FactureStatut, FactureType, LigneDocument, ModeRemise } from "@/lib/types";
@@ -158,6 +159,8 @@ export default function ListeFacturesPage() {
     addFacture,
     deleteFacture,
   } = useStore();
+  const { confirmerSiBesoin, modal: modalCompteProduit } =
+    useAvertissementCompteProduit("vente");
 
   const [filtre, setFiltre] = useState<FiltreListe>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
@@ -536,6 +539,7 @@ export default function ListeFacturesPage() {
       return;
     }
 
+    const executer = () => {
     const numero = nextNumeroDocumentCommercial({
       prefix: "FAC",
       pointDeVenteId: f.pointDeVenteId,
@@ -594,6 +598,9 @@ export default function ListeFacturesPage() {
     );
     if (!convId) return;
     alert(`Facture fiscale ${numero} créée depuis la proforma.`);
+    };
+
+    confirmerSiBesoin(f.lignes, executer);
   }
 
   const preview = factures.find((f) => f.id === previewId);
@@ -612,6 +619,8 @@ export default function ListeFacturesPage() {
       />
 
       <FacturesSubnav />
+
+      {modalCompteProduit}
 
       {editId && editDoc && (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">

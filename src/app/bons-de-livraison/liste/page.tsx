@@ -39,6 +39,7 @@ import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
+import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import {
   avancementLivraisonCommande,
@@ -96,6 +97,8 @@ export default function ListeBonsDeLivraisonPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
+  const { confirmerSiBesoin, modal: modalCompteProduit } =
+    useAvertissementCompteProduit("vente");
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
@@ -236,6 +239,7 @@ export default function ListeBonsDeLivraisonPage() {
       );
       return;
     }
+    confirmerSiBesoin(bl.lignes, () => {
     const echeance = new Date();
     echeance.setDate(echeance.getDate() + 30);
     const t = totauxBonDeLivraison(bl, parametres, acomptes);
@@ -318,6 +322,7 @@ export default function ListeBonsDeLivraisonPage() {
       }
     }
     setPendingBlId(null);
+    });
   }
 
   const pendingBl = bonsDeLivraison.find((b) => b.id === pendingBlId);
@@ -342,6 +347,8 @@ export default function ListeBonsDeLivraisonPage() {
       />
 
       <BonsDeLivraisonSubnav />
+
+      {modalCompteProduit}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {(

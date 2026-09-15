@@ -3,7 +3,7 @@ import { calculerStocks } from "./calculations";
 import { etatPaiementFacture, resteAPayer } from "./commercial";
 import type { Permission } from "./auth/rbac";
 import { factureEstFiscale } from "./facturation-mg";
-import { produitsAMigrerComptes } from "./comptabilite";
+import { produitsAMigrerComptes, moduleComptabiliteActif } from "./comptabilite";
 import { libelleProduit } from "./produits";
 import type {
   Achat,
@@ -106,7 +106,7 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   stock_rupture: "Rupture de stock",
   stock_surstock: "Surstockage",
   stock_peremption: "Péremption proche",
-  produit_compte_generique: "Compte produit générique à remplacer",
+  produit_compte_generique: "Compte produit manquant",
 };
 
 const CLES_REGLES = Object.keys(
@@ -589,22 +589,24 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
     }
   }
 
-  const aMigrer = produitsAMigrerComptes(
-    ctx.produits,
-    ctx.comptesComptables ?? [],
-  );
-  for (const p of aMigrer) {
-    out.push({
-      id: `produit_compte_generique:${p.id}`,
-      type: "produit_compte_generique",
-      categorie: "comptabilite",
-      titre: `${p.code} — compte comptable à corriger`,
-      message: `${libelleProduit(p)} utilise encore un compte générique ou n'a pas le compte exigé par sa catégorie d'achat.`,
-      date: today,
-      href: `/parametres/produits`,
-      gravite: "warning",
-      entiteId: p.id,
-    });
+  if (moduleComptabiliteActif(ctx.parametres)) {
+    const aMigrer = produitsAMigrerComptes(
+      ctx.produits,
+      ctx.comptesComptables ?? [],
+    );
+    for (const p of aMigrer) {
+      out.push({
+        id: `produit_compte_generique:${p.id}`,
+        type: "produit_compte_generique",
+        categorie: "comptabilite",
+        titre: `${p.code} — compte comptable manquant`,
+        message: `${libelleProduit(p)} n'a pas de compte de charge et/ou de vente associé.`,
+        date: today,
+        href: `/parametres/produits`,
+        gravite: "warning",
+        entiteId: p.id,
+      });
+    }
   }
 
   return out.sort((a, b) => {

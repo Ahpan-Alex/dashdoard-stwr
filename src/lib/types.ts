@@ -260,6 +260,11 @@ export type Parametres = {
    * Fixée pour toute l'entreprise ; ne peut qu'augmenter ensuite.
    */
   longueurNumeroCompte?: number;
+  /**
+   * Module Comptabilité (plan, écritures, comptes produit).
+   * Absent = activé (rétrocompatibilité des entreprises déjà paramétrées).
+   */
+  moduleComptabilite?: boolean;
 };
 
 /**

@@ -30,6 +30,7 @@ type EntrepriseFormState = {
   logoDataUrl: string;
   signatureDataUrl: string;
   signatureNom: string;
+  moduleComptabilite: boolean;
 };
 
 function formDepuisParametres(p: Parametres): EntrepriseFormState {
@@ -53,6 +54,7 @@ function formDepuisParametres(p: Parametres): EntrepriseFormState {
     logoDataUrl: p.logoDataUrl ?? "",
     signatureDataUrl: p.signatureDataUrl ?? "",
     signatureNom: p.signatureNom ?? "",
+    moduleComptabilite: p.moduleComptabilite !== false,
   };
 }
 
@@ -77,6 +79,7 @@ function formVide(): EntrepriseFormState {
     logoDataUrl: "",
     signatureDataUrl: "",
     signatureNom: "",
+    moduleComptabilite: true,
   };
 }
 
@@ -197,6 +200,7 @@ export default function ParametresEntreprisePage() {
       logoDataUrl: entreprise.logoDataUrl || undefined,
       signatureDataUrl: entreprise.signatureDataUrl || undefined,
       signatureNom: entreprise.signatureNom.trim() || undefined,
+      moduleComptabilite: entreprise.moduleComptabilite,
     });
     setMode("liste");
     setApercu(false);
@@ -657,6 +661,27 @@ export default function ParametresEntreprisePage() {
               }
             />
           </label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2 lg:col-span-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={entreprise.moduleComptabilite}
+              onChange={(e) =>
+                setEntreprise({
+                  ...entreprise,
+                  moduleComptabilite: e.target.checked,
+                })
+              }
+            />
+            <span>
+              Activer le module Comptabilité
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                Plan comptable, écritures à la facturation, comptes sur les
+                fiches produit. Désactivé : aucun indicateur ni message lié aux
+                comptes.
+              </span>
+            </span>
+          </label>
           <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3">
             <button type="submit" className="btn btn-primary">
               Enregistrer
@@ -746,6 +771,14 @@ export default function ParametresEntreprisePage() {
               <LigneInfo
                 label="Signature"
                 value={parametres.signatureNom}
+              />
+              <LigneInfo
+                label="Module Comptabilité"
+                value={
+                  parametres.moduleComptabilite === false
+                    ? "Inactif"
+                    : "Actif"
+                }
               />
               <div className="sm:col-span-2">
                 <LigneInfo
