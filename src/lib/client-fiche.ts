@@ -1,5 +1,5 @@
 import { parseISO } from "date-fns";
-import { montantVente } from "./calculations";
+import { caRapportMensuelYoY, ecartPct, montantVente } from "./calculations";
 import {
   BL_STATUTS,
   COMMANDE_STATUTS,
@@ -11,10 +11,11 @@ import {
   totauxCommande,
   totauxDevis,
 } from "./commercial";
-import { libelleProduit } from "./produits";
+import { categorieRacine, libelleProduit } from "./produits";
 import type {
   Acompte,
   BonDeLivraison,
+  CategorieProduit,
   Commande,
   Devis,
   Facture,
@@ -101,6 +102,94 @@ export function caParArticleClient(
     })
     .filter((l) => l.montant !== 0 || l.quantite !== 0)
     .sort((a, b) => b.montant - a.montant);
+}
+
+export type CaAnnuelClient = {
+  annee: number;
+  anneePrec: number;
+  caAnnee: number;
+  caAnneePrec: number;
+  ecart: number;
+  pct: number | null;
+};
+
+/**
+ * CA annuel (année civile) net des remises, ventes du tiers en tant que Client.
+ */
+export function caAnnuelClient(
+  ventes: Vente[],
+  clientId: string,
+  annee = new Date().getFullYear(),
+): CaAnnuelClient {
+  const rapport = caRapportMensuelYoY(ventesDuClient(ventes, clientId), "tous", annee);
+  return {
+    annee: rapport.annee,
+    anneePrec: rapport.anneePrec,
+    caAnnee: rapport.total.caAnnee,
+    caAnneePrec: rapport.total.caAnneePrec,
+    ecart: rapport.total.ecart,
+    pct: rapport.total.pct,
+  };
+}
+
+export type CaFamilleClient = {
+  id: string;
+  libelle: string;
+  caAnnee: number;
+  caAnneePrec: number;
+  ecart: number;
+  pct: number | null;
+};
+
+const FAMILLE_SANS_ID = "__sans_famille__";
+
+function montantParFamille(
+  ventes: Vente[],
+  produits: Produit[],
+  categories: CategorieProduit[],
+  clientId: string,
+  annee: number,
+): Map<string, { libelle: string; montant: number }> {
+  const map = new Map<string, { libelle: string; montant: number }>();
+  for (const art of caParArticleClient(ventes, produits, clientId, annee)) {
+    const produit = produits.find((p) => p.id === art.id);
+    const racine = categorieRacine(produit?.categorieId, categories);
+    const id = racine?.id ?? FAMILLE_SANS_ID;
+    const libelle = racine?.libelle ?? "Sans famille";
+    const cur = map.get(id) ?? { libelle, montant: 0 };
+    cur.montant += art.montant;
+    map.set(id, cur);
+  }
+  return map;
+}
+
+/** CA HT par famille de produits (racine), N vs N-1. */
+export function caParFamilleClient(
+  ventes: Vente[],
+  produits: Produit[],
+  categories: CategorieProduit[],
+  clientId: string,
+  annee = new Date().getFullYear(),
+): CaFamilleClient[] {
+  const n = montantParFamille(ventes, produits, categories, clientId, annee);
+  const n1 = montantParFamille(ventes, produits, categories, clientId, annee - 1);
+  const ids = new Set([...n.keys(), ...n1.keys()]);
+  return [...ids]
+    .map((id) => {
+      const caAnnee = n.get(id)?.montant ?? 0;
+      const caAnneePrec = n1.get(id)?.montant ?? 0;
+      const { ecart, pct } = ecartPct(caAnnee, caAnneePrec);
+      return {
+        id,
+        libelle: n.get(id)?.libelle ?? n1.get(id)?.libelle ?? "Sans famille",
+        caAnnee,
+        caAnneePrec,
+        ecart,
+        pct,
+      };
+    })
+    .filter((l) => l.caAnnee !== 0 || l.caAnneePrec !== 0)
+    .sort((a, b) => b.caAnnee - a.caAnnee || a.libelle.localeCompare(b.libelle, "fr"));
 }
 
 export type CategorieDocumentClient =

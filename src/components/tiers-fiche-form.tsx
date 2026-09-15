@@ -2,23 +2,41 @@
 
 import type { FormEvent } from "react";
 import { CompteTiersSelect } from "@/components/compte-tiers-select";
+import {
+  adressePrincipaleEffective,
+  adresseTiersVide,
+  synchroniserAdresseLegacy,
+} from "@/lib/adresse-tiers";
 import { CLIENT_TYPES } from "@/lib/commercial";
 import {
   PREFIXE_COMPTE_CLIENT,
   PREFIXE_COMPTE_FOURNISSEUR,
 } from "@/lib/comptabilite";
+import { FORMES_JURIDIQUES_MG, PAYS_DEFAUT_TIERS, REGIONS_MADAGASCAR } from "@/lib/madagascar";
 import { ROLE_TIERS_LABELS } from "@/lib/tiers";
-import type { Client, CompteComptable, RoleTiers, Tiers } from "@/lib/types";
+import type {
+  Client,
+  CompteComptable,
+  PointDeVente,
+  RoleTiers,
+  Tiers,
+} from "@/lib/types";
 
 export type TiersFormState = {
   code: string;
   nom: string;
+  nomCommercial: string;
+  formeJuridique: string;
+  capitalSocial: string;
   telephone: string;
   email: string;
   adresse: string;
   ville: string;
+  region: string;
   nif: string;
   stat: string;
+  rcs: string;
+  siteRattachementId: string;
   type: Client["type"];
   specialite: string;
   roles: RoleTiers[];
@@ -34,12 +52,18 @@ export type TiersFormState = {
 export const TIERS_FORM_VIDE: TiersFormState = {
   code: "",
   nom: "",
+  nomCommercial: "",
+  formeJuridique: "",
+  capitalSocial: "",
   telephone: "",
   email: "",
   adresse: "",
   ville: "",
+  region: "",
   nif: "",
   stat: "",
+  rcs: "",
+  siteRattachementId: "",
   type: "restaurant",
   specialite: "",
   roles: ["client"],
@@ -53,15 +77,22 @@ export const TIERS_FORM_VIDE: TiersFormState = {
 };
 
 export function tiersVersForm(t: Tiers): TiersFormState {
+  const principale = adressePrincipaleEffective(t);
   return {
     code: t.code ?? "",
     nom: t.nom,
+    nomCommercial: t.nomCommercial ?? "",
+    formeJuridique: t.formeJuridique ?? "",
+    capitalSocial: t.capitalSocial != null ? String(t.capitalSocial) : "",
     telephone: t.telephone ?? "",
     email: t.email ?? "",
-    adresse: t.adresse ?? "",
-    ville: t.ville ?? "",
+    adresse: principale.ligne1 || t.adresse || "",
+    ville: principale.ville || t.ville || "",
+    region: principale.region ?? "",
     nif: t.nif ?? "",
     stat: t.stat ?? "",
+    rcs: t.rcs ?? "",
+    siteRattachementId: t.siteRattachementId ?? "",
     type: t.type ?? "autre",
     specialite: t.specialite ?? "",
     roles: t.roles.length ? t.roles : ["client"],
@@ -87,17 +118,33 @@ export function tiersVersForm(t: Tiers): TiersFormState {
 
 export function payloadTiers(
   form: TiersFormState,
+  base?: Tiers,
 ): Omit<Tiers, "id" | "actif" | "contacts"> {
   const roles = form.roles;
+  const adressePrincipale = adresseTiersVide({
+    ...base?.adressePrincipale,
+    ligne1: form.adresse.trim(),
+    ville: form.ville.trim(),
+    region: form.region.trim(),
+    pays: base?.adressePrincipale?.pays || PAYS_DEFAUT_TIERS,
+  });
+  const legacy = synchroniserAdresseLegacy({ adressePrincipale });
+  const capital = Number(form.capitalSocial.replace(/\s/g, "").replace(",", "."));
   return {
     code: form.code.trim() || undefined,
     nom: form.nom.trim(),
+    nomCommercial: form.nomCommercial.trim() || undefined,
+    formeJuridique: form.formeJuridique.trim() || undefined,
+    capitalSocial: Number.isFinite(capital) && capital > 0 ? capital : undefined,
     telephone: form.telephone.trim() || undefined,
     email: form.email.trim() || undefined,
-    adresse: form.adresse.trim() || undefined,
-    ville: form.ville.trim() || undefined,
+    adresse: legacy.adresse,
+    ville: legacy.ville,
     nif: form.nif.trim() || undefined,
     stat: form.stat.trim() || undefined,
+    rcs: form.rcs.trim() || undefined,
+    siteRattachementId: form.siteRattachementId || undefined,
+    adressePrincipale,
     type: roles.includes("client") ? form.type : undefined,
     specialite: roles.includes("fournisseur")
       ? form.specialite.trim() || undefined
@@ -144,6 +191,7 @@ type Props = {
   ignoreTiersId?: string;
   compteClientVerrouille?: boolean;
   compteFournisseurVerrouille?: boolean;
+  pointsDeVente?: PointDeVente[];
 };
 
 export function TiersFicheForm({
@@ -157,6 +205,7 @@ export function TiersFicheForm({
   ignoreTiersId,
   compteClientVerrouille,
   compteFournisseurVerrouille,
+  pointsDeVente = [],
 }: Props) {
   const estClient = form.roles.includes("client");
   const estFournisseur = form.roles.includes("fournisseur");
@@ -194,12 +243,45 @@ export function TiersFicheForm({
         />
       </label>
       <label className="block text-xs font-semibold text-muted sm:col-span-2">
-        Nom
+        Nom ou raison sociale
         <input
           className="input mt-1"
           value={form.nom}
           onChange={(e) => setForm({ ...form, nom: e.target.value })}
           required
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Nom commercial ou marque
+        <input
+          className="input mt-1"
+          value={form.nomCommercial}
+          onChange={(e) => setForm({ ...form, nomCommercial: e.target.value })}
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Forme juridique
+        <select
+          className="select mt-1"
+          value={form.formeJuridique}
+          onChange={(e) => setForm({ ...form, formeJuridique: e.target.value })}
+        >
+          <option value="">—</option>
+          {FORMES_JURIDIQUES_MG.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Capital social (Ar)
+        <input
+          type="number"
+          min={0}
+          className="input mt-1"
+          value={form.capitalSocial}
+          onChange={(e) => setForm({ ...form, capitalSocial: e.target.value })}
         />
       </label>
       <label className="block text-xs font-semibold text-muted">
@@ -236,6 +318,40 @@ export function TiersFicheForm({
         />
       </label>
       <label className="block text-xs font-semibold text-muted">
+        Région
+        <select
+          className="select mt-1"
+          value={form.region}
+          onChange={(e) => setForm({ ...form, region: e.target.value })}
+        >
+          <option value="">—</option>
+          {REGIONS_MADAGASCAR.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Site de rattachement
+        <select
+          className="select mt-1"
+          value={form.siteRattachementId}
+          onChange={(e) =>
+            setForm({ ...form, siteRattachementId: e.target.value })
+          }
+        >
+          <option value="">—</option>
+          {pointsDeVente
+            .filter((p) => p.actif)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nom}
+              </option>
+            ))}
+        </select>
+      </label>
+      <label className="block text-xs font-semibold text-muted">
         NIF
         <input
           className="input mt-1"
@@ -251,6 +367,18 @@ export function TiersFicheForm({
           onChange={(e) => setForm({ ...form, stat: e.target.value })}
         />
       </label>
+      <label className="block text-xs font-semibold text-muted">
+        RCS
+        <input
+          className="input mt-1"
+          value={form.rcs}
+          onChange={(e) => setForm({ ...form, rcs: e.target.value })}
+        />
+      </label>
+      <p className="sm:col-span-2 lg:col-span-3 text-[11px] text-muted">
+        Sur les factures, devis, BL et BC, seuls le nom, le NIF et le STAT sont
+        imprimés. Les autres champs restent informatifs sur la fiche.
+      </p>
 
       {estClient && (
         <>

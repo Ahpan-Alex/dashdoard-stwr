@@ -317,11 +317,20 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
           {z.client.telClient && (client?.telephone || apercuModele) && (
             <p className="text-[11px] text-muted">{client?.telephone ?? "020 xx xxx xx"}</p>
           )}
-          {z.client.immatriculation && (client?.nif || apercuModele) && (
-            <p className="mt-1 text-[11px]">
-              NIF : {client?.nif ?? "—"}
-            </p>
-          )}
+          {z.client.immatriculation &&
+            (client?.nif || client?.stat || apercuModele) && (
+              <p className="mt-1 text-[11px]">
+                {client?.nif || apercuModele
+                  ? `NIF : ${client?.nif ?? "—"}`
+                  : null}
+                {(client?.nif || apercuModele) && (client?.stat || apercuModele)
+                  ? " · "
+                  : null}
+                {client?.stat || apercuModele
+                  ? `STAT : ${client?.stat ?? "—"}`
+                  : null}
+              </p>
+            )}
         </>
       ),
     });

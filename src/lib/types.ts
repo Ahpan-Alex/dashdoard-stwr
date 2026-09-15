@@ -390,21 +390,55 @@ export type Fournisseur = {
 export type RoleTiers = "client" | "fournisseur";
 
 /** Fiche unique : identité partagée, rôles Client et/ou Fournisseur. */
+/** Adresse Madagascar (fiche Tiers — usages distincts). */
+export type AdresseTiers = {
+  id?: string;
+  /** Libellé d'un site / dépôt de livraison. */
+  libelle?: string;
+  ligne1?: string;
+  ligne2?: string;
+  quartier?: string;
+  ville?: string;
+  region?: string;
+  codePostal?: string;
+  pays?: string;
+};
+
 export type Tiers = {
   id: string;
   code?: string;
+  /** Nom ou raison sociale (obligatoire). */
   nom: string;
+  /** Nom commercial ou marque (informatif, hors documents). */
+  nomCommercial?: string;
+  /** Forme juridique (informatif, hors documents). */
+  formeJuridique?: string;
+  /** Capital social, montant simple (informatif, hors documents). */
+  capitalSocial?: number;
   telephone?: string;
   email?: string;
+  /** Ligne d'adresse héritée / dérivée de l'adresse principale. */
   adresse?: string;
   ville?: string;
   nif?: string;
   stat?: string;
+  /** Registre du commerce (informatif, hors documents). */
+  rcs?: string;
   type?: Client["type"];
   specialite?: string;
   actif: boolean;
   contacts?: ClientContact[];
   roles: RoleTiers[];
+  /** Site (point de vente / entrepôt) de rattachement. */
+  siteRattachementId?: string;
+  adressePrincipale?: AdresseTiers;
+  adresseCourrier?: AdresseTiers;
+  adresseFacturation?: AdresseTiers;
+  adressesLivraison?: AdresseTiers[];
+  /** Si vrai / absent : courrier = adresse principale. */
+  memeAdresseCourrier?: boolean;
+  memeAdresseFacturation?: boolean;
+  memeAdresseLivraison?: boolean;
   delaiPaiementClientJours?: number;
   remiseHabituelleClientPercent?: number;
   plafondCredit?: number;
@@ -512,6 +546,9 @@ export type Achat = {
   avoirs: AvoirAchat[];
   note?: string;
   dateValidation?: string;
+  /** Utilisateur à la saisie (colonne « Vendeur » de la fiche Tiers). */
+  vendeurId?: string;
+  vendeurNom?: string;
 };
 
 export type TransfertStockStatut =
@@ -788,6 +825,9 @@ export type Facture = {
   presentation?: SnapshotPresentationDocument;
   /** Vente émise malgré un dépassement de plafond (rôle habilité). */
   derogationCredit?: boolean;
+  /** Commercial / utilisateur à l'émission. */
+  vendeurId?: string;
+  vendeurNom?: string;
 };
 
 export type JournalAuditAction =

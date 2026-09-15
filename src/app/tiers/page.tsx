@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency } from "@/lib/format";
+import { REGIONS_MADAGASCAR } from "@/lib/madagascar";
 import { useStore } from "@/lib/store";
 import {
   assurerTiers,
@@ -23,7 +24,12 @@ import {
   soldeFournisseurTiers,
 } from "@/lib/tiers";
 import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
-import type { RoleTiers, Tiers } from "@/lib/types";
+import {
+  FILTRES_LISTE_TIERS_VIDE,
+  filtrerListeTiers,
+  type FiltresListeTiers,
+} from "@/lib/tiers-filtres";
+import type { Tiers } from "@/lib/types";
 
 export default function TiersPage() {
   return (
@@ -42,6 +48,7 @@ function TiersListe() {
     acomptes,
     achats,
     parametres,
+    pointsDeVente,
     addTiers,
     updateTiers,
     deleteTiers,
@@ -52,15 +59,38 @@ function TiersListe() {
     () => assurerTiers({ clients, fournisseurs, tiers }),
     [clients, fournisseurs, tiers],
   );
-  const [filtre, setFiltre] = useState<RoleTiers | "tous">("tous");
+  const [filtres, setFiltres] = useState<FiltresListeTiers>(
+    FILTRES_LISTE_TIERS_VIDE,
+  );
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(TIERS_FORM_VIDE);
 
-  const visibles = liste.filter((t) => {
-    if (filtre === "tous") return true;
-    return t.roles.includes(filtre);
-  });
+  const ctxFiltres = useMemo(
+    () => ({ factures, acomptes, achats, parametres }),
+    [factures, acomptes, achats, parametres],
+  );
+
+  const visibles = useMemo(
+    () => filtrerListeTiers(liste, filtres, ctxFiltres),
+    [liste, filtres, ctxFiltres],
+  );
+
+  const villes = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of liste) {
+      const v = (t.adressePrincipale?.ville || t.ville || "").trim();
+      if (v) set.add(v);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [liste]);
+
+  function patchFiltre<K extends keyof FiltresListeTiers>(
+    key: K,
+    value: FiltresListeTiers[K],
+  ) {
+    setFiltres((f) => ({ ...f, [key]: value }));
+  }
 
   function fermer() {
     setOpen(false);
@@ -70,7 +100,8 @@ function TiersListe() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload = payloadTiers(form);
+    const base = editingId ? liste.find((t) => t.id === editingId) : undefined;
+    const payload = payloadTiers(form, base);
     if (editingId) {
       const res = updateTiers(editingId, payload);
       if (!res.ok) {
@@ -122,23 +153,160 @@ function TiersListe() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {(
-          [
-            ["tous", "Tous"],
-            ["client", "Clients"],
-            ["fournisseur", "Fournisseurs"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`btn ${filtre === id ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => setFiltre(id)}
+      <div className="mb-4 grid gap-3 rounded-[var(--radius)] border border-line bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-xs font-semibold text-muted">
+          Rôle
+          <select
+            className="select mt-1"
+            value={filtres.role}
+            onChange={(e) =>
+              patchFiltre("role", e.target.value as FiltresListeTiers["role"])
+            }
           >
-            {label}
+            <option value="tous">Tous</option>
+            <option value="client">Client</option>
+            <option value="fournisseur">Fournisseur</option>
+            <option value="les_deux">Les deux</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Nom ou raison sociale
+          <input
+            className="input mt-1"
+            value={filtres.nom}
+            onChange={(e) => patchFiltre("nom", e.target.value)}
+            placeholder="Recherche…"
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          NIF / STAT / RCS
+          <input
+            className="input mt-1"
+            value={filtres.immatriculation}
+            onChange={(e) => patchFiltre("immatriculation", e.target.value)}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Statut du solde
+          <select
+            className="select mt-1"
+            value={filtres.statutSolde}
+            onChange={(e) =>
+              patchFiltre(
+                "statutSolde",
+                e.target.value as FiltresListeTiers["statutSolde"],
+              )
+            }
+          >
+            <option value="tous">Tous</option>
+            <option value="paye">Payé</option>
+            <option value="impaye">Impayé</option>
+            <option value="en_retard">En retard</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Balance âgée
+          <select
+            className="select mt-1"
+            value={filtres.trancheAgee}
+            onChange={(e) =>
+              patchFiltre(
+                "trancheAgee",
+                e.target.value as FiltresListeTiers["trancheAgee"],
+              )
+            }
+          >
+            <option value="tous">Toutes</option>
+            <option value="0-30">0–30 j</option>
+            <option value="31-60">31–60 j</option>
+            <option value="61-90">61–90 j</option>
+            <option value="90+">+90 j</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Dépassement plafond
+          <select
+            className="select mt-1"
+            value={filtres.depassePlafond}
+            onChange={(e) =>
+              patchFiltre(
+                "depassePlafond",
+                e.target.value as FiltresListeTiers["depassePlafond"],
+              )
+            }
+          >
+            <option value="tous">Tous</option>
+            <option value="oui">Oui</option>
+            <option value="non">Non</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Site de rattachement
+          <select
+            className="select mt-1"
+            value={filtres.siteId}
+            onChange={(e) => patchFiltre("siteId", e.target.value)}
+          >
+            <option value="">Tous</option>
+            {pointsDeVente.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Ville
+          <input
+            className="input mt-1"
+            list="tiers-villes"
+            value={filtres.ville}
+            onChange={(e) => patchFiltre("ville", e.target.value)}
+          />
+          <datalist id="tiers-villes">
+            {villes.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Région
+          <select
+            className="select mt-1"
+            value={filtres.region}
+            onChange={(e) => patchFiltre("region", e.target.value)}
+          >
+            <option value="">Toutes</option>
+            {REGIONS_MADAGASCAR.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Statut
+          <select
+            className="select mt-1"
+            value={filtres.actif}
+            onChange={(e) =>
+              patchFiltre("actif", e.target.value as FiltresListeTiers["actif"])
+            }
+          >
+            <option value="tous">Tous</option>
+            <option value="actif">Actif</option>
+            <option value="inactif">Inactif</option>
+          </select>
+        </label>
+        <div className="flex items-end">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setFiltres(FILTRES_LISTE_TIERS_VIDE)}
+          >
+            Réinitialiser
           </button>
-        ))}
+        </div>
       </div>
 
       {open && (
@@ -151,6 +319,7 @@ function TiersListe() {
           comptes={comptesComptables}
           tiers={liste}
           ignoreTiersId={editingId ?? undefined}
+          pointsDeVente={pointsDeVente}
           compteClientVerrouille={compteUtiliseEnEcriture(
             form.compteClientId,
             ecrituresComptables,
@@ -166,7 +335,7 @@ function TiersListe() {
         <EmptyState
           icon={<Users className="h-5 w-5" />}
           title="Aucun tiers"
-          description="Créez une fiche pour un client, un fournisseur, ou les deux."
+          description="Aucun tiers ne correspond à ces filtres, ou le carnet est vide."
         />
       ) : (
         <div className="table-shell">

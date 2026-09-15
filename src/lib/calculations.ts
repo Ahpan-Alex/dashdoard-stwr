@@ -275,7 +275,7 @@ export type RapportCaYoY = {
   moyenneCumule: Omit<LigneCaYoY, "key" | "label" | "rangeAnnee" | "rangeAnneePrec">;
 };
 
-function ecartPct(caAnnee: number, caAnneePrec: number) {
+export function ecartPct(caAnnee: number, caAnneePrec: number) {
   const ecart = caAnnee - caAnneePrec;
   const pct = caAnneePrec === 0 ? null : (ecart / caAnneePrec) * 100;
   return { ecart, pct };

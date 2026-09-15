@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   BarChart3,
   Contact,
+  FileText,
+  MapPin,
   Scale,
   ScrollText,
   SlidersHorizontal,
@@ -16,8 +18,12 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
+import { TiersAdressePanel } from "@/components/tiers-adresse-panel";
+import { TiersDashboardPanel } from "@/components/tiers-dashboard-panel";
+import { TiersFacturesPanel } from "@/components/tiers-factures-panel";
 import { couleurStatutDocument } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { FORMES_JURIDIQUES_MG } from "@/lib/madagascar";
 import { useStore } from "@/lib/store";
 import {
   assurerTiers,
@@ -34,15 +40,14 @@ import {
 } from "@/lib/tiers";
 import type { ClientContact } from "@/lib/types";
 
-type Onglet = "solde" | "historique" | "conditions" | "contacts" | "tableau";
-
-const ONGLETS: { id: Onglet; label: string; icon: typeof Scale }[] = [
-  { id: "solde", label: "Soldes", icon: Scale },
-  { id: "historique", label: "Historique", icon: ScrollText },
-  { id: "conditions", label: "Conditions", icon: SlidersHorizontal },
-  { id: "contacts", label: "Contacts", icon: Contact },
-  { id: "tableau", label: "Tableau de bord", icon: BarChart3 },
-];
+type Onglet =
+  | "dashboard"
+  | "adresse"
+  | "factures"
+  | "solde"
+  | "historique"
+  | "conditions"
+  | "contacts";
 
 export default function TiersDetailPage() {
   const params = useParams();
@@ -58,6 +63,10 @@ export default function TiersDetailPage() {
     commandes,
     bonsDeLivraison,
     parametres,
+    ventes,
+    produits,
+    categoriesProduits,
+    pointsDeVente,
     updateTiers,
     updatePlafondCredit,
     comptesComptables,
@@ -68,7 +77,7 @@ export default function TiersDetailPage() {
     [clients, fournisseurs, tiers],
   );
   const tiersActif = liste.find((t) => t.id === id);
-  const [onglet, setOnglet] = useState<Onglet>("solde");
+  const [onglet, setOnglet] = useState<Onglet>("dashboard");
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<StatutMouvementTiers | "tous">(
@@ -121,6 +130,20 @@ export default function TiersDetailPage() {
     );
   }
 
+  const onglets: { id: Onglet; label: string; icon: typeof Scale }[] = [
+    ...(estClient(tiersActif)
+      ? [{ id: "dashboard" as const, label: "Dashboard", icon: BarChart3 }]
+      : []),
+    { id: "adresse", label: "Adresse", icon: MapPin },
+    { id: "factures", label: "Factures", icon: FileText },
+    { id: "solde", label: "Soldes", icon: Scale },
+    { id: "historique", label: "Historique", icon: ScrollText },
+    { id: "conditions", label: "Conditions", icon: SlidersHorizontal },
+    { id: "contacts", label: "Contacts", icon: Contact },
+  ];
+  const ongletAffiche: Onglet =
+    onglet === "dashboard" && !estClient(tiersActif) ? "adresse" : onglet;
+
   const soldeC = estClient(tiersActif)
     ? soldeClientTiers(tiersActif.id, { factures, acomptes, parametres })
     : null;
@@ -135,6 +158,9 @@ export default function TiersDetailPage() {
     : [];
   const plafond = tiersActif.plafondCredit ?? 0;
   const depasse = Boolean(soldeC && plafond > 0 && soldeC.solde > plafond);
+  const forme = FORMES_JURIDIQUES_MG.find(
+    (f) => f.id === tiersActif.formeJuridique,
+  )?.label;
 
   function enregistrerPlafond() {
     const v = Math.max(0, Number(plafondSaisi ?? plafond) || 0);
@@ -156,8 +182,8 @@ export default function TiersDetailPage() {
       <PageHeader
         title={tiersActif.nom}
         description={`${libelleRolesTiers(tiersActif)}${
-          tiersActif.ville ? ` · ${tiersActif.ville}` : ""
-        }`}
+          tiersActif.nomCommercial ? ` · ${tiersActif.nomCommercial}` : ""
+        }${tiersActif.ville ? ` · ${tiersActif.ville}` : ""}`}
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -174,12 +200,46 @@ export default function TiersDetailPage() {
         }
       />
 
+      <dl className="mb-6 grid gap-3 rounded-[var(--radius)] border border-line bg-card p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        <div>
+          <dt className="text-xs text-muted">Forme juridique</dt>
+          <dd className="font-medium">{forme || tiersActif.formeJuridique || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">Capital social</dt>
+          <dd className="font-medium">
+            {tiersActif.capitalSocial
+              ? formatCurrency(tiersActif.capitalSocial)
+              : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">NIF</dt>
+          <dd className="font-medium">{tiersActif.nif || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">STAT</dt>
+          <dd className="font-medium">{tiersActif.stat || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">RCS</dt>
+          <dd className="font-medium">{tiersActif.rcs || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">Site de rattachement</dt>
+          <dd className="font-medium">
+            {pointsDeVente.find((p) => p.id === tiersActif.siteRattachementId)
+              ?.nom || "—"}
+          </dd>
+        </div>
+      </dl>
+
       <nav className="mb-6 flex flex-wrap gap-2">
-        {ONGLETS.map(({ id: ongletId, label, icon: Icon }) => (
+        {onglets.map(({ id: ongletId, label, icon: Icon }) => (
           <button
             key={ongletId}
             type="button"
-            className={`btn ${onglet === ongletId ? "btn-primary" : "btn-secondary"}`}
+            className={`btn ${ongletAffiche === ongletId ? "btn-primary" : "btn-secondary"}`}
             onClick={() => setOnglet(ongletId)}
           >
             <Icon className="h-4 w-4" />
@@ -188,7 +248,27 @@ export default function TiersDetailPage() {
         ))}
       </nav>
 
-      {onglet === "solde" && (
+      {ongletAffiche === "dashboard" && estClient(tiersActif) && (
+        <TiersDashboardPanel
+          clientId={tiersActif.id}
+          ventes={ventes}
+          produits={produits}
+          categories={categoriesProduits}
+          pointsDeVente={pointsDeVente}
+        />
+      )}
+
+      {ongletAffiche === "adresse" && (
+        <TiersAdressePanel
+          key={tiersActif.id}
+          tiers={tiersActif}
+          onSave={(patch) => updateTiers(tiersActif.id, patch)}
+        />
+      )}
+
+      {ongletAffiche === "factures" && <TiersFacturesPanel tiers={tiersActif} />}
+
+      {ongletAffiche === "solde" && (
         <div className="space-y-6">
           {soldeC && (
             <section className="rounded-[var(--radius)] border border-line bg-card p-5">
@@ -228,7 +308,7 @@ export default function TiersDetailPage() {
         </div>
       )}
 
-      {onglet === "historique" && (
+      {ongletAffiche === "historique" && (
         <div>
           <div className="mb-4 grid gap-3 sm:grid-cols-4">
             <label className="text-xs font-semibold text-muted">
@@ -308,7 +388,7 @@ export default function TiersDetailPage() {
         </div>
       )}
 
-      {onglet === "conditions" && (
+      {ongletAffiche === "conditions" && (
         <div className="space-y-6">
           {estClient(tiersActif) && (
             <section className="rounded-[var(--radius)] border border-line bg-card p-5">
@@ -414,32 +494,13 @@ export default function TiersDetailPage() {
         </div>
       )}
 
-      {onglet === "contacts" && (
+      {ongletAffiche === "contacts" && (
         <ClientContactsPanel
           contacts={tiersActif.contacts ?? []}
           onChange={(contacts: ClientContact[]) =>
             updateTiers(tiersActif.id, { contacts })
           }
         />
-      )}
-
-      {onglet === "tableau" && (
-        <div className="rounded-[var(--radius)] border border-line bg-card p-5 text-sm text-muted">
-          <p>
-            Identité : {[tiersActif.adresse, tiersActif.ville].filter(Boolean).join(", ") || "—"}
-          </p>
-          <p className="mt-1">
-            NIF {tiersActif.nif || "—"} · STAT {tiersActif.stat || "—"}
-          </p>
-          <p className="mt-3">
-            {estClient(tiersActif)
-              ? `Encours client ${formatCurrency(soldeC?.solde ?? 0)}.`
-              : ""}{" "}
-            {estFournisseur(tiersActif)
-              ? `Dettes fournisseur ${formatCurrency(soldeF?.solde ?? 0)}.`
-              : ""}
-          </p>
-        </div>
       )}
     </RequirePermission>
   );

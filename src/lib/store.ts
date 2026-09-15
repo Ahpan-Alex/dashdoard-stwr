@@ -1611,6 +1611,7 @@ export const useStore = create<Store>()((set, get) => ({
       addAchat: (achat) => {
         const id = uid("ach");
         const numero = achat.numero || nextNumeroAchat(get().achats);
+        const actor = getActiviteActor();
         set((state) => ({
           achats: [
             {
@@ -1620,6 +1621,8 @@ export const useStore = create<Store>()((set, get) => ({
               livraisons: achat.livraisons ?? [],
               paiements: achat.paiements ?? [],
               avoirs: achat.avoirs ?? [],
+              vendeurId: achat.vendeurId ?? actor.id,
+              vendeurNom: achat.vendeurNom ?? actor.nom,
             },
             ...state.achats,
           ],
@@ -3618,9 +3621,15 @@ export const useStore = create<Store>()((set, get) => ({
         const id = uid("fac");
         set((state) => {
           const modele = modeleCourant(state, "facture");
+          const actor = getActiviteActor();
           const complete = figerCumpSiCloture(
             avecPresentationSiBesoin(
-              { ...facture, id },
+              {
+                ...facture,
+                id,
+                vendeurId: facture.vendeurId ?? actor.id,
+                vendeurNom: facture.vendeurNom ?? actor.nom,
+              },
               state.parametres,
               modele,
             ),

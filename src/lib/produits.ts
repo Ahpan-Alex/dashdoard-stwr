@@ -74,6 +74,23 @@ export function categoriesFeuilles(categories: CategorieProduit[]) {
   return categories.filter((c) => c.actif && !parents.has(c.id));
 }
 
+/** Famille racine (profondeur 0) d'une catégorie. */
+export function categorieRacine(
+  categorieId: string | undefined,
+  categories: CategorieProduit[],
+): CategorieProduit | undefined {
+  if (!categorieId) return undefined;
+  let current = categories.find((c) => c.id === categorieId);
+  const guard = new Set<string>();
+  while (current?.parentId && !guard.has(current.id)) {
+    guard.add(current.id);
+    const parent = categories.find((c) => c.id === current!.parentId);
+    if (!parent) break;
+    current = parent;
+  }
+  return current;
+}
+
 /** 0 = famille, 1 = sous-famille, 2 = sous-sous-famille */
 export function profondeurCategorie(
   categorieId: string,

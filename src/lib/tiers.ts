@@ -1,6 +1,11 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { soldeAchat, totauxAchat, totauxAvoir } from "./achats";
 import {
+  adresseFacturationEffective,
+  formaterAdresseTiers,
+  legacyDepuisAdresse,
+} from "./adresse-tiers";
+import {
   ACOMPTE_STATUTS,
   BL_STATUTS,
   COMMANDE_STATUTS,
@@ -80,14 +85,16 @@ export function estFournisseur(t: Pick<Tiers, "roles">) {
 }
 
 export function clientDepuisTiers(t: Tiers): Client {
+  const facturation = adresseFacturationEffective(t);
+  const legacy = legacyDepuisAdresse(facturation);
   return {
     id: t.id,
     code: t.code,
     nom: t.nom,
     telephone: t.telephone,
     email: t.email,
-    adresse: t.adresse,
-    ville: t.ville,
+    adresse: formaterAdresseTiers(facturation) || t.adresse || legacy.adresse,
+    ville: facturation.ville || t.ville,
     nif: t.nif,
     stat: t.stat,
     type: t.type ?? "autre",
