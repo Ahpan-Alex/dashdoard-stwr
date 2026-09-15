@@ -88,6 +88,11 @@ export type FormatsNumeroPieces = Partial<
   Record<TypePieceNumerotee, FormatNumeroPiece>
 >;
 
+/** Prochain compteur (hors préfixes) pour démarrer en cours d’exercice. */
+export type ProchainsNumerosPieces = Partial<
+  Record<TypePieceNumerotee, number>
+>;
+
 /** Exercice comptable : année civile (01/01–31/12) ou à cheval sur deux années. */
 export type ExerciceComptable = {
   id: string;
@@ -391,6 +396,12 @@ export type Parametres = {
   moduleComptabilite?: boolean;
   /** Formats de n° pour devis, commande, BL et facture client. */
   formatsNumeroPieces?: FormatsNumeroPieces;
+  /**
+   * Prochain n° séquentiel (hors préfixes) si l’entreprise démarre en cours
+   * d’exercice sans ressaisir l’historique. Absent = 1. Le réel est le max
+   * entre ce plancher et les pièces déjà émises sur le même préfixe.
+   */
+  prochainsNumerosPieces?: ProchainsNumerosPieces;
 };
 
 /**

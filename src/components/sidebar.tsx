@@ -351,6 +351,10 @@ const sections: { title: string; links: NavLink[] }[] = [
                 label: "Gestion n° des pièces",
                 children: [
                   {
+                    href: "/parametres/configuration/numerotation/initiale",
+                    label: "Numérotation initiale",
+                  },
+                  {
                     href: "/parametres/configuration/numerotation/devis",
                     label: "Devis",
                   },

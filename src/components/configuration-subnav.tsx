@@ -16,6 +16,10 @@ export const CONFIGURATION_MENUS = [
 ] as const;
 
 export const NUMEROTATION_MENUS = [
+  {
+    href: "/parametres/configuration/numerotation/initiale",
+    label: "Numérotation initiale",
+  },
   ...PIECES_NUMEROTEES.map((p) => ({
     href: `/parametres/configuration/numerotation/${p.slug}`,
     label: p.label,

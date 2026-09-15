@@ -2,6 +2,7 @@ import { type OptsNumeroDocument } from "./exercices";
 import {
   formatNumeroPieceEffectif,
   nextNumeroSelonFormat,
+  prochainNumeroPieceEffectif,
 } from "./numerotation-pieces";
 import type {
   Acompte,
@@ -47,13 +48,17 @@ export function nextNumeroDocumentCommercial(opts: {
       ? opts.date
       : (opts.date ?? new Date()).toISOString();
   const cfg = formatNumeroPieceEffectif(opts.parametres, "facture_client");
+  const estFactureClient = opts.prefix === "FAC";
   return nextNumeroSelonFormat(
     {
       ...cfg,
-      prefixeLibre: opts.prefix === "FAC" ? cfg.prefixeLibre : opts.prefix,
+      prefixeLibre: estFactureClient ? cfg.prefixeLibre : opts.prefix,
     },
     opts.existing,
     dateIso,
+    estFactureClient
+      ? prochainNumeroPieceEffectif(opts.parametres, "facture_client")
+      : 1,
   );
 }
 

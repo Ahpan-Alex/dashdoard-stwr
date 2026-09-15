@@ -23,11 +23,23 @@ export default function GestionNumeroPiecesPage() {
       <ConfigurationSubnav />
       <PageHeader
         title="Gestion n° des pièces"
-        description="Définissez le format de numéro pour chaque document commercial. La facture fournisseur reprend le n° saisi manuellement."
+        description="Définissez le format de numéro pour chaque document commercial, ou le prochain compteur si vous démarrez en cours d’exercice. La facture fournisseur reprend le n° saisi manuellement."
         showPosSelector={false}
       />
       <NumerotationSubnav />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Link
+          href="/parametres/configuration/numerotation/initiale"
+          className="rounded-[var(--radius)] border border-line bg-card p-4 transition-shadow hover:border-sea-300 hover:shadow-md sm:col-span-2 lg:col-span-3"
+        >
+          <p className="font-display text-base font-semibold text-ink">
+            Numérotation initiale
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Prochain n° de devis, commande, BL et facture pour continuer en
+            cours d’exercice sans ressaisir les anciens documents.
+          </p>
+        </Link>
         {PIECES_NUMEROTEES.map((p) => {
           const format = formatNumeroPieceEffectif(parametres, p.type);
           return (

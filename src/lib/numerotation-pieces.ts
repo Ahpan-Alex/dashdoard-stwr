@@ -98,6 +98,23 @@ export function clampLongueurNumeroPiece(value: number) {
   );
 }
 
+const PROCHAIN_NUMERO_MAX = 10 ** LONGUEUR_NUMERO_PIECE_MAX - 1;
+
+export function clampProchainNumeroPiece(value: unknown) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(PROCHAIN_NUMERO_MAX, n);
+}
+
+export function prochainNumeroPieceEffectif(
+  parametres: Parametres | undefined,
+  type: TypePieceNumerotee,
+) {
+  return clampProchainNumeroPiece(
+    parametres?.prochainsNumerosPieces?.[type],
+  );
+}
+
 export function normaliserFormatNumeroPiece(
   type: TypePieceNumerotee,
   raw?: Partial<FormatNumeroPiece> | null,
@@ -177,6 +194,7 @@ export function nextNumeroSelonFormat(
   format: FormatNumeroPiece,
   existing: string[],
   dateIso?: string,
+  prochain = 1,
 ) {
   const racine = racineNumeroPiece(format, dateIso);
   const re = new RegExp(`^${escapeRegex(racine)}-(\\d+)$`);
@@ -186,7 +204,8 @@ export function nextNumeroSelonFormat(
     const m = n.match(re);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return composerNumeroPiece(format, max + 1, dateIso);
+  const sequence = Math.max(max + 1, clampProchainNumeroPiece(prochain));
+  return composerNumeroPiece(format, sequence, dateIso);
 }
 
 export function numeroPieceSuivant(
@@ -199,6 +218,7 @@ export function numeroPieceSuivant(
     formatNumeroPieceEffectif(parametres, type),
     existing,
     dateIso,
+    prochainNumeroPieceEffectif(parametres, type),
   );
 }
 
