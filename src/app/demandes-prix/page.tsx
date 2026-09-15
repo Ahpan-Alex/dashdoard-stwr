@@ -6,13 +6,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { SelecteurArticle } from "@/components/selecteur-article";
 import { StatCard } from "@/components/stat-card";
 import { formatDate } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { DP_STATUT_LABELS } from "@/lib/demandes-prix";
 import { produitEstAchetable } from "@/lib/nature-stock";
-import { libelleProduit } from "@/lib/produits";
 import { TIERS_DIVERS_MARCHE_ID } from "@/lib/missions";
+import { assurerTiers, estFournisseur } from "@/lib/tiers";
 import { useStore } from "@/lib/store";
 import type { DemandePrixStatut } from "@/lib/types";
 
@@ -26,9 +27,27 @@ function badgeDp(statut: DemandePrixStatut) {
 export default function DemandesPrixPage() {
   const router = useRouter();
   const demandesPrix = useStore((s) => s.demandesPrix ?? []);
-  const fournisseurs = useStore((s) => s.fournisseurs);
+  const clients = useStore((s) => s.clients);
+  const fournisseursLegacy = useStore((s) => s.fournisseurs);
+  const tiers = useStore((s) => s.tiers);
   const creerDemandePrix = useStore((s) => s.creerDemandePrix);
   const [creer, setCreer] = useState(false);
+
+  const fournisseurs = useMemo(
+    () =>
+      assurerTiers({
+        clients,
+        fournisseurs: fournisseursLegacy,
+        tiers,
+      }).filter(
+        (t) =>
+          t.actif !== false &&
+          estFournisseur(t) &&
+          t.id !== TIERS_DIVERS_MARCHE_ID &&
+          !t.systeme,
+      ),
+    [clients, fournisseursLegacy, tiers],
+  );
 
   const liste = useMemo(
     () => [...demandesPrix].sort((a, b) => b.date.localeCompare(a.date)),
@@ -39,7 +58,7 @@ export default function DemandesPrixPage() {
     <div>
       <PageHeader
         title="Demandes de prix"
-        description="Consultez plusieurs fournisseurs, comparez les offres ligne par ligne et classez-les par prix."
+        description="Consultez plusieurs fournisseurs, comparez les offres article par article et classez-les par prix."
         actions={
           <button type="button" className="btn btn-primary" onClick={() => setCreer(true)}>
             <Plus className="h-4 w-4" />
@@ -50,7 +69,7 @@ export default function DemandesPrixPage() {
 
       {creer && (
         <FormulaireDp
-          fournisseurs={fournisseurs.filter((f) => f.actif && f.id !== TIERS_DIVERS_MARCHE_ID)}
+          fournisseurs={fournisseurs.map((f) => ({ id: f.id, nom: f.nom }))}
           onClose={() => setCreer(false)}
           onSubmit={(payload) => {
             const res = creerDemandePrix(payload);
@@ -126,10 +145,17 @@ function FormulaireDp({
     fournisseurIds: string[];
   }) => void;
 }) {
-  const produits = useStore((s) => s.produits.filter((p) => p.actif && produitEstAchetable(p)));
+  const articles = useStore((s) => s.produits.filter((p) => p.actif && produitEstAchetable(p)));
   const [date, setDate] = useState(jourLocalISO());
-  const [lignes, setLignes] = useState([{ produitId: produits[0]?.id ?? "", quantite: "1" }]);
-  const [frns, setFrns] = useState<string[]>(fournisseurs.slice(0, 2).map((f) => f.id));
+  const [lignes, setLignes] = useState([{ produitId: "", quantite: "1" }]);
+  const [frns, setFrns] = useState<string[]>([]);
+  const [rechercheFrn, setRechercheFrn] = useState("");
+
+  const frnsFiltres = useMemo(() => {
+    const q = rechercheFrn.trim().toLowerCase();
+    if (!q) return fournisseurs;
+    return fournisseurs.filter((f) => f.nom.toLowerCase().includes(q));
+  }, [fournisseurs, rechercheFrn]);
 
   function toggleFrn(id: string) {
     setFrns(frns.includes(id) ? frns.filter((x) => x !== id) : [...frns, id]);
@@ -153,52 +179,82 @@ function FormulaireDp({
         Date
         <input type="date" className="input mt-1 max-w-xs" value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
-      <h3 className="mb-2 text-sm font-semibold">Articles</h3>
-      <div className="space-y-2">
-        {lignes.map((l, i) => (
-          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
-            <select
-              className="select"
-              value={l.produitId}
-              onChange={(e) => setLignes(lignes.map((x, j) => (j === i ? { ...x, produitId: e.target.value } : x)))}
-            >
-              <option value="">Article</option>
-              {produits.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {libelleProduit(p)}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min={0}
-              step="any"
-              className="input"
-              value={l.quantite}
-              onChange={(e) => setLignes(lignes.map((x, j) => (j === i ? { ...x, quantite: e.target.value } : x)))}
-            />
-            <button type="button" className="btn btn-secondary" onClick={() => setLignes(lignes.filter((_, j) => j !== i))}>
-              Retirer
-            </button>
-          </div>
-        ))}
-      </div>
+      <h3 className="mb-2 text-sm font-semibold">Articles à consulter</h3>
+      {articles.length === 0 ? (
+        <p className="mb-4 text-sm text-muted">
+          Aucun article achetable (matière première) dans le catalogue. Créez-en un avant
+          de lancer une DP.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {lignes.map((l, i) => (
+            <div key={i} className="rounded-[var(--radius)] border border-line p-3">
+              <SelecteurArticle
+                produits={articles}
+                value={l.produitId}
+                onChange={(produitId) =>
+                  setLignes(lignes.map((x, j) => (j === i ? { ...x, produitId } : x)))
+                }
+                allowEmpty
+                emptyLabel="— Choisir un article —"
+              />
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="block text-xs font-semibold text-muted">
+                  Quantité
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    className="input mt-1 w-32"
+                    value={l.quantite}
+                    onChange={(e) =>
+                      setLignes(lignes.map((x, j) => (j === i ? { ...x, quantite: e.target.value } : x)))
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setLignes(lignes.filter((_, j) => j !== i))}
+                >
+                  Retirer
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <button
         type="button"
         className="btn btn-secondary mt-2"
-        onClick={() => setLignes([...lignes, { produitId: produits[0]?.id ?? "", quantite: "1" }])}
+        onClick={() => setLignes([...lignes, { produitId: "", quantite: "1" }])}
+        disabled={articles.length === 0}
       >
         Ajouter un article
       </button>
       <h3 className="mb-2 mt-5 text-sm font-semibold">Fournisseurs consultés</h3>
-      <div className="flex flex-wrap gap-2">
-        {fournisseurs.map((f) => (
-          <label key={f.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm">
-            <input type="checkbox" checked={frns.includes(f.id)} onChange={() => toggleFrn(f.id)} />
-            {f.nom}
-          </label>
-        ))}
-      </div>
+      {fournisseurs.length === 0 ? (
+        <p className="text-sm text-muted">
+          Aucun fournisseur actif. Créez-en un dans Tiers avant de lancer une DP.
+        </p>
+      ) : (
+        <>
+          <input
+            className="input mb-2 max-w-md"
+            placeholder="Filtrer les fournisseurs…"
+            value={rechercheFrn}
+            onChange={(e) => setRechercheFrn(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            {frnsFiltres.map((f) => (
+              <label key={f.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm">
+                <input type="checkbox" checked={frns.includes(f.id)} onChange={() => toggleFrn(f.id)} />
+                {f.nom}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
       <div className="mt-4 flex gap-2">
         <button type="submit" className="btn btn-primary">
           Créer

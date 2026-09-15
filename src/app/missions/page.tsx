@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { SelecteurArticle } from "@/components/selecteur-article";
 import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
@@ -22,7 +23,6 @@ import {
   totalDepenseMission,
 } from "@/lib/missions";
 import { produitEstAchetable } from "@/lib/nature-stock";
-import { libelleProduit } from "@/lib/produits";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
@@ -347,27 +347,23 @@ function FormulaireMission({
 
       <h3 className="mb-2 mt-5 text-sm font-semibold">Liste prévisionnelle</h3>
       <div className="space-y-2">
-        {lignes.map((l, i) => (
-          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
-            <select
-              className="select"
+          {lignes.map((l, i) => (
+          <div key={i} className="rounded-[var(--radius)] border border-line p-3">
+            <SelecteurArticle
+              produits={produits}
               value={l.produitId}
-              onChange={(e) =>
-                setLignes(lignes.map((x, j) => (j === i ? { ...x, produitId: e.target.value } : x)))
+              onChange={(produitId) =>
+                setLignes(lignes.map((x, j) => (j === i ? { ...x, produitId } : x)))
               }
-            >
-              <option value="">Article</option>
-              {produits.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {libelleProduit(p)}
-                </option>
-              ))}
-            </select>
+              allowEmpty
+              emptyLabel="— Choisir un article —"
+            />
+            <div className="mt-2 flex flex-wrap items-end gap-2">
             <input
               type="number"
               min={0}
               step="any"
-              className="input"
+              className="input w-32"
               value={l.quantiteSouhaitee}
               onChange={(e) =>
                 setLignes(
@@ -386,6 +382,7 @@ function FormulaireMission({
             >
               Retirer
             </button>
+            </div>
           </div>
         ))}
       </div>

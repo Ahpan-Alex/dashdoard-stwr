@@ -355,7 +355,7 @@ function InventaireEditor({
 
   const nomProduit = (id: string) => {
     const p = produits.find((x) => x.id === id);
-    return p ? libelleProduit(p) : "Produit supprimé";
+    return p ? libelleProduit(p) : "Article supprimé";
   };
   const uniteProduit = (id: string) =>
     produits.find((x) => x.id === id)?.unite ?? "";

@@ -185,7 +185,7 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
     id: "stocks",
     label: "Stocks",
     colonnes: [
-      col("produit", "Produit", 40, true),
+      col("produit", "Article", 40, true),
       col("categorie", "Catégorie", 24),
   col("pointDeVente", "Site", 30),
   col("cump", "CUMP", 22),

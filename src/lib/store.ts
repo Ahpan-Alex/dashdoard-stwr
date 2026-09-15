@@ -153,6 +153,7 @@ import {
 import {
   dpEstVerrouillee,
   nextNumeroDemandePrix,
+  offreLigneFournisseur,
 } from "./demandes-prix";
 import {
   cycleNomenclature,
@@ -540,6 +541,12 @@ type Store = {
       offres: DemandePrixOffre[];
       note: string;
     }>,
+  ) => { ok: boolean; reason?: string };
+  patchOffreDemandePrix: (
+    id: string,
+    ligneId: string,
+    fournisseurId: string,
+    patch: Partial<Pick<DemandePrixOffre, "prixUnitaire" | "delaiJours">>,
   ) => { ok: boolean; reason?: string };
   changerStatutDemandePrix: (
     id: string,
@@ -3523,6 +3530,33 @@ export const useStore = create<Store>()((set, get) => ({
         };
         set((s) => ({
           demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? next : d)),
+        }));
+        return { ok: true };
+      },
+
+      patchOffreDemandePrix: (id, ligneId, fournisseurId, patch) => {
+        const prev = (get().demandesPrix ?? []).find((d) => d.id === id);
+        if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
+        if (dpEstVerrouillee(prev)) {
+          return { ok: false, reason: "Cette demande de prix est clôturée ou annulée." };
+        }
+        const exist = offreLigneFournisseur(prev, ligneId, fournisseurId);
+        const offres = exist
+          ? prev.offres.map((o) => (o.id === exist.id ? { ...o, ...patch } : o))
+          : [
+              ...prev.offres,
+              {
+                id: uid("dpo"),
+                ligneId,
+                fournisseurId,
+                prixUnitaire: 0,
+                ...patch,
+              },
+            ];
+        set((s) => ({
+          demandesPrix: (s.demandesPrix ?? []).map((d) =>
+            d.id === id ? { ...d, offres } : d,
+          ),
         }));
         return { ok: true };
       },

@@ -496,8 +496,8 @@ export default function ParametresProduitsPage() {
   return (
     <div>
       <PageHeader
-        title="Catalogue produits"
-        description="Familles (3 niveaux), code unique, multi-prix — désactivation pour préserver les factures."
+        title="Catalogue articles & produits"
+        description="Articles pour l'achat, produits pour la vente. Familles, code unique, tarifs — désactivation pour préserver l'historique."
         showPosSelector={false}
       />
 
@@ -523,7 +523,7 @@ export default function ParametresProduitsPage() {
           <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
             {editingCatId
               ? `Modifier la famille${categorieEnEdition ? ` · ${categorieEnEdition.code}` : ""}`
-              : "Familles de produits"}
+              : "Familles"}
           </p>
           {editingCatId && (
             <IconButton
@@ -759,8 +759,8 @@ export default function ParametresProduitsPage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
               {editingId
-                ? `Modifier le produit${produitEnEdition ? ` · ${produitEnEdition.code}` : ""}`
-                : "Nouveau produit"}
+                ? `Modifier la fiche${produitEnEdition ? ` · ${produitEnEdition.code}` : ""}`
+                : "Nouvel article / produit"}
             </p>
             {editingId && (
               <IconButton label="Annuler la modification" onClick={annulerEdition}>
@@ -1061,7 +1061,7 @@ export default function ParametresProduitsPage() {
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  Créer le produit
+                  Créer la fiche
                 </>
               )}
             </button>
@@ -1163,7 +1163,7 @@ export default function ParametresProduitsPage() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <IconButton
-                        label="Modifier la fiche produit"
+                        label="Modifier la fiche"
                         onClick={() => demarrerEdition(p)}
                       >
                         <Pencil className="h-4 w-4" />

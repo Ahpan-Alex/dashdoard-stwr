@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
+import { SelecteurArticle } from "@/components/selecteur-article";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
@@ -286,13 +287,11 @@ function AchatsListe() {
             Nouvelle commande fournisseur
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="block text-xs font-semibold text-muted">
-              Article (pour proposer le fournisseur rang 1)
-              <select
-                className="select mt-1"
+            <div className="sm:col-span-2">
+              <SelecteurArticle
+                produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
                 value={form.produitRefId}
-                onChange={(e) => {
-                  const produitRefId = e.target.value;
+                onChange={(produitRefId) => {
                   const p = produits.find((x) => x.id === produitRefId);
                   const prioritaire = p
                     ? fournisseurPrioritaireId(p, { achats, demandesPrix })
@@ -303,15 +302,11 @@ function AchatsListe() {
                     fournisseurId: prioritaire || form.fournisseurId,
                   });
                 }}
-              >
-                <option value="">— Optionnel —</option>
-                {produits.filter((p) => p.actif && produitEstAchetable(p)).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {libelleProduit(p)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                label="Article (pour proposer le fournisseur rang 1)"
+                allowEmpty
+                emptyLabel="— Optionnel —"
+              />
+            </div>
             <label className="block text-xs font-semibold text-muted">
               Fournisseur
               <select
@@ -424,21 +419,16 @@ function AchatsListe() {
             ))}
           </select>
         </label>
-        <label className="text-xs font-semibold text-muted">
-          Article
-          <select
-            className="select mt-1 min-w-[12rem]"
+        <div className="min-w-[18rem] flex-1">
+          <SelecteurArticle
+            produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
             value={filtreProduit}
-            onChange={(e) => setFiltreProduit(e.target.value)}
-          >
-            <option value="">Tous</option>
-            {produits.filter((p) => produitEstAchetable(p)).map((p) => (
-              <option key={p.id} value={p.id}>
-                {libelleProduit(p)}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setFiltreProduit}
+            label="Article"
+            allowEmpty
+            emptyLabel="Tous"
+          />
+        </div>
       </div>
 
       {visibles.length === 0 ? (
@@ -564,7 +554,7 @@ function AchatEditor({
   const nomProduit = (id: string | undefined) => {
     if (!id) return "Ligne libre";
     const p = produits.find((x) => x.id === id);
-    return p ? libelleProduit(p) : "Produit";
+    return p ? libelleProduit(p) : "Article";
   };
   const unite = (id: string | undefined) =>
     id ? produits.find((x) => x.id === id)?.unite ?? "" : "";
@@ -896,7 +886,9 @@ function CommandePanel({
   const comptesComptables = useStore((s) => s.comptesComptables);
   const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
   const [typeNouveau, setTypeNouveau] = useState<TypeAchat>("marchandises");
-  const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
+  const [produitId, setProduitId] = useState(
+    () => produits.find((p) => p.actif && produitEstAchetable(p))?.id ?? "",
+  );
   const [designationLibre, setDesignationLibre] = useState("");
   const [compteLibreId, setCompteLibreId] = useState("");
   const [taxableLibre, setTaxableLibre] = useState(true);
@@ -974,7 +966,7 @@ function CommandePanel({
         fournisseurs.find((f) => f.id === prioritaire.fournisseurId)?.nom ?? "Fournisseur";
       if (
         confirm(
-          `Le fournisseur prioritaire (rang 1) pour cet article est « ${nomPrio} ». Basculer ? Le classement de la fiche produit ne sera pas modifié.`,
+          `Le fournisseur prioritaire (rang 1) pour cet article est « ${nomPrio} ». Basculer ? Le classement de la fiche article ne sera pas modifié.`,
         )
       ) {
         const res = updateAchat(achat.id, { fournisseurId: prioritaire.fournisseurId });
@@ -1132,22 +1124,14 @@ function CommandePanel({
               )}
             </>
           ) : (
-            <label className="block text-xs font-semibold text-muted">
-              Article catalogue
-              <select
-                className="select mt-1 min-w-[16rem]"
+            <div className="min-w-[16rem] flex-1">
+              <SelecteurArticle
+                produits={produits.filter((p) => p.actif && produitEstAchetable(p))}
                 value={produitId}
-                onChange={(e) => setProduitId(e.target.value)}
-              >
-                {produits
-                  .filter((p) => p.actif && produitEstAchetable(p))
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {libelleProduit(p)}
-                    </option>
-                  ))}
-              </select>
-            </label>
+                onChange={setProduitId}
+                label="Article catalogue"
+              />
+            </div>
           )}
           <button type="button" className="btn btn-secondary" onClick={ajouterLigne}>
             <Plus className="h-4 w-4" />

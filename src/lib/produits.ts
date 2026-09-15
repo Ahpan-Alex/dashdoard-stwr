@@ -146,6 +146,49 @@ export function categoriesEnArbre(categories: CategorieProduit[]) {
   return out;
 }
 
+/** True si l'article appartient à la famille ou à l'une de ses sous-familles. */
+export function produitAppartientFamille(
+  produit: Pick<Produit, "categorieId">,
+  familleId: string | undefined,
+  categories: CategorieProduit[],
+) {
+  if (!familleId) return true;
+  let current = categories.find((c) => c.id === produit.categorieId);
+  const guard = new Set<string>();
+  while (current && !guard.has(current.id)) {
+    if (current.id === familleId) return true;
+    guard.add(current.id);
+    current = current.parentId
+      ? categories.find((c) => c.id === current!.parentId)
+      : undefined;
+  }
+  return false;
+}
+
+export function filtrerCatalogue(
+  produits: Produit[],
+  opts: {
+    familleId?: string;
+    recherche?: string;
+    categories: CategorieProduit[];
+  },
+) {
+  const q = (opts.recherche ?? "").trim().toLowerCase();
+  return produits
+    .filter((p) =>
+      produitAppartientFamille(p, opts.familleId, opts.categories),
+    )
+    .filter((p) => {
+      if (!q) return true;
+      return (
+        p.code.toLowerCase().includes(q) ||
+        p.libelleCourt.toLowerCase().includes(q) ||
+        p.libelleLong.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => a.code.localeCompare(b.code, "fr"));
+}
+
 /** Résolution prix HT : tarif client → gros → détail */
 export function resolvePrixVenteHT(
   produit: Produit,

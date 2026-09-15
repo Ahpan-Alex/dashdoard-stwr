@@ -299,7 +299,7 @@ const sections: { title: string; links: NavLink[] }[] = [
           },
           {
             href: "/parametres/produits",
-            label: "Catalogue produits",
+            label: "Catalogue articles & produits",
             permission: "produits.lire",
           },
           {

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
+import { SelecteurArticle } from "@/components/selecteur-article";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { createId } from "@/lib/id";
@@ -280,25 +281,19 @@ function MissionDetail() {
                 const p = produits.find((x) => x.id === l.produitId);
                 return (
                   <tr key={l.id}>
-                    <td>
+                    <td className="min-w-[16rem]">
                       {saisie ? (
-                        <select
-                          className="select"
+                        <SelecteurArticle
+                          produits={achetable}
                           value={l.produitId}
-                          onChange={(e) =>
+                          onChange={(produitId) =>
                             patchRealises((lignes) =>
                               lignes.map((x) =>
-                                x.id === l.id ? { ...x, produitId: e.target.value } : x,
+                                x.id === l.id ? { ...x, produitId } : x,
                               ),
                             )
                           }
-                        >
-                          {achetable.map((prod) => (
-                            <option key={prod.id} value={prod.id}>
-                              {prod.code} — {libelleProduit(prod)}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         p ? `${p.code} — ${libelleProduit(p)}` : "—"
                       )}

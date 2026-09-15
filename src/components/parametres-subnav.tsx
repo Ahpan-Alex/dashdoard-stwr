@@ -14,7 +14,7 @@ export const PARAMETRES_MENUS = [
   },
   {
     href: "/parametres/produits",
-    label: "Catalogue produits",
+    label: "Catalogue articles & produits",
   },
   {
     href: "/parametres/unites",

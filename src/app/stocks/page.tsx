@@ -222,7 +222,7 @@ function StocksContent() {
           <table className="data">
             <thead>
               <tr>
-                <ThCol id="produit" show={visible}>Produit</ThCol>
+                <ThCol id="produit" show={visible}>Article</ThCol>
                 <ThCol id="categorie" show={visible}>Catégorie</ThCol>
                 <ThCol id="pointDeVente" show={visible}>Site</ThCol>
                 <ThCol id="cump" show={visible}>CUMP</ThCol>
