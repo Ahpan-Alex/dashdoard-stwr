@@ -15,6 +15,7 @@ import {
   produitsSansCompteSurLignes,
 } from "@/lib/comptabilite";
 import { libelleProduit } from "@/lib/produits";
+import { produitEstAchetable, produitEstVendable } from "@/lib/nature-stock";
 import { useStore } from "@/lib/store";
 import type { Produit } from "@/lib/types";
 
@@ -246,8 +247,12 @@ function EditionCompteProduit({
 
   function enregistrer() {
     const res = updateProduit(produit.id, {
-      compteChargeId: compteChargeId || undefined,
-      compteVenteId: compteVenteId || undefined,
+      compteChargeId: produitEstAchetable(produit)
+        ? compteChargeId || undefined
+        : undefined,
+      compteVenteId: produitEstVendable(produit)
+        ? compteVenteId || undefined
+        : undefined,
     });
     if (!res.ok) {
       alert(res.reason);
@@ -268,6 +273,7 @@ function EditionCompteProduit({
         La saisie de la facture en cours est conservée.
       </p>
       <div className="mt-4 space-y-3">
+        {produitEstAchetable(produit) && (
         <label className="block text-xs font-semibold text-muted">
           Compte de charge (achat)
           <select
@@ -285,9 +291,11 @@ function EditionCompteProduit({
             ))}
           </select>
         </label>
-        {chargeVerrouille && (
+        )}
+        {chargeVerrouille && produitEstAchetable(produit) && (
           <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
         )}
+        {produitEstVendable(produit) && (
         <label className="block text-xs font-semibold text-muted">
           Compte de vente
           <select
@@ -305,7 +313,8 @@ function EditionCompteProduit({
             ))}
           </select>
         </label>
-        {venteVerrouille && (
+        )}
+        {venteVerrouille && produitEstVendable(produit) && (
           <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
         )}
       </div>

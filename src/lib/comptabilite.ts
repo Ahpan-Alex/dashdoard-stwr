@@ -26,6 +26,7 @@ import type {
   Tiers,
   TypeAchat,
 } from "./types";
+import { produitEstAchetable, produitEstVendable } from "./nature-stock";
 import { montantLigneRealisee, TIERS_DIVERS_MARCHE_NOM } from "./missions";
 import {
   TYPE_ACHAT_LABELS,
@@ -192,24 +193,37 @@ export function compteProduitEstRenseigne(
 export function produitSansCompteComptable(
   produit: Pick<
     Produit,
-    "compteChargeId" | "compteVenteId" | "compteComptableId"
+    | "compteChargeId"
+    | "compteVenteId"
+    | "compteComptableId"
+    | "natureStock"
+    | "usageCommercial"
   >,
   comptes: CompteComptable[],
 ) {
-  return (
-    !compteProduitEstRenseigne(compteChargeProduit(produit, comptes)) ||
-    !compteProduitEstRenseigne(compteVenteProduit(produit, comptes))
-  );
+  const manqueCharge =
+    produitEstAchetable(produit) &&
+    !compteProduitEstRenseigne(compteChargeProduit(produit, comptes));
+  const manqueVente =
+    produitEstVendable(produit) &&
+    !compteProduitEstRenseigne(compteVenteProduit(produit, comptes));
+  return manqueCharge || manqueVente;
 }
 
 export function produitSansComptePourNature(
   produit: Pick<
     Produit,
-    "compteChargeId" | "compteVenteId" | "compteComptableId"
+    | "compteChargeId"
+    | "compteVenteId"
+    | "compteComptableId"
+    | "natureStock"
+    | "usageCommercial"
   >,
   comptes: CompteComptable[],
   nature: "charge" | "vente",
 ) {
+  if (nature === "vente" && !produitEstVendable(produit)) return false;
+  if (nature === "charge" && !produitEstAchetable(produit)) return false;
   const compte =
     nature === "vente"
       ? compteVenteProduit(produit, comptes)
@@ -241,22 +255,31 @@ export function produitsSansCompteSurLignes(
 export function motifComptesProduitInvalides(
   produit: Pick<
     Produit,
-    "typeAchat" | "compteChargeId" | "compteVenteId" | "compteComptableId"
+    | "typeAchat"
+    | "compteChargeId"
+    | "compteVenteId"
+    | "compteComptableId"
+    | "natureStock"
+    | "usageCommercial"
   >,
   comptes: CompteComptable[],
 ) {
   const manquants: string[] = [];
-  const charge = compteChargeProduit(produit, comptes);
-  if (!compteProduitEstRenseigne(charge)) {
-    manquants.push("le compte de charge (achat)");
-  } else if (classeNumeroCompte(charge!.numero) !== "6") {
-    manquants.push("un compte de charge de classe 6");
+  if (produitEstAchetable(produit)) {
+    const charge = compteChargeProduit(produit, comptes);
+    if (!compteProduitEstRenseigne(charge)) {
+      manquants.push("le compte de charge (achat)");
+    } else if (classeNumeroCompte(charge!.numero) !== "6") {
+      manquants.push("un compte de charge de classe 6");
+    }
   }
-  const vente = compteVenteProduit(produit, comptes);
-  if (!compteProduitEstRenseigne(vente)) {
-    manquants.push("le compte de vente");
-  } else if (classeNumeroCompte(vente!.numero) !== "7") {
-    manquants.push("un compte de vente de classe 7");
+  if (produitEstVendable(produit)) {
+    const vente = compteVenteProduit(produit, comptes);
+    if (!compteProduitEstRenseigne(vente)) {
+      manquants.push("le compte de vente");
+    } else if (classeNumeroCompte(vente!.numero) !== "7") {
+      manquants.push("un compte de vente de classe 7");
+    }
   }
   if (manquants.length === 0) return null;
   if (manquants.length === 1) {
@@ -1297,6 +1320,8 @@ export function migrerProduitComptes(
   let venteId = produit.compteVenteId;
   if (!chargeId && classeLegacy === "6" && legacy) chargeId = legacy.id;
   if (!venteId && classeLegacy === "7" && legacy) venteId = legacy.id;
+  if (!produitEstAchetable(produit)) chargeId = undefined;
+  if (!produitEstVendable(produit)) venteId = undefined;
   const typeAchat = produit.typeAchat ?? "marchandises";
 
   if (

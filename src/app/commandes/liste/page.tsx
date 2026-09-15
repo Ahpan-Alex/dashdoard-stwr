@@ -36,10 +36,10 @@ import {
   creerSnapshotAcomptesDocument,
   libelleClient,
   lignesAcomptesPourDocument,
-  nextNumero,
   totauxCommande,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { filterByPos } from "@/lib/calculations";
 import { nextNumeroDocumentCommercial } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -105,7 +105,6 @@ export default function ListeCommandesPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
-  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
@@ -251,10 +250,10 @@ export default function ListeCommandesPage() {
       );
       return;
     }
-    const numero = nextNumero(
-      "BL",
+    const numero = numeroPieceSuivant(
+      "livraison",
       bonsDeLivraison.map((b) => b.numero),
-      { exercices: exercicesComptables },
+      parametres,
     );
     const blId = addBonDeLivraison({
       numero,
@@ -320,7 +319,7 @@ export default function ListeCommandesPage() {
       pointDeVenteId: c.pointDeVenteId,
       pointsDeVente,
       existing: factures.map((f) => f.numero),
-      exercices: exercicesComptables,
+      parametres,
     });
     const payloadFacture = {
       numero,
@@ -375,17 +374,17 @@ export default function ListeCommandesPage() {
   }
 
   const pendingCmd = commandes.find((c) => c.id === pending?.commandeId);
-  const numeroBlProvisoire = nextNumero(
-    "BL",
+  const numeroBlProvisoire = numeroPieceSuivant(
+    "livraison",
     bonsDeLivraison.map((b) => b.numero),
-    { exercices: exercicesComptables },
+    parametres,
   );
   const numeroFacProvisoire = nextNumeroDocumentCommercial({
     prefix: "FAC",
     pointDeVenteId: pendingCmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "",
     pointsDeVente,
     existing: factures.map((f) => f.numero),
-    exercices: exercicesComptables,
+    parametres,
   });
 
   return (

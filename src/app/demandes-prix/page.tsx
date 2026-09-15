@@ -261,8 +261,8 @@ function FormulaireDp({
       <h3 className="mb-2 text-sm font-semibold">Articles à consulter</h3>
       {articles.length === 0 ? (
         <p className="mb-4 text-sm text-muted">
-          Aucun article achetable (matière première) dans le catalogue. Créez-en un avant
-          de lancer une DP.
+          Aucun article achetable dans le catalogue. Sur la fiche produit,
+          choisissez « Peut être acheté » ou « Acheté et vendu ».
         </p>
       ) : (
         <div className="space-y-4">

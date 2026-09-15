@@ -36,7 +36,7 @@ import {
 } from "@/lib/facturation-mg";
 import {
   designationFacture,
-  produitsActifs,
+  produitsVendablesActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -100,12 +100,11 @@ export default function FacturesPage() {
     encaisserAcompte,
     pointDeVenteActifId,
   } = useStore();
-  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
   const avecTVA = appliqueTVA(parametres);
-  const produitsDispo = produitsActifs(produits);
+  const produitsDispo = produitsVendablesActifs(produits);
   const categoriesActives = useMemo(
     () =>
       [...categoriesProduits]
@@ -199,7 +198,7 @@ export default function FacturesPage() {
     pointsDeVente,
     existing: factures.map((f) => f.numero),
     date: new Date(`${form.date}T12:00:00`),
-    exercices: exercicesComptables,
+    parametres,
   });
 
   const lignesProduitParId = useMemo(() => {
@@ -512,7 +511,7 @@ export default function FacturesPage() {
             pointsDeVente,
             existing: factures.map((f) => f.numero),
             date: new Date(`${form.date}T12:00:00`),
-            exercices: exercicesComptables,
+            parametres,
           });
 
     const detailAcomptesEmission = [

@@ -10,7 +10,8 @@ import {
 } from "@/components/document-saisie-wizard";
 import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import {
@@ -38,7 +39,6 @@ export default function BonsDeLivraisonPage() {
     finaliserTransformation,
     pointDeVenteActifId,
   } = useStore();
-  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
 
   const [open, setOpen] = useState(true);
   const [wizardKey, setWizardKey] = useState(0);
@@ -147,10 +147,11 @@ export default function BonsDeLivraisonPage() {
             initialNote={seed.note}
             previewMeta={{
               type: "bon_de_livraison",
-              numero: nextNumero(
-                "BL",
+              numero: numeroPieceSuivant(
+                "livraison",
                 bonsDeLivraison.map((b) => b.numero),
-                { date: meta.date, exercices: exercicesComptables },
+                parametres,
+                meta.date,
               ),
               date: new Date(`${meta.date}T12:00:00`).toISOString(),
               echeance: meta.dateLivraison
@@ -178,10 +179,11 @@ export default function BonsDeLivraisonPage() {
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const cmd = commandes.find((c) => c.id === meta.commandeId);
-              const numero = nextNumero(
-                "BL",
+              const numero = numeroPieceSuivant(
+                "livraison",
                 bonsDeLivraison.map((b) => b.numero),
-                { date: meta.date, exercices: exercicesComptables },
+                parametres,
+                meta.date,
               );
               const blId = addBonDeLivraison({
                 numero,

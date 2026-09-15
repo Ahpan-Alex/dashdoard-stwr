@@ -31,11 +31,11 @@ import {
   acomptesPourDocument,
   libelleClient,
   lignesAcomptesPourDocument,
-  nextNumero,
   totauxDevis,
   totauxCommande,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { filterByPos } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -96,7 +96,6 @@ export default function ListeDevisPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
-  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
@@ -233,10 +232,11 @@ export default function ListeDevisPage() {
       );
       return;
     }
-    const numero = nextNumero(
-      "CMD",
+    const numero = numeroPieceSuivant(
+      "commande",
       commandes.map((c) => c.numero),
-      { date: d.date, exercices: exercicesComptables },
+      parametres,
+      d.date,
     );
     const commandeId = addCommande({
       numero,
@@ -276,10 +276,11 @@ export default function ListeDevisPage() {
   const commandeProvisoire: Commande | null = pendingDevis
     ? {
         id: "preview",
-        numero: nextNumero(
-          "CMD",
+        numero: numeroPieceSuivant(
+          "commande",
           commandes.map((c) => c.numero),
-          { date: pendingDevis.date, exercices: exercicesComptables },
+          parametres,
+          pendingDevis.date,
         ),
         clientId: pendingDevis.clientId,
         pointDeVenteId: pendingDevis.pointDeVenteId,

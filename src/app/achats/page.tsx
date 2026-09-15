@@ -131,6 +131,7 @@ function AchatsListe() {
     date: AUJOURD_HUI,
     echeance: "",
     validiteJours: "15",
+    numeroFactureFournisseur: "",
     produitRefId: "",
   });
 
@@ -208,6 +209,7 @@ function AchatsListe() {
       lignes: [],
       note: undefined,
       validiteJours: Number(form.validiteJours) || 15,
+      numeroFactureFournisseur: form.numeroFactureFournisseur.trim() || undefined,
     });
     setCreer(false);
     setSelectionId(id);
@@ -407,6 +409,17 @@ function AchatsListe() {
                 }
               />
             </label>
+            <label className="block text-xs font-semibold text-muted">
+              N° facture fournisseur
+              <input
+                className="input mt-1"
+                value={form.numeroFactureFournisseur}
+                onChange={(e) =>
+                  setForm({ ...form, numeroFactureFournisseur: e.target.value })
+                }
+                placeholder="N° figurant sur la facture"
+              />
+            </label>
           </div>
           <div className="mt-4 flex gap-2">
             <button type="button" className="btn btn-primary" onClick={lancerCreation}>
@@ -573,6 +586,9 @@ function AchatEditor({
   const [validiteJours, setValiditeJours] = useState(
     String(achat.validiteJours ?? 15),
   );
+  const [numeroFactureFournisseur, setNumeroFactureFournisseur] = useState(
+    achat.numeroFactureFournisseur ?? "",
+  );
   const brouillon = achat.statut === "brouillon";
   const tot = totauxAchat({ ...achat, lignes });
   const solde = soldeAchat(achat);
@@ -602,11 +618,15 @@ function AchatEditor({
             note: note.trim() || undefined,
             echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
             validiteJours: Number(validiteJours) || 15,
+            numeroFactureFournisseur:
+              numeroFactureFournisseur.trim() || undefined,
           }
         : {
             note: note.trim() || undefined,
             echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
             validiteJours: Number(validiteJours) || 15,
+            numeroFactureFournisseur:
+              numeroFactureFournisseur.trim() || undefined,
           },
     );
     if (!res.ok) alert(res.reason);
@@ -618,6 +638,7 @@ function AchatEditor({
       note: note.trim() || undefined,
       echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
       validiteJours: Number(validiteJours) || 15,
+      numeroFactureFournisseur: numeroFactureFournisseur.trim() || undefined,
     });
     if (!save.ok) {
       alert(save.reason);
@@ -783,6 +804,8 @@ function AchatEditor({
           setEcheance={setEcheance}
           validiteJours={validiteJours}
           setValiditeJours={setValiditeJours}
+          numeroFactureFournisseur={numeroFactureFournisseur}
+          setNumeroFactureFournisseur={setNumeroFactureFournisseur}
           brouillon={brouillon}
           libelleLigne={libelleLigne}
           unite={unite}
@@ -929,6 +952,8 @@ function CommandePanel({
   setEcheance,
   validiteJours,
   setValiditeJours,
+  numeroFactureFournisseur,
+  setNumeroFactureFournisseur,
   brouillon,
   libelleLigne,
   unite,
@@ -944,6 +969,8 @@ function CommandePanel({
   setEcheance: (e: string) => void;
   validiteJours: string;
   setValiditeJours: (v: string) => void;
+  numeroFactureFournisseur: string;
+  setNumeroFactureFournisseur: (v: string) => void;
   brouillon: boolean;
   libelleLigne: (l: AchatLigne) => string;
   unite: (id: string | undefined) => string;
@@ -1129,6 +1156,16 @@ function CommandePanel({
             value={validiteJours}
             onChange={(e) => setValiditeJours(e.target.value)}
             disabled={achat.statut === "annule"}
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          N° facture fournisseur
+          <input
+            className="input mt-1"
+            value={numeroFactureFournisseur}
+            onChange={(e) => setNumeroFactureFournisseur(e.target.value)}
+            disabled={achat.statut === "annule"}
+            placeholder="N° figurant sur la facture"
           />
         </label>
       </div>

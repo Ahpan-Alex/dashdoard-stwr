@@ -163,6 +163,7 @@ import {
 import {
   natureStockDuProduit,
   produitEstFabrique,
+  usageCommercialDuProduit,
 } from "./nature-stock";
 import {
   motifSymboleUniteInvalide,
@@ -375,7 +376,7 @@ type Store = {
   ) => string;
   updateAchat: (
     id: string,
-    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours">>,
+    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours" | "numeroFactureFournisseur">>,
   ) => { ok: boolean; reason?: string };
   validerAchat: (id: string) => { ok: boolean; reason?: string };
   annulerAchat: (id: string) => { ok: boolean; reason?: string };
@@ -3878,9 +3879,19 @@ export const useStore = create<Store>()((set, get) => ({
           );
           if (cycle) return { ok: false, reason: cycle };
         }
+        const usage = usageCommercialDuProduit({
+          ...produit,
+          natureStock: nature,
+        });
         const seeded = seedComptesDefautState(state);
         const nouveau = assignerComptesProduit(
-          { ...produit, id: uid("prod"), natureStock: nature, nomenclatures },
+          {
+            ...produit,
+            id: uid("prod"),
+            natureStock: nature,
+            usageCommercial: usage,
+            nomenclatures,
+          },
           seeded.comptesComptables,
         );
         set((s) => ({
@@ -3942,7 +3953,16 @@ export const useStore = create<Store>()((set, get) => ({
           );
           if (cycle) return { ok: false, reason: cycle };
         }
-        data = { ...data, natureStock: natureCible, nomenclatures };
+        data = {
+          ...data,
+          natureStock: natureCible,
+          nomenclatures,
+          usageCommercial: usageCommercialDuProduit({
+            ...prev,
+            ...data,
+            natureStock: natureCible,
+          }),
+        };
         const seeded = seedComptesDefautState(state);
         const auth = useAuthStore.getState();
         const patch: Partial<Produit> = { ...data };
@@ -5820,7 +5840,7 @@ export const useStore = create<Store>()((set, get) => ({
             pointsDeVente: state.pointsDeVente,
             existing: state.factures.map((f) => f.numero),
             date: data.date,
-            exercices: state.exercicesComptables,
+            parametres: state.parametres,
           });
           const facAco = get().addFacture({
             numero: numeroFac,

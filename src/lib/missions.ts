@@ -285,7 +285,7 @@ export function motifLigneMissionInvalide(
   const p = produits.find((x) => x.id === ligne.produitId);
   if (!p) return "Article introuvable.";
   if (!produitEstAchetable(p)) {
-    return `« ${p.libelleCourt || p.code} » n'est pas un article acheté (semi-fini / fini).`;
+    return `« ${p.libelleCourt || p.code} » n'est pas un article achetable.`;
   }
   if (ligne.quantite < 0) return "La quantité ne peut pas être négative.";
   if (ligne.quantite > 0 && ligne.prixUnitaire < 0) {

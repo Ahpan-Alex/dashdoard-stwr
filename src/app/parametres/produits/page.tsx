@@ -39,11 +39,11 @@ import {
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_PRODUIT,
 } from "@/lib/comptabilite";
-import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeAchat } from "@/lib/types";
+import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeAchat, UsageCommercialProduit } from "@/lib/types";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
-import { natureStockDuProduit, NATURE_STOCK_LABELS, prixAchatEstObligatoire, prixVenteEstObligatoire } from "@/lib/nature-stock";
+import { natureStockDuProduit, NATURE_STOCK_LABELS, prixAchatEstObligatoire, prixVenteEstObligatoire, produitEstAchetable, produitEstVendable, usageCommercialDuProduit, USAGE_COMMERCIAL_LABELS, USAGES_COMMERCIAUX } from "@/lib/nature-stock";
 import { nomenclaturesDuProduit } from "@/lib/nomenclature";
 import {
   libelleUniteMesure,
@@ -70,6 +70,7 @@ type ProduitFormState = {
   compteChargeId: string;
   compteVenteId: string;
   natureStock: NatureStock;
+  usageCommercial: UsageCommercialProduit;
   nomenclatures: NomenclatureProduit[];
 };
 
@@ -102,6 +103,7 @@ function formDepuisProduit(p: Produit): ProduitFormState {
     compteChargeId: p.compteChargeId ?? "",
     compteVenteId: p.compteVenteId ?? "",
     natureStock: natureStockDuProduit(p),
+    usageCommercial: usageCommercialDuProduit(p),
     nomenclatures: nomenclaturesDuProduit(p),
   };
 }
@@ -187,6 +189,7 @@ export default function ParametresProduitsPage() {
       compteChargeId: "",
       compteVenteId: "",
       natureStock: "matiere_premiere",
+      usageCommercial: "achat_vente",
       nomenclatures: [],
     };
   }
@@ -377,12 +380,12 @@ export default function ParametresProduitsPage() {
       alert("Les prix doivent être des montants positifs ou nuls.");
       return;
     }
-    if (prixAchatEstObligatoire(form.natureStock) && achatSaisi === "") {
-      alert("Le prix d'achat est obligatoire pour une matière première / article acheté.");
+    if (prixAchatEstObligatoire(form) && achatSaisi === "") {
+      alert("Le prix d'achat est obligatoire pour un article achetable.");
       return;
     }
-    if (prixVenteEstObligatoire(form.natureStock) && venteSaisie === "") {
-      alert("Le prix de vente est obligatoire pour un produit semi-fini ou fini.");
+    if (prixVenteEstObligatoire(form) && venteSaisie === "") {
+      alert("Le prix de vente est obligatoire pour un article vendable.");
       return;
     }
 
@@ -426,9 +429,14 @@ export default function ParametresProduitsPage() {
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
       natureStock: form.natureStock,
+      usageCommercial: form.usageCommercial,
       nomenclatures: form.nomenclatures,
-      compteChargeId: form.compteChargeId || undefined,
-      compteVenteId: form.compteVenteId || undefined,
+      compteChargeId: produitEstAchetable(form)
+        ? form.compteChargeId || undefined
+        : undefined,
+      compteVenteId: produitEstVendable(form)
+        ? form.compteVenteId || undefined
+        : undefined,
     };
 
     if (editingId) {
@@ -837,6 +845,35 @@ export default function ParametresProduitsPage() {
                 ))}
               </select>
             </label>
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-2 text-xs font-semibold text-muted">
+                Circuit commercial
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {USAGES_COMMERCIAUX.map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    className={`btn ${form.usageCommercial === u ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        usageCommercial: u,
+                        compteChargeId:
+                          u === "vente" ? "" : form.compteChargeId,
+                        compteVenteId: u === "achat" ? "" : form.compteVenteId,
+                      })
+                    }
+                  >
+                    {USAGE_COMMERCIAL_LABELS[u]}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] font-normal text-muted">
+                Détermine les listes d’achat / vente et les comptes comptables
+                affichés.
+              </p>
+            </fieldset>
             <NomenclatureEditor
               natureStock={form.natureStock}
               nomenclatures={form.nomenclatures}
@@ -855,6 +892,7 @@ export default function ParametresProduitsPage() {
             />
             {moduleCompta && (
               <>
+                {produitEstAchetable(form) && (
                 <label className="block text-xs font-semibold text-muted">
                   Compte de charge (achat)
                   <select
@@ -872,6 +910,8 @@ export default function ParametresProduitsPage() {
                     ))}
                   </select>
                 </label>
+                )}
+                {produitEstVendable(form) && (
                 <label className="block text-xs font-semibold text-muted">
                   Compte de vente
                   <select
@@ -889,6 +929,7 @@ export default function ParametresProduitsPage() {
                     ))}
                   </select>
                 </label>
+                )}
               </>
             )}
             <label className="block text-xs font-semibold text-muted">
@@ -932,9 +973,10 @@ export default function ParametresProduitsPage() {
                 />
               </label>
             )}
+            {produitEstAchetable(form) && (
             <label className="block text-xs font-semibold text-muted">
               Prix d&apos;achat HT
-              {!prixAchatEstObligatoire(form.natureStock) && (
+              {!prixAchatEstObligatoire(form) && (
                 <span className="font-normal"> (facultatif)</span>
               )}
               <input
@@ -944,17 +986,20 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixAchat: e.target.value })
                 }
-                required={prixAchatEstObligatoire(form.natureStock)}
+                required={prixAchatEstObligatoire(form)}
                 placeholder={
-                  prixAchatEstObligatoire(form.natureStock)
+                  prixAchatEstObligatoire(form)
                     ? undefined
                     : "Issu de la fabrication"
                 }
               />
             </label>
+            )}
+            {produitEstVendable(form) && (
+            <>
             <label className="block text-xs font-semibold text-muted">
               Prix vente détail HT
-              {!prixVenteEstObligatoire(form.natureStock) && (
+              {!prixVenteEstObligatoire(form) && (
                 <span className="font-normal"> (facultatif)</span>
               )}
               <input
@@ -964,9 +1009,9 @@ export default function ParametresProduitsPage() {
                 onChange={(e) =>
                   setForm({ ...form, prixVenteHT: e.target.value })
                 }
-                required={prixVenteEstObligatoire(form.natureStock)}
+                required={prixVenteEstObligatoire(form)}
                 placeholder={
-                  prixVenteEstObligatoire(form.natureStock)
+                  prixVenteEstObligatoire(form)
                     ? undefined
                     : "Non vendu tel quel"
                 }
@@ -992,6 +1037,8 @@ export default function ParametresProduitsPage() {
                 onChange={(e) => setForm({ ...form, seuilGros: e.target.value })}
               />
             </label>
+            </>
+            )}
             <label className="block text-xs font-semibold text-muted">
               Seuil réappro (qté)
               <input
@@ -1107,6 +1154,7 @@ export default function ParametresProduitsPage() {
                 <th>Catégorie</th>
                 <th>Unité</th>
                 <th>Nature</th>
+                <th>Circuit</th>
                 <th>Vente HT</th>
                 {avecTVA && <th>TVA</th>}
                 <th>Statut</th>
@@ -1147,6 +1195,9 @@ export default function ParametresProduitsPage() {
                   <td className="font-mono text-xs">{p.unite}</td>
                   <td className="text-xs">
                     {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
+                  </td>
+                  <td className="text-xs">
+                    {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(p)]}
                   </td>
                   <td>{formatCurrency(p.prixVenteHT)}</td>
                   {avecTVA && <td>{p.tauxTVA} %</td>}
@@ -1246,8 +1297,9 @@ export default function ParametresProduitsPage() {
                   {selected.libelleLong}
                 </p>
                 <p className="text-xs text-muted">
-                  {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]} · Achat{" "}
-                  {formatCurrency(selected.prixAchat)} · Détail{" "}
+                  {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]} ·{" "}
+                  {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(selected)]} ·
+                  Achat {formatCurrency(selected.prixAchat)} · Détail{" "}
                   {formatCurrency(selected.prixVenteHT)}
                   {selected.prixVenteGrosHT != null
                     ? ` · Gros ${formatCurrency(selected.prixVenteGrosHT)}`
@@ -1294,18 +1346,22 @@ export default function ParametresProduitsPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                   {(
                     [
-                      ["tarifs", "Tarifs clients"],
-                      ["historique", "Historique des prix"],
-                      ["fournisseurs", "Fournisseurs"],
-                    ] as const
-                  ).map(([id, label]) => (
+                      ...(produitEstVendable(selected)
+                        ? [{ id: "tarifs" as const, label: "Tarifs clients" }]
+                        : []),
+                      { id: "historique" as const, label: "Historique des prix" },
+                      ...(produitEstAchetable(selected)
+                        ? [{ id: "fournisseurs" as const, label: "Fournisseurs" }]
+                        : []),
+                    ]
+                  ).map((item) => (
                     <button
-                      key={id}
+                      key={item.id}
                       type="button"
-                      className={`btn ${ficheOnglet === id ? "btn-primary" : "btn-secondary"}`}
-                      onClick={() => setFicheOnglet(id)}
+                      className={`btn ${ficheOnglet === item.id ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => setFicheOnglet(item.id)}
                     >
-                      {label}
+                      {item.label}
                     </button>
                   ))}
                 </div>
@@ -1462,8 +1518,13 @@ function ComptaProduitPanel({
   if (!peutModifier) {
     return (
       <p className="text-sm text-muted">
-        {TYPE_ACHAT_LABELS[type]}. Charge : {libelleCompte(charge)}. Vente :{" "}
-        {libelleCompte(vente)}.{" "}
+        {TYPE_ACHAT_LABELS[type]}.{" "}
+        {produitEstAchetable(produit)
+          ? `Charge : ${libelleCompte(charge)}. `
+          : ""}
+        {produitEstVendable(produit)
+          ? `Vente : ${libelleCompte(vente)}. `
+          : ""}
         {produitEstTaxable(produit, avecTVA) ? "Taxable." : "Non taxable."} Seul
         l&apos;administrateur peut modifier les comptes.
       </p>
@@ -1493,6 +1554,7 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
+      {produitEstAchetable(produit) && (
       <label className="block text-xs font-semibold text-muted">
         Compte de charge (achat)
         <select
@@ -1511,9 +1573,11 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
-      {chargeVerrouille && (
+      )}
+      {chargeVerrouille && produitEstAchetable(produit) && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
+      {produitEstVendable(produit) && (
       <label className="block text-xs font-semibold text-muted">
         Compte de vente
         <select
@@ -1532,7 +1596,8 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
-      {venteVerrouille && (
+      )}
+      {venteVerrouille && produitEstVendable(produit) && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
       <label className="flex items-center gap-2 text-sm">

@@ -12,7 +12,8 @@ import {
 } from "@/components/document-saisie-wizard";
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, nextNumero, persisterRemiseGlobale } from "@/lib/commercial";
+import { appliqueTVA, libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { useModelePourType } from "@/lib/use-modele";
@@ -31,7 +32,6 @@ export default function DevisPage() {
     addDevis,
     encaisserAcompte,
     pointDeVenteActifId,
-    exercicesComptables,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -45,10 +45,11 @@ export default function DevisPage() {
   const [wizardKey, setWizardKey] = useState(0);
 
   const modele = useModelePourType("devis");
-  const numeroProvisoire = nextNumero(
-    "DEV",
+  const numeroProvisoire = numeroPieceSuivant(
+    "devis",
     devis.map((d) => d.numero),
-    { date: meta.date, exercices: exercicesComptables },
+    parametres,
+    meta.date,
   );
   const echeanceProvisoire = (() => {
     const d = new Date(`${meta.date}T12:00:00`);
@@ -134,10 +135,11 @@ export default function DevisPage() {
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
-              const numero = nextNumero(
-                "DEV",
+              const numero = numeroPieceSuivant(
+                "devis",
                 devis.map((d) => d.numero),
-                { date: dateIso, exercices: exercicesComptables },
+                parametres,
+                dateIso,
               );
               const devisId = addDevis({
                 numero,

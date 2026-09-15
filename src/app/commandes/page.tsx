@@ -19,9 +19,9 @@ import {
   acomptesPourDocument,
   libelleClient,
   lignesAcomptesPourDocument,
-  nextNumero,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
+import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { devisPeutEtreTransforme } from "@/lib/transformation-document";
@@ -47,7 +47,6 @@ export default function CommandesPage() {
     annulerTransformation,
     finaliserTransformation,
     pointDeVenteActifId,
-    exercicesComptables,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -180,10 +179,11 @@ export default function CommandesPage() {
             acomptesDetail={acomptesDetail}
             previewMeta={{
               type: "commande",
-              numero: nextNumero(
-                "CMD",
+              numero: numeroPieceSuivant(
+                "commande",
                 commandes.map((c) => c.numero),
-                { date: meta.date, exercices: exercicesComptables },
+                parametres,
+                meta.date,
               ),
               date: new Date(`${meta.date}T12:00:00`).toISOString(),
               echeance: meta.dateLivraisonPrevue
@@ -207,10 +207,11 @@ export default function CommandesPage() {
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
               const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
-              const numero = nextNumero(
-                "CMD",
+              const numero = numeroPieceSuivant(
+                "commande",
                 commandes.map((c) => c.numero),
-                { date: dateIso, exercices: exercicesComptables },
+                parametres,
+                dateIso,
               );
               const commandeId = addCommande({
                 numero,

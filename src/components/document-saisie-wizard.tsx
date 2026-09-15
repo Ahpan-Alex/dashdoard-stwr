@@ -44,7 +44,7 @@ import type {
 } from "@/lib/types";
 import {
   designationFacture,
-  produitsActifs,
+  produitsVendablesActifs,
   resolvePrixVenteHT,
 } from "@/lib/produits";
 import { createId } from "@/lib/id";
@@ -183,7 +183,7 @@ export function DocumentSaisieWizard({
   acomptesDetail = [],
 }: Props) {
   const inventaires = useStore((s) => s.inventaires);
-  const produitsDispo = produitsActifs(produits);
+  const produitsDispo = produitsVendablesActifs(produits);
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
   const previewSheetRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<DraftLigne[]>(initialLignes);

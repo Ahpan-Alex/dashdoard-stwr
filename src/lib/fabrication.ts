@@ -493,7 +493,7 @@ export function motifAchatNatureInterdite(
     if (!l.produitId) continue;
     const p = produits.find((x) => x.id === l.produitId);
     if (p && !produitEstAchetable(p)) {
-      return `« ${p.libelleCourt || p.code} » est un ${p.natureStock === "fini" ? "produit fini" : "semi-fini"} : il entre en stock uniquement via un ordre de fabrication, jamais par achat.`;
+      return `« ${p.libelleCourt || p.code} » n'est pas achetable : il n'apparaît pas sur les commandes fournisseur ni les demandes de prix.`;
     }
   }
   return null;

@@ -11,6 +11,7 @@ import type {
   TarifClient,
   Vente,
 } from "./types";
+import { produitEstVendable } from "./nature-stock";
 
 const CODE_REGEX = /^[A-Z0-9][A-Z0-9-]{1,30}[A-Z0-9]$|^[A-Z0-9]{2,32}$/;
 
@@ -357,6 +358,10 @@ export function produitEstReference(
 
 export function produitsActifs(produits: Produit[]) {
   return produits.filter((p) => p.actif);
+}
+
+export function produitsVendablesActifs(produits: Produit[]) {
+  return produits.filter((p) => p.actif && produitEstVendable(p));
 }
 
 /** Migration depuis l'ancien format { nom, categorie, prixAchatMoyen, prixVente } */

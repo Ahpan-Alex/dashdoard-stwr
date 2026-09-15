@@ -1,4 +1,8 @@
-import { jetonNumeroExercice, type OptsNumeroDocument } from "./exercices";
+import { type OptsNumeroDocument } from "./exercices";
+import {
+  formatNumeroPieceEffectif,
+  nextNumeroSelonFormat,
+} from "./numerotation-pieces";
 import type {
   Acompte,
   Client,
@@ -26,8 +30,8 @@ export function codeEtablissement(
 }
 
 /**
- * Numérotation chronologique continue par année et établissement :
- * FAC-2026-MARCHE-000001 · PRO-… · AVO-…
+ * Numérotation des factures clients selon le format paramétré.
+ * PRO / AVO / FACACO reprennent la date et la longueur, avec leur propre préfixe.
  */
 export function nextNumeroDocumentCommercial(opts: {
   prefix: "FAC" | "PRO" | "AVO" | "FACACO";
@@ -36,28 +40,21 @@ export function nextNumeroDocumentCommercial(opts: {
   existing: string[];
   date?: Date | string;
   exercices?: OptsNumeroDocument["exercices"];
+  parametres?: Parametres;
 }) {
   const dateIso =
     typeof opts.date === "string"
       ? opts.date
       : (opts.date ?? new Date()).toISOString();
-  const jeton = jetonNumeroExercice(opts.exercices, dateIso);
-  const etab = codeEtablissement(opts.pointDeVenteId, opts.pointsDeVente);
-  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(
-    `^${escape(opts.prefix)}-${escape(jeton)}-${escape(etab)}-(\\d+)$`,
+  const cfg = formatNumeroPieceEffectif(opts.parametres, "facture_client");
+  return nextNumeroSelonFormat(
+    {
+      ...cfg,
+      prefixeLibre: opts.prefix === "FAC" ? cfg.prefixeLibre : opts.prefix,
+    },
+    opts.existing,
+    dateIso,
   );
-  let max = 0;
-  for (const n of opts.existing) {
-    const m = n.match(re);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  const reLegacy = new RegExp(`^${escape(opts.prefix)}-${escape(jeton)}-(\\d+)$`);
-  for (const n of opts.existing) {
-    const m = n.match(reLegacy);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `${opts.prefix}-${jeton}-${etab}-${String(max + 1).padStart(6, "0")}`;
 }
 
 export const FACTURE_STATUTS_MG: Record<string, string> = {

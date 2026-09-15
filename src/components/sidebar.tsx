@@ -56,6 +56,7 @@ type NavChild = {
   label: string;
   exact?: boolean;
   permission?: Permission;
+  children?: NavChild[];
 };
 type NavLink = {
   href: string;
@@ -337,8 +338,41 @@ const sections: { title: string; links: NavLink[] }[] = [
             label: "Modèles documents",
           },
           {
-            href: "/parametres/exercices",
-            label: "Exercices comptables",
+            href: "/parametres/configuration",
+            label: "Configuration générale",
+            children: [
+              {
+                href: "/parametres/configuration/exercices",
+                label: "Exercices comptables",
+                exact: true,
+              },
+              {
+                href: "/parametres/configuration/numerotation",
+                label: "Gestion n° des pièces",
+                children: [
+                  {
+                    href: "/parametres/configuration/numerotation/devis",
+                    label: "Devis",
+                  },
+                  {
+                    href: "/parametres/configuration/numerotation/commande",
+                    label: "Commande",
+                  },
+                  {
+                    href: "/parametres/configuration/numerotation/livraison",
+                    label: "Livraison",
+                  },
+                  {
+                    href: "/parametres/configuration/numerotation/facture-client",
+                    label: "Facture client",
+                  },
+                  {
+                    href: "/parametres/configuration/numerotation/facture-fournisseur",
+                    label: "Facture fournisseur",
+                  },
+                ],
+              },
+            ],
           },
           {
             href: "/parametres/objectifs-revenu",
@@ -417,6 +451,15 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function childIsActive(pathname: string, child: NavChild): boolean {
+  const self = child.exact
+    ? pathname === child.href
+    : isActive(pathname, child.href);
+  return (
+    self || (child.children ?? []).some((c) => childIsActive(pathname, c))
+  );
+}
+
 function isGroupActive(pathname: string, link: NavLink) {
   if (isActive(pathname, link.href)) return true;
   if ((link.matchPrefixes ?? []).some(
@@ -424,9 +467,7 @@ function isGroupActive(pathname: string, link: NavLink) {
   )) {
     return true;
   }
-  return (link.children ?? []).some((child) =>
-    child.exact ? pathname === child.href : isActive(pathname, child.href),
-  );
+  return (link.children ?? []).some((child) => childIsActive(pathname, child));
 }
 
 function initialOpenState(pathname: string) {
@@ -584,7 +625,12 @@ export function Sidebar() {
           .filter((link) => canSee(hasPermission, link))
           .map((link) => ({
             ...link,
-            children: link.children?.filter((c) => canSee(hasPermission, c)),
+            children: link.children
+              ?.filter((c) => canSee(hasPermission, c))
+              .map((c) => ({
+                ...c,
+                children: c.children?.filter((n) => canSee(hasPermission, n)),
+              })),
           })),
       }))
       .filter((s) => s.links.length > 0)
@@ -710,18 +756,42 @@ export function Sidebar() {
                             const childActive = child.exact
                               ? pathname === child.href
                               : isActive(pathname, child.href);
+                            const nested = child.children ?? [];
                             return (
-                              <Link
-                                key={`${child.href}-${child.label}`}
-                                href={child.href}
-                                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium leading-snug transition-colors ${
-                                  childActive
-                                    ? "bg-sea-700 text-white"
-                                    : "text-sea-300 hover:bg-white/5 hover:text-white"
-                                }`}
-                              >
-                                {child.label}
-                              </Link>
+                              <div key={`${child.href}-${child.label}`}>
+                                <Link
+                                  href={child.href}
+                                  className={`block rounded-lg px-3 py-1.5 text-[13px] font-medium leading-snug transition-colors ${
+                                    childActive
+                                      ? "bg-sea-700 text-white"
+                                      : "text-sea-300 hover:bg-white/5 hover:text-white"
+                                  }`}
+                                >
+                                  {child.label}
+                                </Link>
+                                {nested.length > 0 && childActive && (
+                                  <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                                    {nested.map((n) => {
+                                      const nestedActive = n.exact
+                                        ? pathname === n.href
+                                        : isActive(pathname, n.href);
+                                      return (
+                                        <Link
+                                          key={`${n.href}-${n.label}`}
+                                          href={n.href}
+                                          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
+                                            nestedActive
+                                              ? "bg-sea-700 text-white"
+                                              : "text-sea-400 hover:bg-white/5 hover:text-white"
+                                          }`}
+                                        >
+                                          {n.label}
+                                        </Link>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>

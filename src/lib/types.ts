@@ -59,6 +59,27 @@ export type TypeClient = {
   actif: boolean;
 };
 
+/** Deuxième préfixe des n° de pièces : année 4 car., année 2 car., ou année+mois. */
+export type FormatDateNumeroPiece = "annee_4" | "annee_2" | "annee_mois";
+
+export type TypePieceNumerotee =
+  | "devis"
+  | "commande"
+  | "livraison"
+  | "facture_client";
+
+export type FormatNumeroPiece = {
+  /** Premier préfixe, texte libre (ex. DEV, FAC). */
+  prefixeLibre: string;
+  formatDate: FormatDateNumeroPiece;
+  /** Chiffres du compteur, hors préfixes. */
+  longueurNumero: number;
+};
+
+export type FormatsNumeroPieces = Partial<
+  Record<TypePieceNumerotee, FormatNumeroPiece>
+>;
+
 /** Exercice comptable : année civile (01/01–31/12) ou à cheval sur deux années. */
 export type ExerciceComptable = {
   id: string;
@@ -126,6 +147,11 @@ export type Produit = {
    * Absent = matière première / article acheté (rétrocompatibilité).
    */
   natureStock?: NatureStock;
+  /**
+   * Circuit commercial : acheté, vendu, ou les deux.
+   * Absent = déduit de la nature (MP = achat+vente, fabriqué = vente).
+   */
+  usageCommercial?: UsageCommercialProduit;
   /** Jusqu’à deux nomenclatures (automatique + alternative nommée). */
   nomenclatures?: NomenclatureProduit[];
   /**
@@ -153,6 +179,9 @@ export type ProduitFournisseurRang = {
 
 /** Classification logistique du produit — distincte du type d'achat (classe 6). */
 export type NatureStock = "matiere_premiere" | "semi_fini" | "fini";
+
+/** Circuit commercial de la fiche article. */
+export type UsageCommercialProduit = "achat" | "vente" | "achat_vente";
 
 export type TypeNomenclature = "automatique" | "alternative";
 
@@ -355,6 +384,8 @@ export type Parametres = {
    * Absent = activé (rétrocompatibilité des entreprises déjà paramétrées).
    */
   moduleComptabilite?: boolean;
+  /** Formats de n° pour devis, commande, BL et facture client. */
+  formatsNumeroPieces?: FormatsNumeroPieces;
 };
 
 /**
@@ -653,6 +684,8 @@ export type Achat = {
   demandePrixId?: string;
   /** Durée de validité du bon de commande, en jours. */
   validiteJours?: number;
+  /** N° de la facture fournisseur, saisi manuellement. */
+  numeroFactureFournisseur?: string;
 };
 
 export type DemandePrixStatut =

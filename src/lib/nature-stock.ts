@@ -1,4 +1,4 @@
-import type { NatureStock, Produit } from "./types";
+import type { NatureStock, Produit, UsageCommercialProduit } from "./types";
 
 export const NATURE_STOCK_LABELS: Record<NatureStock, string> = {
   matiere_premiere: "Matière première / article acheté",
@@ -6,10 +6,35 @@ export const NATURE_STOCK_LABELS: Record<NatureStock, string> = {
   fini: "Produit fini",
 };
 
+export const USAGE_COMMERCIAL_LABELS: Record<UsageCommercialProduit, string> = {
+  achat: "Peut être acheté",
+  vente: "Peut être vendu",
+  achat_vente: "Acheté et vendu",
+};
+
+export const USAGES_COMMERCIAUX: UsageCommercialProduit[] = [
+  "achat",
+  "vente",
+  "achat_vente",
+];
+
 export function natureStockDuProduit(
   produit: Pick<Produit, "natureStock"> | undefined | null,
 ): NatureStock {
   return produit?.natureStock ?? "matiere_premiere";
+}
+
+export function usageCommercialDuProduit(
+  produit:
+    | Pick<Produit, "natureStock" | "usageCommercial">
+    | undefined
+    | null,
+): UsageCommercialProduit {
+  const raw = produit?.usageCommercial;
+  if (raw === "achat" || raw === "vente" || raw === "achat_vente") return raw;
+  return natureStockDuProduit(produit) === "matiere_premiere"
+    ? "achat_vente"
+    : "vente";
 }
 
 export function produitEstFabrique(produit: Pick<Produit, "natureStock">) {
@@ -17,22 +42,30 @@ export function produitEstFabrique(produit: Pick<Produit, "natureStock">) {
   return n === "semi_fini" || n === "fini";
 }
 
-export function produitEstAchetable(produit: Pick<Produit, "natureStock">) {
-  return natureStockDuProduit(produit) === "matiere_premiere";
+export function produitEstAchetable(
+  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+) {
+  const u = usageCommercialDuProduit(produit);
+  return u === "achat" || u === "achat_vente";
 }
 
-export function produitEstVendable(_produit: Pick<Produit, "natureStock">) {
-  return true;
+export function produitEstVendable(
+  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+) {
+  const u = usageCommercialDuProduit(produit);
+  return u === "vente" || u === "achat_vente";
 }
 
-/** Matière première : achetée, le tarif de vente n'est pas exigé. */
-export function prixAchatEstObligatoire(nature: NatureStock) {
-  return nature === "matiere_premiere";
+export function prixAchatEstObligatoire(
+  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+) {
+  return produitEstAchetable(produit);
 }
 
-/** Semi-fini / fini : fabriqués, le tarif d'achat n'est pas exigé. */
-export function prixVenteEstObligatoire(nature: NatureStock) {
-  return nature === "semi_fini" || nature === "fini";
+export function prixVenteEstObligatoire(
+  produit: Pick<Produit, "natureStock" | "usageCommercial">,
+) {
+  return produitEstVendable(produit);
 }
 
 export function peutServirDeComposantBom(produit: Pick<Produit, "natureStock">) {

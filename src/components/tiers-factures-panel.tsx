@@ -403,7 +403,7 @@ function TableAchats({
               <tr key={a.id}>
                 <td className="font-medium">
                   <Link href={`/achats?id=${a.id}`} className="hover:underline">
-                    {a.numero}
+                    {a.numeroFactureFournisseur?.trim() || a.numero}
                   </Link>
                 </td>
                 <td className="font-mono text-xs">{tiers.code || "—"}</td>
