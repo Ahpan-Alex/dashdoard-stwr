@@ -111,6 +111,7 @@ type PreviewMeta = {
   referenceCommande?: string;
   factureType?: "standard" | "acompte" | "solde" | "avoir" | "proforma";
   estProforma?: boolean;
+  validiteJours?: number;
 };
 
 type Props = {
@@ -1178,6 +1179,7 @@ export function DocumentSaisieWizard({
               referenceCommande={previewMeta.referenceCommande}
               factureType={previewMeta.factureType}
               estProforma={previewMeta.estProforma}
+              validiteJours={previewMeta.validiteJours}
               acomptesDetail={acomptesDetail}
             />
           </div>

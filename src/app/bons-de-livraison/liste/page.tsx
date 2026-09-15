@@ -97,6 +97,7 @@ export default function ListeBonsDeLivraisonPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
@@ -258,6 +259,7 @@ export default function ListeBonsDeLivraisonPage() {
       pointDeVenteId: bl.pointDeVenteId,
       pointsDeVente,
       existing: factures.map((f) => f.numero),
+      exercices: exercicesComptables,
     });
     const payloadFacture = {
       numero,
@@ -331,6 +333,7 @@ export default function ListeBonsDeLivraisonPage() {
     pointDeVenteId: pendingBl?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "",
     pointsDeVente,
     existing: factures.map((f) => f.numero),
+    exercices: exercicesComptables,
   });
 
   return (

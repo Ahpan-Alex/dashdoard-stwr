@@ -96,6 +96,7 @@ export default function ListeDevisPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
 
   const [filtre, setFiltre] = useState<Filtre>(() =>
     filtreDepuisQuery(searchParams.get("statut")),
@@ -235,6 +236,7 @@ export default function ListeDevisPage() {
     const numero = nextNumero(
       "CMD",
       commandes.map((c) => c.numero),
+      { date: d.date, exercices: exercicesComptables },
     );
     const commandeId = addCommande({
       numero,
@@ -250,6 +252,7 @@ export default function ListeDevisPage() {
       remiseGlobale: d.remiseGlobale,
       remiseGlobaleMode: d.remiseGlobaleMode,
       note: d.note,
+      validiteJours: d.validiteJours ?? 15,
     });
     const fin = finaliserTransformation({
       sourceType: "devis",
@@ -276,6 +279,7 @@ export default function ListeDevisPage() {
         numero: nextNumero(
           "CMD",
           commandes.map((c) => c.numero),
+          { date: pendingDevis.date, exercices: exercicesComptables },
         ),
         clientId: pendingDevis.clientId,
         pointDeVenteId: pendingDevis.pointDeVenteId,
@@ -407,6 +411,7 @@ export default function ListeDevisPage() {
               conditionsPaiement:
                 editDoc.conditionsPaiement ||
                 parametres.conditionsPaiementDefaut,
+              validiteJours: Number(meta.validiteJours) || 15,
             }}
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
@@ -594,6 +599,7 @@ export default function ListeDevisPage() {
                           totaux={totauxDevis(d, parametres, acomptes)}
                           conditionsPaiement={d.conditionsPaiement}
                           note={d.note}
+                          validiteJours={d.validiteJours}
                           acomptesDetail={lignesAcomptesPourDocument(acomptes, {
                             devisId: d.id,
                           })}
@@ -663,6 +669,7 @@ export default function ListeDevisPage() {
               totaux={totauxDevis(preview, parametres, acomptes)}
               conditionsPaiement={preview.conditionsPaiement}
               note={preview.note}
+              validiteJours={preview.validiteJours}
               acomptesDetail={lignesAcomptesPourDocument(acomptes, {
                 devisId: preview.id,
               })}
@@ -705,6 +712,7 @@ export default function ListeDevisPage() {
             conditionsPaiement={commandeProvisoire.conditionsPaiement}
             note={pendingDevis.note}
             referenceDevis={pendingDevis.numero}
+            validiteJours={pendingDevis.validiteJours}
             acomptesDetail={lignesAcomptesPourDocument(acomptes, {
               devisId: pendingDevis.id,
             })}

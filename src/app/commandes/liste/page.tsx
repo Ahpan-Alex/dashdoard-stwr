@@ -105,6 +105,7 @@ export default function ListeCommandesPage() {
     libererVerrousExpires,
     finaliserTransformation,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
@@ -131,6 +132,7 @@ export default function ListeCommandesPage() {
     devisId: "",
     date: new Date().toISOString().slice(0, 10),
     dateLivraisonPrevue: "",
+    validiteJours: "15",
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
   const [pending, setPending] = useState<{
@@ -204,6 +206,7 @@ export default function ListeCommandesPage() {
       dateLivraisonPrevue: c.dateLivraisonPrevue
         ? c.dateLivraisonPrevue.slice(0, 10)
         : "",
+      validiteJours: String(c.validiteJours ?? 15),
     });
     setSeed({
       lignes: lignesToDraft(c.lignes),
@@ -251,6 +254,7 @@ export default function ListeCommandesPage() {
     const numero = nextNumero(
       "BL",
       bonsDeLivraison.map((b) => b.numero),
+      { exercices: exercicesComptables },
     );
     const blId = addBonDeLivraison({
       numero,
@@ -316,6 +320,7 @@ export default function ListeCommandesPage() {
       pointDeVenteId: c.pointDeVenteId,
       pointsDeVente,
       existing: factures.map((f) => f.numero),
+      exercices: exercicesComptables,
     });
     const payloadFacture = {
       numero,
@@ -373,12 +378,14 @@ export default function ListeCommandesPage() {
   const numeroBlProvisoire = nextNumero(
     "BL",
     bonsDeLivraison.map((b) => b.numero),
+    { exercices: exercicesComptables },
   );
   const numeroFacProvisoire = nextNumeroDocumentCommercial({
     prefix: "FAC",
     pointDeVenteId: pendingCmd?.pointDeVenteId ?? pointsDeVente[0]?.id ?? "",
     pointsDeVente,
     existing: factures.map((f) => f.numero),
+    exercices: exercicesComptables,
   });
 
   return (
@@ -499,6 +506,7 @@ export default function ListeCommandesPage() {
                 editDoc.conditionsPaiement ||
                 parametres.conditionsPaiementDefaut,
               referenceDevis: devis.find((d) => d.id === meta.devisId)?.numero,
+              validiteJours: Number(meta.validiteJours) || 15,
             }}
             confirmLabel="Enregistrer les modifications"
             onCancel={() => setEditId(null)}
@@ -514,6 +522,7 @@ export default function ListeCommandesPage() {
                     ).toISOString()
                   : undefined,
                 devisId: meta.devisId || undefined,
+                validiteJours: Number(meta.validiteJours) || 15,
                 lignes,
                 ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),
                 note,
@@ -594,6 +603,18 @@ export default function ListeCommandesPage() {
                         ...meta,
                         dateLivraisonPrevue: e.target.value,
                       })
+                    }
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Validité (jours)
+                  <input
+                    type="number"
+                    min={1}
+                    className="input mt-1"
+                    value={meta.validiteJours}
+                    onChange={(e) =>
+                      setMeta({ ...meta, validiteJours: e.target.value })
                     }
                   />
                 </label>
@@ -705,6 +726,7 @@ export default function ListeCommandesPage() {
                           totaux={totauxCommande(c, parametres, acomptes)}
                           conditionsPaiement={c.conditionsPaiement}
                           note={c.note}
+                          validiteJours={c.validiteJours}
                           referenceDevis={
                             devis.find((d) => d.id === c.devisId)?.numero
                           }
@@ -789,6 +811,7 @@ export default function ListeCommandesPage() {
               totaux={totauxCommande(preview, parametres, acomptes)}
               conditionsPaiement={preview.conditionsPaiement}
               note={preview.note}
+              validiteJours={preview.validiteJours}
               referenceDevis={
                 devis.find((d) => d.id === preview.devisId)?.numero
               }

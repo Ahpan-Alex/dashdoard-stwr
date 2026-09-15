@@ -159,6 +159,7 @@ export default function ListeFacturesPage() {
     addFacture,
     deleteFacture,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
@@ -401,6 +402,7 @@ export default function ListeFacturesPage() {
       pointDeVenteId: factureAvoir.pointDeVenteId,
       pointsDeVente,
       existing: factures.map((f) => f.numero),
+      exercices: exercicesComptables,
     });
 
     const resAvoir = addFacture(
@@ -546,6 +548,7 @@ export default function ListeFacturesPage() {
       pointsDeVente,
       existing: factures.map((x) => x.numero),
       date: new Date(f.date),
+      exercices: exercicesComptables,
     });
 
     if (f.statut === "brouillon" && f.type !== "proforma") {

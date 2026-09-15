@@ -107,6 +107,7 @@ function ApercuDocument({ modele }: { modele: ModeleDocument }) {
       totaux={totaux}
       modePaiement="virement"
       apercuModele
+      validiteJours={15}
     />
   );
 }

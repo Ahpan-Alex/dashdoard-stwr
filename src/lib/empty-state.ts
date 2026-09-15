@@ -75,6 +75,7 @@ export function emptyAppState(): AppState {
     categoriesProduits: seedCategoriesProduits(),
     unitesMesure: seedUnitesMesure(),
     typesClients: seedTypesClients(),
+    exercicesComptables: [],
     produits: [],
     tarifsClients: [],
     historiquesPrix: [],
@@ -127,6 +128,9 @@ export function pickAppState(state: AppState): AppState {
       state.clients ?? [],
       state.tiers ?? [],
     ),
+    exercicesComptables: Array.isArray(state.exercicesComptables)
+      ? state.exercicesComptables
+      : [],
     produits: state.produits ?? [],
     tarifsClients: state.tarifsClients,
     historiquesPrix: state.historiquesPrix,

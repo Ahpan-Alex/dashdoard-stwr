@@ -38,6 +38,7 @@ export default function BonsDeLivraisonPage() {
     finaliserTransformation,
     pointDeVenteActifId,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
 
   const [open, setOpen] = useState(true);
   const [wizardKey, setWizardKey] = useState(0);
@@ -149,6 +150,7 @@ export default function BonsDeLivraisonPage() {
               numero: nextNumero(
                 "BL",
                 bonsDeLivraison.map((b) => b.numero),
+                { date: meta.date, exercices: exercicesComptables },
               ),
               date: new Date(`${meta.date}T12:00:00`).toISOString(),
               echeance: meta.dateLivraison
@@ -179,6 +181,7 @@ export default function BonsDeLivraisonPage() {
               const numero = nextNumero(
                 "BL",
                 bonsDeLivraison.map((b) => b.numero),
+                { date: meta.date, exercices: exercicesComptables },
               );
               const blId = addBonDeLivraison({
                 numero,

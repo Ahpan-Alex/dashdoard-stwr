@@ -155,6 +155,7 @@ import {
   nextNumeroDemandePrix,
   offreLigneFournisseur,
 } from "./demandes-prix";
+import { normaliserValiditeJours } from "./validite-document";
 import {
   cycleNomenclature,
   normaliserNomenclatures,
@@ -173,6 +174,12 @@ import {
   nbTiersParTypeClient,
   normalizeCodeTypeClient,
 } from "./types-clients";
+import {
+  bornesExerciceCalendaire,
+  codeExerciceCheval,
+  motifExerciceInvalide,
+} from "./exercices";
+import type { OptsNumeroDocument } from "./exercices";
 import { createId } from "./id";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
@@ -239,6 +246,7 @@ import type {
   DemandePrixLigne,
   DemandePrixOffre,
   DemandePrixStatut,
+  ExerciceComptable,
 } from "./types";
 
 type Store = {
@@ -266,6 +274,7 @@ type Store = {
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
+  exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];
   historiquesPrix: HistoriquePrix[];
@@ -366,7 +375,7 @@ type Store = {
   ) => string;
   updateAchat: (
     id: string,
-    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note">>,
+    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours">>,
   ) => { ok: boolean; reason?: string };
   validerAchat: (id: string) => { ok: boolean; reason?: string };
   annulerAchat: (id: string) => { ok: boolean; reason?: string };
@@ -531,6 +540,7 @@ type Store = {
     lignes: { produitId: string; quantite: number }[];
     fournisseurIds: string[];
     note?: string;
+    validiteJours?: number;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierDemandePrix: (
     id: string,
@@ -541,6 +551,7 @@ type Store = {
       offres: DemandePrixOffre[];
       fournisseurIdsRetenus: string[];
       note: string;
+      validiteJours: number;
     }>,
   ) => { ok: boolean; reason?: string };
   patchOffreDemandePrix: (
@@ -558,6 +569,7 @@ type Store = {
     data: {
       pointDeVenteId: string;
       date?: string;
+      validiteJours?: number;
       commandes: {
         fournisseurId: string;
         lignes: { produitId: string; quantite: number; prixAchatUnitaire: number }[];
@@ -602,6 +614,26 @@ type Store = {
     data: Partial<Pick<TypeClient, "code" | "libelle" | "actif" | "ordre">>,
   ) => { ok: true } | { ok: false; reason: string };
   deleteTypeClient: (id: string) => { ok: true } | { ok: false; reason: string };
+
+  addExerciceComptable: (data: {
+    calendaire: boolean;
+    annee?: number;
+    dateDebut?: string;
+    dateFin?: string;
+    libelle?: string;
+    actif?: boolean;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateExerciceComptable: (
+    id: string,
+    data: Partial<
+      Pick<
+        ExerciceComptable,
+        "libelle" | "dateDebut" | "dateFin" | "calendaire" | "actif" | "cloture" | "code"
+      >
+    >,
+  ) => { ok: true } | { ok: false; reason: string };
+  cloturerExerciceComptable: (id: string) => { ok: true } | { ok: false; reason: string };
+  deleteExerciceComptable: (id: string) => { ok: true } | { ok: false; reason: string };
 
   addProduit: (
     produit: Omit<Produit, "id">,
@@ -750,6 +782,13 @@ type Store = {
 
 function uid(prefix: string) {
   return createId(prefix);
+}
+
+function optsNum(
+  state: { exercicesComptables?: ExerciceComptable[] },
+  date?: string,
+): OptsNumeroDocument {
+  return { date, exercices: state.exercicesComptables ?? [] };
 }
 
 function seedComptesDefautState(state: {
@@ -1868,7 +1907,7 @@ export const useStore = create<Store>()((set, get) => ({
 
       addAchat: (achat) => {
         const id = uid("ach");
-        const numero = achat.numero || nextNumeroAchat(get().achats);
+        const numero = achat.numero || nextNumeroAchat(get().achats, optsNum(get(), achat.date));
         const actor = getActiviteActor();
         set((state) => ({
           achats: [
@@ -3063,7 +3102,7 @@ export const useStore = create<Store>()((set, get) => ({
         const fournisseur = state.fournisseurs.find((f) => f.id === data.fournisseurId);
         if (!fournisseur) return { ok: false, reason: "Fournisseur introuvable." };
         const achatId = uid("ach");
-        const numero = nextNumeroAchat(state.achats);
+        const numero = nextNumeroAchat(state.achats, optsNum(state));
         const actor = getActiviteActor();
         set((s) => ({
           achats: [
@@ -3480,13 +3519,14 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const nouveau: DemandePrix = {
           id: uid("dp"),
-          numero: nextNumeroDemandePrix(state.demandesPrix ?? []),
+          numero: nextNumeroDemandePrix(state.demandesPrix ?? [], optsNum(state, data.date)),
           date: data.date,
           statut: "brouillon",
           lignes,
           fournisseurIds: [...new Set(data.fournisseurIds)],
           offres,
           note: data.note,
+          validiteJours: normaliserValiditeJours(data.validiteJours),
         };
         set((s) => ({
           demandesPrix: [nouveau, ...(s.demandesPrix ?? [])],
@@ -3558,6 +3598,10 @@ export const useStore = create<Store>()((set, get) => ({
           fournisseurIds,
           offres,
           fournisseurIdsRetenus: retenus,
+          validiteJours:
+            data.validiteJours !== undefined
+              ? normaliserValiditeJours(data.validiteJours)
+              : prev.validiteJours,
         };
         set((s) => ({
           demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? next : d)),
@@ -3623,25 +3667,28 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.statut === "annulee") {
           return { ok: false, reason: "Cette demande de prix est annulée." };
         }
-        const retenus = prev.fournisseurIdsRetenus ?? [];
-        if (retenus.length === 0) {
-          return { ok: false, reason: "Indiquez le ou les fournisseurs retenus." };
+        const consultes = new Set(prev.fournisseurIds ?? []);
+        if (consultes.size === 0) {
+          return { ok: false, reason: "Aucun fournisseur consulté sur cette demande." };
         }
         if (!data.pointDeVenteId) {
           return { ok: false, reason: "Choisissez un site de destination." };
         }
         if (data.commandes.length === 0) {
-          return { ok: false, reason: "Sélectionnez au moins un fournisseur à commander." };
+          return { ok: false, reason: "Répartissez au moins un article vers un fournisseur." };
         }
         const produits = state.produits ?? [];
         const actor = getActiviteActor();
         const nouveaux: Achat[] = [];
         let achatsCourants = state.achats;
+        const validite = normaliserValiditeJours(
+          data.validiteJours ?? prev.validiteJours,
+        );
         for (const cmd of data.commandes) {
-          if (!retenus.includes(cmd.fournisseurId)) {
+          if (!consultes.has(cmd.fournisseurId)) {
             return {
               ok: false,
-              reason: "Chaque commande doit concerner un fournisseur retenu.",
+              reason: "Chaque commande doit concerner un fournisseur consulté sur la DP.",
             };
           }
           if (cmd.lignes.length === 0) {
@@ -3665,7 +3712,10 @@ export const useStore = create<Store>()((set, get) => ({
           const motifNat = motifAchatNatureInterdite(produits, lignesAchat);
           if (motifNat) return { ok: false, reason: motifNat };
           const achatId = uid("ach");
-          const numero = nextNumeroAchat(achatsCourants);
+          const numero = nextNumeroAchat(
+            achatsCourants,
+            optsNum(state, data.date ?? prev.date),
+          );
           const achat: Achat = {
             id: achatId,
             numero,
@@ -3684,15 +3734,22 @@ export const useStore = create<Store>()((set, get) => ({
             vendeurId: actor.id,
             vendeurNom: actor.nom,
             demandePrixId: prev.id,
+            validiteJours: validite,
           };
           nouveaux.push(achat);
           achatsCourants = [achat, ...achatsCourants];
         }
         const achatIds = [...(prev.achatIds ?? []), ...nouveaux.map((a) => a.id)];
+        const retenusMaj = [
+          ...new Set([
+            ...(prev.fournisseurIdsRetenus ?? []),
+            ...data.commandes.map((c) => c.fournisseurId),
+          ]),
+        ];
         set((s) => ({
           achats: [...nouveaux, ...s.achats],
           demandesPrix: (s.demandesPrix ?? []).map((d) =>
-            d.id === id ? { ...d, achatIds } : d,
+            d.id === id ? { ...d, achatIds, fournisseurIdsRetenus: retenusMaj } : d,
           ),
           journalActivites: [
             ...nouveaux.map((a) =>
@@ -4284,6 +4341,159 @@ export const useStore = create<Store>()((set, get) => ({
           typesClients: s.typesClients.filter((t) => t.id !== id),
           journalActivites: [
             entreeActivite("suppression", "type_client", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+
+      addExerciceComptable: (data) => {
+        const state = get();
+        const existants = state.exercicesComptables ?? [];
+        let dateDebut = "";
+        let dateFin = "";
+        let code = "";
+        let libelle = (data.libelle ?? "").trim();
+        let calendaire = data.calendaire;
+        if (calendaire) {
+          const annee = data.annee ?? new Date().getFullYear();
+          if (!Number.isFinite(annee) || annee < 1990 || annee > 2200) {
+            return { ok: false as const, reason: "Année d’exercice invalide." };
+          }
+          const bornes = bornesExerciceCalendaire(annee);
+          dateDebut = bornes.dateDebut;
+          dateFin = bornes.dateFin;
+          code = bornes.code;
+          libelle = libelle || bornes.libelle;
+        } else {
+          dateDebut = (data.dateDebut ?? "").slice(0, 10);
+          dateFin = (data.dateFin ?? "").slice(0, 10);
+          code = codeExerciceCheval(dateDebut, dateFin);
+          libelle = libelle || (code ? `Exercice ${code}` : "");
+        }
+        const motif = motifExerciceInvalide(
+          { code, libelle, dateDebut, dateFin },
+          existants,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("ex");
+        const actif = data.actif !== false && existants.filter((e) => e.actif && !e.cloture).length === 0
+          ? true
+          : Boolean(data.actif);
+        const nouveau: ExerciceComptable = {
+          id,
+          code,
+          libelle,
+          dateDebut,
+          dateFin,
+          calendaire,
+          actif,
+          cloture: false,
+        };
+        set((s) => ({
+          exercicesComptables: [
+            nouveau,
+            ...(s.exercicesComptables ?? []).map((e) =>
+              actif ? { ...e, actif: false } : e,
+            ),
+          ],
+          journalActivites: [
+            entreeActivite("creation", "exercice_comptable", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateExerciceComptable: (id, data) => {
+        const state = get();
+        const prev = (state.exercicesComptables ?? []).find((e) => e.id === id);
+        if (!prev) return { ok: false as const, reason: "Exercice introuvable." };
+        if (prev.cloture && data.cloture !== false) {
+          if (data.dateDebut || data.dateFin || data.code) {
+            return { ok: false as const, reason: "Un exercice clôturé ne peut plus changer de dates." };
+          }
+        }
+        const calendaire = data.calendaire ?? prev.calendaire;
+        let dateDebut = (data.dateDebut ?? prev.dateDebut).slice(0, 10);
+        let dateFin = (data.dateFin ?? prev.dateFin).slice(0, 10);
+        let code = (data.code ?? prev.code).trim();
+        if (calendaire) {
+          const annee = Number(dateDebut.slice(0, 4)) || new Date().getFullYear();
+          const bornes = bornesExerciceCalendaire(annee);
+          dateDebut = bornes.dateDebut;
+          dateFin = bornes.dateFin;
+          code = bornes.code;
+        } else if (data.dateDebut || data.dateFin) {
+          code = codeExerciceCheval(dateDebut, dateFin) || code;
+        }
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifExerciceInvalide(
+          { code, libelle, dateDebut, dateFin },
+          state.exercicesComptables ?? [],
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const actif = data.actif ?? prev.actif;
+        const cloture = data.cloture ?? prev.cloture;
+        set((s) => ({
+          exercicesComptables: (s.exercicesComptables ?? []).map((e) => {
+            if (e.id === id) {
+              return {
+                ...e,
+                code,
+                libelle,
+                dateDebut,
+                dateFin,
+                calendaire,
+                actif: cloture ? false : actif,
+                cloture,
+              };
+            }
+            if (actif && !cloture) return { ...e, actif: false };
+            return e;
+          }),
+          journalActivites: [
+            entreeActivite("modification", "exercice_comptable", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      cloturerExerciceComptable: (id) => {
+        const prev = (get().exercicesComptables ?? []).find((e) => e.id === id);
+        if (!prev) return { ok: false as const, reason: "Exercice introuvable." };
+        if (prev.cloture) return { ok: false as const, reason: "Cet exercice est déjà clôturé." };
+        set((s) => ({
+          exercicesComptables: (s.exercicesComptables ?? []).map((e) =>
+            e.id === id ? { ...e, cloture: true, actif: false } : e,
+          ),
+          journalActivites: [
+            entreeActivite("validation", "exercice_comptable", {
+              entiteId: id,
+              libelle: prev.libelle,
+              detail: "cloture",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteExerciceComptable: (id) => {
+        const prev = (get().exercicesComptables ?? []).find((e) => e.id === id);
+        if (!prev) return { ok: false as const, reason: "Exercice introuvable." };
+        set((s) => ({
+          exercicesComptables: (s.exercicesComptables ?? []).filter((e) => e.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "exercice_comptable", {
               entiteId: id,
               libelle: prev.libelle,
             }),
@@ -5597,6 +5807,7 @@ export const useStore = create<Store>()((set, get) => ({
         const numeroAco = nextNumero(
           "ACO",
           state.acomptes.map((a) => a.numero),
+          optsNum(state, data.date),
         );
         const generer = data.genererFactureAcompte !== false;
         let factureAcompteId: string | undefined;
@@ -5608,7 +5819,8 @@ export const useStore = create<Store>()((set, get) => ({
             pointDeVenteId: pdvId,
             pointsDeVente: state.pointsDeVente,
             existing: state.factures.map((f) => f.numero),
-            date: new Date(data.date),
+            date: data.date,
+            exercices: state.exercicesComptables,
           });
           const facAco = get().addFacture({
             numero: numeroFac,

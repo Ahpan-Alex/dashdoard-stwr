@@ -3,7 +3,11 @@ import type { AlertesSuivi, ParametresAlertes } from "./alertes";
 import type { ModeleDocument, PreferencesModeles } from "./document-templates";
 
 /** Rôle opérationnel d’un site. Un site peut cumuler entrepôt et point de vente. */
-export type RoleSite = "entrepot" | "point_de_vente" | "atelier" | "atelier_final";
+export type RoleSite =
+  | "entrepot"
+  | "point_de_vente"
+  | "atelier"
+  | "atelier_final";
 
 export type PointDeVente = {
   id: string;
@@ -53,6 +57,20 @@ export type TypeClient = {
   libelle: string;
   ordre: number;
   actif: boolean;
+};
+
+/** Exercice comptable : année civile (01/01–31/12) ou à cheval sur deux années. */
+export type ExerciceComptable = {
+  id: string;
+  /** Jeton de numérotation : « 2026 » ou « 2025-2026 ». */
+  code: string;
+  libelle: string;
+  dateDebut: string;
+  dateFin: string;
+  /** true = 1er janvier → 31 décembre. */
+  calendaire: boolean;
+  actif: boolean;
+  cloture: boolean;
 };
 
 export type TypeAchat =
@@ -633,9 +651,15 @@ export type Achat = {
   ofComposantId?: string;
   /** Demande de prix d'origine, si la commande en est issue. */
   demandePrixId?: string;
+  /** Durée de validité du bon de commande, en jours. */
+  validiteJours?: number;
 };
 
-export type DemandePrixStatut = "brouillon" | "en_cours" | "cloturee" | "annulee";
+export type DemandePrixStatut =
+  | "brouillon"
+  | "en_cours"
+  | "cloturee"
+  | "annulee";
 
 export type DemandePrixLigne = {
   id: string;
@@ -665,13 +689,11 @@ export type DemandePrix = {
   /** Commandes fournisseur générées depuis cette DP. */
   achatIds?: string[];
   note?: string;
+  /** Durée de validité de la demande de prix, en jours. */
+  validiteJours?: number;
 };
 
-export type TransfertStockStatut =
-  | "demande"
-  | "expedie"
-  | "recu"
-  | "annule";
+export type TransfertStockStatut = "demande" | "expedie" | "recu" | "annule";
 
 export type TransfertStockLigne = {
   produitId: string;
@@ -800,6 +822,8 @@ export type Commande = {
   pointDeVenteId: string;
   date: string;
   dateLivraisonPrevue?: string;
+  /** Durée de validité du bon de commande, en jours. */
+  validiteJours?: number;
   statut: CommandeStatut;
   lignes: LigneDocument[];
   tauxTVA: number;
@@ -840,7 +864,12 @@ export type BonDeLivraison = {
   verrouTransformation?: VerrouTransformation | null;
 };
 
-export type FactureType = "standard" | "acompte" | "solde" | "avoir" | "proforma";
+export type FactureType =
+  | "standard"
+  | "acompte"
+  | "solde"
+  | "avoir"
+  | "proforma";
 
 export type FactureStatut =
   | "brouillon"
@@ -1061,6 +1090,7 @@ export type ActiviteEntite =
   | "categorie"
   | "unite_mesure"
   | "type_client"
+  | "exercice_comptable"
   | "fournisseur"
   | "achat"
   | "point_de_vente"
@@ -1127,7 +1157,11 @@ export type CompteComptable = {
 
 export type JournalEcriture = "vente" | "achat";
 
-export type SourceEcriture = "facture" | "achat" | "avoir_achat" | "mission_achat";
+export type SourceEcriture =
+  | "facture"
+  | "achat"
+  | "avoir_achat"
+  | "mission_achat";
 
 export type LigneEcritureComptable = {
   id: string;
@@ -1363,6 +1397,7 @@ export type AppState = {
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
+  exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];
   historiquesPrix: HistoriquePrix[];

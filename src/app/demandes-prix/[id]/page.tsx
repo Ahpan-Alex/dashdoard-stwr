@@ -8,6 +8,7 @@ import { DemandePrixDocument } from "@/components/demande-prix-document";
 import { DocumentPrintActions } from "@/components/document-print-actions";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
+import { SelecteurApercuCommandesFournisseur } from "@/components/apercu-bon-commande-fournisseur";
 import { TransformerDpAchat } from "@/components/transformer-dp-achat";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { createId } from "@/lib/id";
@@ -182,9 +183,25 @@ export default function DemandePrixDetailPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className={`badge ${badgeDp(dp.statut)}`}>{DP_STATUT_LABELS[dp.statut]}</span>
         <span className="text-sm text-muted">{formatDate(dp.date)}</span>
+        <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+          Validité (jours)
+          <input
+            type="number"
+            min={1}
+            className="input w-24"
+            value={dp.validiteJours ?? 15}
+            disabled={dp.statut === "annulee"}
+            onChange={(e) => {
+              const res = modifierDemandePrix(dp.id, {
+                validiteJours: Number(e.target.value) || 15,
+              });
+              if (!res.ok) alert(res.reason);
+            }}
+          />
+        </label>
       </div>
 
       {!verrouille && (
@@ -507,8 +524,13 @@ export default function DemandePrixDetailPage() {
       {dp.statut !== "annulee" && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-2 font-display text-lg font-semibold">
-            Transformer en commande fournisseur
+            Transformer en commande(s) fournisseur
           </h2>
+          <p className="mb-3 text-xs text-muted">
+            Un même article peut être partagé entre plusieurs fournisseurs. Chaque
+            fournisseur reçoit sa propre commande brouillon : prévisualisez et
+            téléchargez le bon, puis validez.
+          </p>
           <TransformerDpAchat dp={dp} nomFrn={nomFrn} />
         </section>
       )}
@@ -516,19 +538,15 @@ export default function DemandePrixDetailPage() {
       {(dp.achatIds ?? []).length > 0 && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-2 font-display text-lg font-semibold">Commandes générées</h2>
-          <ul className="space-y-1 text-sm">
-            {(dp.achatIds ?? []).map((aid) => {
-              const a = achats.find((x) => x.id === aid);
-              return (
-                <li key={aid}>
-                  <Link href={`/achats?id=${aid}`} className="font-semibold text-sea-800">
-                    {a?.numero ?? "Commande"}
-                  </Link>
-                  {a ? ` · ${nomFrn(a.fournisseurId)}` : null}
-                </li>
-              );
-            })}
-          </ul>
+          <p className="mb-3 text-xs text-muted">
+            Prévisualisez et téléchargez chaque bon de commande fournisseur avant
+            de valider.
+          </p>
+          <SelecteurApercuCommandesFournisseur
+            achats={(dp.achatIds ?? [])
+              .map((aid) => achats.find((x) => x.id === aid))
+              .filter((a): a is NonNullable<typeof a> => Boolean(a))}
+          />
         </section>
       )}
     </div>

@@ -2,31 +2,45 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { SelecteurArticle } from "@/components/selecteur-article";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import {
+  affectationsInitialesParArticle,
   dpPeutEtreTransformee,
-  lignesCommandeDepuisDp,
+  offreLigneFournisseur,
+  regrouperAffectationsEnCommandes,
 } from "@/lib/demandes-prix";
-import { produitEstAchetable } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
+import { VALIDITE_JOURS_DEFAUT, normaliserValiditeJours } from "@/lib/validite-document";
 import type { DemandePrix, Produit } from "@/lib/types";
 
-type LigneEdit = {
-  produitId: string;
+type PartEdit = {
+  fournisseurId: string;
   quantite: string;
   prixAchatUnitaire: string;
 };
 
-function lignesInitiales(dp: DemandePrix, fournisseurId: string, produits: Produit[]) {
-  return lignesCommandeDepuisDp(dp, fournisseurId, produits).map((l) => ({
-    produitId: l.produitId,
-    quantite: String(l.quantite),
-    prixAchatUnitaire: l.prixAchatUnitaire > 0 ? String(l.prixAchatUnitaire) : "",
+type LigneEdit = {
+  ligneId: string;
+  produitId: string;
+  designation: string;
+  quantiteDemandee: number;
+  parts: PartEdit[];
+};
+
+function toEdit(dp: DemandePrix, produits: Produit[]): LigneEdit[] {
+  return affectationsInitialesParArticle(dp, produits ?? []).map((a) => ({
+    ligneId: a.ligneId,
+    produitId: a.produitId,
+    designation: a.designation,
+    quantiteDemandee: a.quantiteDemandee,
+    parts: a.parts.map((p) => ({
+      fournisseurId: p.fournisseurId,
+      quantite: String(p.quantite),
+      prixAchatUnitaire: p.prixAchatUnitaire > 0 ? String(p.prixAchatUnitaire) : "",
+    })),
   }));
 }
 
@@ -37,54 +51,97 @@ export function TransformerDpAchat({
   dp: DemandePrix;
   nomFrn: (id: string) => string;
 }) {
-  const router = useRouter();
   const produits = useStore((s) => s.produits ?? []);
   const transformer = useStore((s) => s.transformerDemandePrixEnAchats);
   const { visibles } = useSitesVisibles();
   const sites = visibles.filter((s) => s.actif);
-  const retenus = dp.fournisseurIdsRetenus ?? [];
-  const articles = useMemo(
-    () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
-    [produits],
-  );
+  const consultes = dp.fournisseurIds ?? [];
 
   const [ouvert, setOuvert] = useState(false);
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
   const [date, setDate] = useState(jourLocalISO());
-  const [frnChoisis, setFrnChoisis] = useState<string[]>(retenus);
-  const [parFrn, setParFrn] = useState<Record<string, LigneEdit[]>>(() => {
-    const init: Record<string, LigneEdit[]> = {};
-    for (const fid of retenus) {
-      init[fid] = lignesInitiales(dp, fid, produits);
-    }
-    return init;
-  });
+  const [validiteJours, setValiditeJours] = useState(
+    String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT),
+  );
+  const [lignes, setLignes] = useState<LigneEdit[]>(() => toEdit(dp, produits));
+
+  const commandesPrevues = useMemo(
+    () =>
+      regrouperAffectationsEnCommandes(
+        lignes.map((l) => ({
+          produitId: l.produitId,
+          parts: l.parts.map((p) => ({
+            fournisseurId: p.fournisseurId,
+            quantite: Number(p.quantite) || 0,
+            prixAchatUnitaire: Number(p.prixAchatUnitaire) || 0,
+          })),
+        })),
+      ),
+    [lignes],
+  );
 
   if (!dpPeutEtreTransformee(dp)) {
     return (
       <p className="text-sm text-muted">
-        Indiquez d’abord le ou les fournisseurs retenus pour transformer cette DP
-        en commande fournisseur.
+        Ajoutez au moins un article et un fournisseur consulté pour transformer
+        cette DP en une ou plusieurs commandes fournisseur.
       </p>
     );
   }
 
-  function toggleFrn(id: string) {
-    setFrnChoisis((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      setParFrn((m) => ({
-        ...m,
-        [id]: m[id] ?? lignesInitiales(dp, id, produits),
-      }));
-      return next;
-    });
+  function resetFormulaire() {
+    setLignes(toEdit(dp, produits));
+    setSiteId(sites[0]?.id ?? "");
+    setDate(jourLocalISO());
+    setValiditeJours(String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT));
+    setOuvert(true);
   }
 
-  function patchLigne(fid: string, index: number, patch: Partial<LigneEdit>) {
-    setParFrn((m) => ({
-      ...m,
-      [fid]: (m[fid] ?? []).map((l, i) => (i === index ? { ...l, ...patch } : l)),
-    }));
+  function patchPart(ligneId: string, index: number, patch: Partial<PartEdit>) {
+    setLignes((prev) =>
+      prev.map((l) =>
+        l.ligneId === ligneId
+          ? {
+              ...l,
+              parts: l.parts.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+            }
+          : l,
+      ),
+    );
+  }
+
+  function retirerPart(ligneId: string, index: number) {
+    setLignes((prev) =>
+      prev.map((l) =>
+        l.ligneId === ligneId
+          ? { ...l, parts: l.parts.filter((_, i) => i !== index) }
+          : l,
+      ),
+    );
+  }
+
+  function ajouterPart(ligneId: string, fournisseurId: string) {
+    if (!fournisseurId) return;
+    setLignes((prev) =>
+      prev.map((l) => {
+        if (l.ligneId !== ligneId) return l;
+        const deja = l.parts.reduce((s, p) => s + (Number(p.quantite) || 0), 0);
+        const reste = Math.max(0, l.quantiteDemandee - deja);
+        const offre = offreLigneFournisseur(dp, l.ligneId, fournisseurId);
+        return {
+          ...l,
+          parts: [
+            ...l.parts,
+            {
+              fournisseurId,
+              quantite: String(reste || l.quantiteDemandee),
+              prixAchatUnitaire:
+                offre && offre.prixUnitaire > 0 ? String(offre.prixUnitaire) : "",
+            },
+          ],
+        };
+      }),
+    );
   }
 
   function lancer() {
@@ -92,68 +149,53 @@ export function TransformerDpAchat({
       alert("Choisissez un site de destination.");
       return;
     }
-    if (frnChoisis.length === 0) {
-      alert("Sélectionnez au moins un fournisseur retenu.");
+    if (commandesPrevues.length === 0) {
+      alert("Attribuez au moins un article à un fournisseur, avec une quantité positive.");
       return;
     }
-    const commandes = [];
-    for (const fid of frnChoisis) {
-      const lignes = (parFrn[fid] ?? [])
-        .filter((l) => l.produitId)
-        .map((l) => ({
-          produitId: l.produitId,
-          quantite: Number(l.quantite) || 0,
-          prixAchatUnitaire: Number(l.prixAchatUnitaire) || 0,
-        }));
-      if (lignes.length === 0) {
-        alert(`Ajoutez au moins un article pour ${nomFrn(fid)}.`);
+    for (const l of lignes) {
+      if (l.parts.some((p) => p.fournisseurId && !(Number(p.quantite) >= 0))) {
+        alert("Les quantités doivent être positives.");
         return;
       }
-      if (lignes.some((l) => !(l.quantite > 0))) {
-        alert("Chaque ligne doit avoir une quantité positive.");
+      if (l.parts.some((p) => p.fournisseurId && Number(p.prixAchatUnitaire) < 0)) {
+        alert("Les prix ne peuvent pas être négatifs.");
         return;
       }
-      commandes.push({ fournisseurId: fid, lignes });
     }
+    const commandes = commandesPrevues.map((c) => ({
+      fournisseurId: c.fournisseurId,
+      lignes: c.lignes,
+    }));
     const res = transformer(dp.id, {
       pointDeVenteId: siteId,
       date: isoMidiDepuisJour(date),
+      validiteJours: normaliserValiditeJours(validiteJours),
       commandes,
     });
     if (!res.ok) {
       alert(res.reason);
       return;
     }
-    const premier = res.achatIds[0];
-    router.push(premier ? `/achats?id=${premier}` : "/achats");
+    setOuvert(false);
   }
 
   return (
     <div>
       {!ouvert ? (
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            const init: Record<string, LigneEdit[]> = {};
-            for (const fid of retenus) {
-              init[fid] = lignesInitiales(dp, fid, produits);
-            }
-            setParFrn(init);
-            setFrnChoisis(retenus);
-            setSiteId(sites[0]?.id ?? "");
-            setOuvert(true);
-          }}
-        >
-          Transformer en commande fournisseur
+        <button type="button" className="btn btn-primary" onClick={resetFormulaire}>
+          {(dp.achatIds ?? []).length > 0
+            ? "Créer d’autres commandes"
+            : "Transformer en commande fournisseur"}
         </button>
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Les commandes sont créées en brouillon : vous pourrez encore modifier
-            les lignes, le site et les prix avant validation.
+            Répartissez chaque article entre un ou plusieurs fournisseurs : une
+            commande brouillon distincte est créée par fournisseur. Vous
+            prévisualisez et téléchargez ensuite chaque bon, avant de valider.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="block text-xs font-semibold text-muted">
               Site de destination
               <select
@@ -178,102 +220,138 @@ export function TransformerDpAchat({
                 onChange={(e) => setDate(e.target.value)}
               />
             </label>
-          </div>
-          <div>
-            <p className="mb-2 text-xs font-semibold text-muted">
-              Fournisseurs à commander
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {retenus.map((fid) => (
-                <label
-                  key={fid}
-                  className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={frnChoisis.includes(fid)}
-                    onChange={() => toggleFrn(fid)}
-                  />
-                  {nomFrn(fid)}
-                </label>
-              ))}
-            </div>
-          </div>
-          {frnChoisis.map((fid) => (
-            <div key={fid} className="rounded-[var(--radius)] border border-line p-3">
-              <h4 className="mb-2 font-semibold">{nomFrn(fid)}</h4>
-              <div className="space-y-2">
-                {(parFrn[fid] ?? []).map((l, i) => {
-                  const p = produits.find((x) => x.id === l.produitId);
-                  return (
-                    <div key={`${fid}-${i}`} className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem_auto]">
-                      <p className="self-center text-sm">
-                        {p ? `${p.code} — ${libelleProduit(p)}` : "Article"}
-                      </p>
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        className="input"
-                        value={l.quantite}
-                        onChange={(e) => patchLigne(fid, i, { quantite: e.target.value })}
-                        aria-label="Quantité"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        className="input"
-                        value={l.prixAchatUnitaire}
-                        onChange={(e) =>
-                          patchLigne(fid, i, { prixAchatUnitaire: e.target.value })
-                        }
-                        aria-label="Prix unitaire"
-                        placeholder="Prix HT"
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() =>
-                          setParFrn((m) => ({
-                            ...m,
-                            [fid]: (m[fid] ?? []).filter((_, j) => j !== i),
-                          }))
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <AjouterLigne
-                articles={articles}
-                onAdd={(produitId) =>
-                  setParFrn((m) => ({
-                    ...m,
-                    [fid]: [
-                      ...(m[fid] ?? []),
-                      { produitId, quantite: "1", prixAchatUnitaire: "" },
-                    ],
-                  }))
-                }
+            <label className="block text-xs font-semibold text-muted">
+              Validité (jours)
+              <input
+                type="number"
+                min={1}
+                className="input mt-1"
+                value={validiteJours}
+                onChange={(e) => setValiditeJours(e.target.value)}
               />
-              <p className="mt-2 text-xs text-muted">
-                Total HT estimé :{" "}
-                {formatCurrency(
-                  (parFrn[fid] ?? []).reduce(
-                    (s, l) =>
-                      s + (Number(l.quantite) || 0) * (Number(l.prixAchatUnitaire) || 0),
-                    0,
-                  ),
-                )}
+            </label>
+          </div>
+
+          <div className="space-y-4">
+            {lignes.map((l) => {
+              const p = produits.find((x) => x.id === l.produitId);
+              const affecte = l.parts.reduce((s, part) => s + (Number(part.quantite) || 0), 0);
+              const restants = consultes.filter(
+                (fid) => !l.parts.some((part) => part.fournisseurId === fid),
+              );
+              const ecart = Math.abs(affecte - l.quantiteDemandee) > 0.0001;
+              return (
+                <div key={l.ligneId} className="rounded-[var(--radius)] border border-line p-3">
+                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                    <h4 className="font-semibold">
+                      {p ? `${p.code} — ${libelleProduit(p)}` : l.designation}
+                    </h4>
+                    <p className={`text-xs ${ecart ? "text-amber-800" : "text-muted"}`}>
+                      Demandé {formatNumber(l.quantiteDemandee)}
+                      {p?.unite ? ` ${p.unite}` : ""} · affecté {formatNumber(affecte)}
+                      {ecart ? " (différent de la DP)" : ""}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {l.parts.map((part, i) => (
+                      <div
+                        key={`${l.ligneId}-${i}`}
+                        className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem_auto]"
+                      >
+                        <select
+                          className="select"
+                          value={part.fournisseurId}
+                          onChange={(e) =>
+                            patchPart(l.ligneId, i, { fournisseurId: e.target.value })
+                          }
+                        >
+                          <option value="">— Fournisseur —</option>
+                          {consultes.map((fid) => (
+                            <option
+                              key={fid}
+                              value={fid}
+                              disabled={
+                                fid !== part.fournisseurId &&
+                                l.parts.some((x) => x.fournisseurId === fid)
+                              }
+                            >
+                              {nomFrn(fid)}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          className="input"
+                          value={part.quantite}
+                          onChange={(e) =>
+                            patchPart(l.ligneId, i, { quantite: e.target.value })
+                          }
+                          aria-label="Quantité"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          className="input"
+                          value={part.prixAchatUnitaire}
+                          onChange={(e) =>
+                            patchPart(l.ligneId, i, { prixAchatUnitaire: e.target.value })
+                          }
+                          aria-label="Prix unitaire"
+                          placeholder="Prix HT"
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => retirerPart(l.ligneId, i)}
+                          aria-label="Retirer ce fournisseur"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {restants.length > 0 && (
+                    <AjouterFournisseurLigne
+                      options={restants.map((fid) => ({ id: fid, nom: nomFrn(fid) }))}
+                      onAdd={(fid) => ajouterPart(l.ligneId, fid)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {commandesPrevues.length > 0 && (
+            <div className="rounded-[var(--radius)] border border-sea-200 bg-sea-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-muted">
+                {commandesPrevues.length > 1
+                  ? `${commandesPrevues.length} commandes seront créées`
+                  : "1 commande sera créée"}
               </p>
+              <ul className="space-y-1 text-sm">
+                {commandesPrevues.map((c) => (
+                  <li key={c.fournisseurId}>
+                    <span className="font-semibold">{nomFrn(c.fournisseurId)}</span>
+                    {" · "}
+                    {c.lignes.length} article{c.lignes.length > 1 ? "s" : ""}
+                    {" · "}
+                    {formatCurrency(
+                      c.lignes.reduce((s, l) => s + l.quantite * l.prixAchatUnitaire, 0),
+                    )}{" "}
+                    HT
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
+          )}
+
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary" onClick={lancer}>
-              Créer {frnChoisis.length > 1 ? "les brouillons" : "le brouillon"}
+              Créer et prévisualiser
+              {commandesPrevues.length > 1 ? " les commandes" : " la commande"}
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setOuvert(false)}>
               Annuler
@@ -285,32 +363,34 @@ export function TransformerDpAchat({
   );
 }
 
-function AjouterLigne({
-  articles,
+function AjouterFournisseurLigne({
+  options,
   onAdd,
 }: {
-  articles: Produit[];
-  onAdd: (produitId: string) => void;
+  options: { id: string; nom: string }[];
+  onAdd: (fournisseurId: string) => void;
 }) {
-  const [id, setId] = useState("");
+  const [id, setId] = useState(options[0]?.id ?? "");
   return (
     <div className="mt-3 flex flex-wrap items-end gap-2">
-      <div className="min-w-[14rem] flex-1">
-        <SelecteurArticle
-          produits={articles}
-          value={id}
-          onChange={setId}
-          allowEmpty
-          emptyLabel="— Ajouter un article —"
-        />
-      </div>
+      <label className="block min-w-[14rem] flex-1 text-xs font-semibold text-muted">
+        Partager avec un autre fournisseur
+        <select className="select mt-1" value={id} onChange={(e) => setId(e.target.value)}>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.nom}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         className="btn btn-secondary"
         onClick={() => {
           if (!id) return;
           onAdd(id);
-          setId("");
+          const next = options.find((o) => o.id !== id);
+          setId(next?.id ?? "");
         }}
       >
         <Plus className="h-4 w-4" />

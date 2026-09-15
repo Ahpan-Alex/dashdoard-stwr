@@ -1,5 +1,6 @@
 import { endOfDay, isWithinInterval, parseISO, startOfDay } from "date-fns";
 import { nextNumero } from "./commercial";
+import type { OptsNumeroDocument } from "./exercices";
 import { achatConcerneSite, htAchatPourSite, repartirQuantiteLivree } from "./sites";
 import { ligneAchatStockee } from "./type-achat";
 import type {
@@ -182,8 +183,8 @@ export function statutLivraisonRecord(liv: LivraisonAchat): LivraisonAchatStatut
   return "livree";
 }
 
-export function nextNumeroAchat(achats: Achat[]) {
-  return nextNumero("ACH", achats.map((a) => a.numero));
+export function nextNumeroAchat(achats: Achat[], opts?: OptsNumeroDocument) {
+  return nextNumero("ACH", achats.map((a) => a.numero), opts);
 }
 
 export function nextNumeroLivraison(achats: Achat[]) {

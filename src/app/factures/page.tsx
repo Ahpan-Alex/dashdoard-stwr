@@ -100,6 +100,7 @@ export default function FacturesPage() {
     encaisserAcompte,
     pointDeVenteActifId,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
@@ -198,6 +199,7 @@ export default function FacturesPage() {
     pointsDeVente,
     existing: factures.map((f) => f.numero),
     date: new Date(`${form.date}T12:00:00`),
+    exercices: exercicesComptables,
   });
 
   const lignesProduitParId = useMemo(() => {
@@ -510,6 +512,7 @@ export default function FacturesPage() {
             pointsDeVente,
             existing: factures.map((f) => f.numero),
             date: new Date(`${form.date}T12:00:00`),
+            exercices: exercicesComptables,
           });
 
     const detailAcomptesEmission = [

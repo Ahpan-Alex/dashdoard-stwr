@@ -116,11 +116,11 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Exploitation",
     links: [
-      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix", "/documents"],
+      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix"],
         children: [
           { href: "/achats", label: "Commandes fournisseurs", exact: true },
           { href: "/demandes-prix", label: "Demandes de prix" },
-          { href: "/documents", label: "Historique documents" },
+          { href: "/documents", label: "Historique documents", exact: true },
         ],
       },
       { href: "/stocks", label: "Stocks", icon: Boxes },
@@ -170,7 +170,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         permission: "commercial.lire",
       },
       {
-        href: "/documents",
+        href: "/documents/ventes",
         label: "Historique documents",
         icon: Archive,
       },
@@ -337,6 +337,10 @@ const sections: { title: string; links: NavLink[] }[] = [
             label: "Modèles documents",
           },
           {
+            href: "/parametres/exercices",
+            label: "Exercices comptables",
+          },
+          {
             href: "/parametres/objectifs-revenu",
             label: "Objectifs de revenu",
           },
@@ -415,8 +419,13 @@ function isActive(pathname: string, href: string) {
 
 function isGroupActive(pathname: string, link: NavLink) {
   if (isActive(pathname, link.href)) return true;
-  return (link.matchPrefixes ?? []).some(
+  if ((link.matchPrefixes ?? []).some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )) {
+    return true;
+  }
+  return (link.children ?? []).some((child) =>
+    child.exact ? pathname === child.href : isActive(pathname, child.href),
   );
 }
 

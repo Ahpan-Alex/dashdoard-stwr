@@ -31,6 +31,7 @@ export default function DevisPage() {
     addDevis,
     encaisserAcompte,
     pointDeVenteActifId,
+    exercicesComptables,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -47,6 +48,7 @@ export default function DevisPage() {
   const numeroProvisoire = nextNumero(
     "DEV",
     devis.map((d) => d.numero),
+    { date: meta.date, exercices: exercicesComptables },
   );
   const echeanceProvisoire = (() => {
     const d = new Date(`${meta.date}T12:00:00`);
@@ -125,16 +127,18 @@ export default function DevisPage() {
               parametres,
               modele,
               conditionsPaiement: parametres.conditionsPaiementDefaut,
+              validiteJours: Number(meta.validiteJours) || 15,
             }}
             confirmLabel="Enregistrer le devis"
             onCancel={() => setOpen(false)}
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
+              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
               const numero = nextNumero(
                 "DEV",
                 devis.map((d) => d.numero),
+                { date: dateIso, exercices: exercicesComptables },
               );
-              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
               const devisId = addDevis({
                 numero,
                 clientId: meta.clientId,

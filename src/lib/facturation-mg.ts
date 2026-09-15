@@ -1,3 +1,4 @@
+import { jetonNumeroExercice, type OptsNumeroDocument } from "./exercices";
 import type {
   Acompte,
   Client,
@@ -33,23 +34,30 @@ export function nextNumeroDocumentCommercial(opts: {
   pointDeVenteId: string;
   pointsDeVente: PointDeVente[];
   existing: string[];
-  date?: Date;
+  date?: Date | string;
+  exercices?: OptsNumeroDocument["exercices"];
 }) {
-  const year = (opts.date ?? new Date()).getFullYear();
+  const dateIso =
+    typeof opts.date === "string"
+      ? opts.date
+      : (opts.date ?? new Date()).toISOString();
+  const jeton = jetonNumeroExercice(opts.exercices, dateIso);
   const etab = codeEtablissement(opts.pointDeVenteId, opts.pointsDeVente);
-  const re = new RegExp(`^${opts.prefix}-${year}-${etab}-(\\d+)$`);
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `^${escape(opts.prefix)}-${escape(jeton)}-${escape(etab)}-(\\d+)$`,
+  );
   let max = 0;
   for (const n of opts.existing) {
     const m = n.match(re);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  // Continuité aussi avec anciens formats PREFIX-YEAR-NNNN
-  const reLegacy = new RegExp(`^${opts.prefix}-${year}-(\\d+)$`);
+  const reLegacy = new RegExp(`^${escape(opts.prefix)}-${escape(jeton)}-(\\d+)$`);
   for (const n of opts.existing) {
     const m = n.match(reLegacy);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return `${opts.prefix}-${year}-${etab}-${String(max + 1).padStart(6, "0")}`;
+  return `${opts.prefix}-${jeton}-${etab}-${String(max + 1).padStart(6, "0")}`;
 }
 
 export const FACTURE_STATUTS_MG: Record<string, string> = {

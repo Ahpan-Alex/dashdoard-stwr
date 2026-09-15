@@ -4,6 +4,7 @@ import { forwardRef } from "react";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { libelleProduit } from "@/lib/produits";
 import { totauxAchat } from "@/lib/achats";
+import { libelleValiditeDocument } from "@/lib/validite-document";
 import type { Achat, Parametres, Produit } from "@/lib/types";
 
 export type DestinataireFournisseur = {
@@ -78,6 +79,9 @@ export const BonCommandeFournisseur = forwardRef<HTMLDivElement, Props>(
           </p>
           <div className="flex flex-wrap gap-4 text-xs text-muted">
             <span>Date : {formatDate(achat.date)}</span>
+            <span>
+              Validité : {libelleValiditeDocument(achat.date, achat.validiteJours)}
+            </span>
             {achat.echeance && <span>Échéance : {formatDate(achat.echeance)}</span>}
             {siteNom && <span>Livraison : {siteNom}</span>}
           </div>

@@ -25,9 +25,9 @@ import { useStore } from "@/lib/store";
 
 const cards = [
   {
-    href: "/documents",
+    href: "/documents/ventes",
     title: "Historique documents",
-    description: "Tous les documents, pastilles de statut, PDF",
+    description: "Devis, commandes, BL, factures — pastilles de statut, PDF",
     icon: Archive,
   },
   {

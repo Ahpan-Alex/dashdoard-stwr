@@ -1,4 +1,5 @@
 import { nextNumero } from "./commercial";
+import type { OptsNumeroDocument } from "./exercices";
 import { libelleProduit } from "./produits";
 import type { DemandePrix, DemandePrixOffre, DemandePrixStatut, Produit } from "./types";
 
@@ -9,10 +10,14 @@ export const DP_STATUT_LABELS: Record<DemandePrixStatut, string> = {
   annulee: "Annulée",
 };
 
-export function nextNumeroDemandePrix(demandes: DemandePrix[]) {
+export function nextNumeroDemandePrix(
+  demandes: DemandePrix[],
+  opts?: OptsNumeroDocument,
+) {
   return nextNumero(
     "DP",
     demandes.map((d) => d.numero),
+    opts,
   );
 }
 
@@ -109,8 +114,119 @@ export function lignesCommandeDepuisDp(
     });
 }
 
-export function dpPeutEtreTransformee(dp: Pick<DemandePrix, "statut" | "fournisseurIdsRetenus" | "lignes">) {
+export function dpPeutEtreTransformee(
+  dp: Pick<DemandePrix, "statut" | "fournisseurIdsRetenus" | "fournisseurIds" | "lignes">,
+) {
   if (dp.statut === "annulee") return false;
   if ((dp.lignes ?? []).length === 0) return false;
-  return fournisseursRetenusIds(dp).length > 0;
+  return (dp.fournisseurIdsRetenus ?? dp.fournisseurIds ?? []).length > 0;
+}
+
+/** Fournisseurs parmi lesquels répartir les articles (retenus, sinon consultés). */
+export function fournisseursPourTransformation(dp: DemandePrix) {
+  const retenus = dp.fournisseurIdsRetenus ?? [];
+  if (retenus.length > 0) return retenus;
+  return dp.fournisseurIds ?? [];
+}
+
+/** Fournisseur au prix le plus bas pour une ligne, parmi les candidats. */
+export function fournisseurMoinsCherLigne(
+  dp: Pick<DemandePrix, "offres">,
+  ligneId: string,
+  candidatIds: string[],
+) {
+  let best = candidatIds[0];
+  let bestPrix = Infinity;
+  for (const fid of candidatIds) {
+    const o = offreLigneFournisseur(dp, ligneId, fid);
+    if (o && o.prixUnitaire > 0 && o.prixUnitaire < bestPrix) {
+      bestPrix = o.prixUnitaire;
+      best = fid;
+    }
+  }
+  return best;
+}
+
+export type PartAffectationDp = {
+  fournisseurId: string;
+  quantite: number;
+  prixAchatUnitaire: number;
+};
+
+export type AffectationArticleDp = {
+  ligneId: string;
+  produitId: string;
+  designation: string;
+  quantiteDemandee: number;
+  parts: PartAffectationDp[];
+};
+
+/** Une part par article, chez le fournisseur le moins cher (retenus, sinon consultés). */
+export function affectationsInitialesParArticle(
+  dp: DemandePrix,
+  produits: Produit[],
+): AffectationArticleDp[] {
+  const candidats = fournisseursPourTransformation(dp);
+  return (dp.lignes ?? [])
+    .filter((l) => l.produitId)
+    .map((l) => {
+      const p = produits.find((x) => x.id === l.produitId);
+      const fid = fournisseurMoinsCherLigne(dp, l.id, candidats) ?? candidats[0] ?? "";
+      const offre = fid ? offreLigneFournisseur(dp, l.id, fid) : undefined;
+      return {
+        ligneId: l.id,
+        produitId: l.produitId,
+        designation: p
+          ? `${p.code || ""} — ${libelleProduit(p) || "Article"}`.replace(/^ — /, "")
+          : "Article",
+        quantiteDemandee: l.quantite,
+        parts: fid
+          ? [
+              {
+                fournisseurId: fid,
+                quantite: l.quantite,
+                prixAchatUnitaire: offre?.prixUnitaire ?? 0,
+              },
+            ]
+          : [],
+      };
+    });
+}
+
+/** Regroupe les parts article → une commande par fournisseur. */
+export function regrouperAffectationsEnCommandes(
+  affectations: { produitId: string; parts: PartAffectationDp[] }[],
+) {
+  const parFrn = new Map<
+    string,
+    { produitId: string; quantite: number; prixAchatUnitaire: number }[]
+  >();
+  for (const aff of affectations) {
+    for (const part of aff.parts) {
+      if (!part.fournisseurId || !(part.quantite > 0)) continue;
+      const lignes = parFrn.get(part.fournisseurId) ?? [];
+      const exist = lignes.find((l) => l.produitId === aff.produitId);
+      if (exist) {
+        const total = exist.quantite + part.quantite;
+        exist.prixAchatUnitaire =
+          total > 0
+            ? (exist.prixAchatUnitaire * exist.quantite +
+                part.prixAchatUnitaire * part.quantite) /
+              total
+            : part.prixAchatUnitaire;
+        exist.quantite = total;
+      } else {
+        lignes.push({
+          produitId: aff.produitId,
+          quantite: part.quantite,
+          prixAchatUnitaire: part.prixAchatUnitaire,
+        });
+      }
+      parFrn.set(part.fournisseurId, lignes);
+    }
+  }
+  return [...parFrn.entries()].map(([fournisseurId, lignes]) => ({
+    fournisseurId,
+    lignes,
+  }));
 }

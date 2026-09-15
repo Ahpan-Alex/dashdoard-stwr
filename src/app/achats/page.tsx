@@ -1,12 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
-  ClipboardCheck,
   FileDown,
   Info,
   PackagePlus,
@@ -16,8 +15,7 @@ import {
   Truck,
   Undo2,
 } from "lucide-react";
-import { BonCommandeFournisseur } from "@/components/bon-commande-fournisseur";
-import { DocumentPrintActions } from "@/components/document-print-actions";
+import { ApercuBonCommandeFournisseur } from "@/components/apercu-bon-commande-fournisseur";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
@@ -112,6 +110,7 @@ function AchatsListe() {
     addAchat,
     assurerComptesComptablesDefaut,
   } = useStore();
+  const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const moduleCompta = moduleComptabiliteActif(parametres);
 
   useEffect(() => {
@@ -131,6 +130,7 @@ function AchatsListe() {
     pointDeVenteId: "",
     date: AUJOURD_HUI,
     echeance: "",
+    validiteJours: "15",
     produitRefId: "",
   });
 
@@ -193,7 +193,10 @@ function AchatsListe() {
       return;
     }
     const id = addAchat({
-      numero: nextNumeroAchat(achats),
+      numero: nextNumeroAchat(achats, {
+        date: isoMidiDepuisJour(form.date),
+        exercices: exercicesComptables,
+      }),
       fournisseurId: form.fournisseurId,
       pointDeVenteId: pdv,
       date: isoMidiDepuisJour(form.date),
@@ -204,6 +207,7 @@ function AchatsListe() {
       tauxTVA: parametres.assujettiTVA ? parametres.tauxTVA : 0,
       lignes: [],
       note: undefined,
+      validiteJours: Number(form.validiteJours) || 15,
     });
     setCreer(false);
     setSelectionId(id);
@@ -391,6 +395,18 @@ function AchatsListe() {
                 }
               />
             </label>
+            <label className="block text-xs font-semibold text-muted">
+              Validité (jours)
+              <input
+                type="number"
+                min={1}
+                className="input mt-1"
+                value={form.validiteJours}
+                onChange={(e) =>
+                  setForm({ ...form, validiteJours: e.target.value })
+                }
+              />
+            </label>
           </div>
           <div className="mt-4 flex gap-2">
             <button type="button" className="btn btn-primary" onClick={lancerCreation}>
@@ -544,11 +560,6 @@ function AchatEditor({
       ? (s.demandesPrix ?? []).find((d) => d.id === achat.demandePrixId)
       : undefined,
   );
-  const parametres = useStore((s) => s.parametres);
-  const pointsDeVente = useStore((s) => s.pointsDeVente);
-  const fournisseursStore = useStore((s) => s.fournisseurs);
-  const tiersStore = useStore((s) => s.tiers);
-  const sheetRef = useRef<HTMLDivElement>(null);
   const [voirBon, setVoirBon] = useState(true);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("charge");
@@ -558,6 +569,9 @@ function AchatEditor({
   const [note, setNote] = useState(achat.note ?? "");
   const [echeance, setEcheance] = useState(
     achat.echeance ? achat.echeance.slice(0, 10) : "",
+  );
+  const [validiteJours, setValiditeJours] = useState(
+    String(achat.validiteJours ?? 15),
   );
   const brouillon = achat.statut === "brouillon";
   const tot = totauxAchat({ ...achat, lignes });
@@ -587,10 +601,12 @@ function AchatEditor({
             lignes,
             note: note.trim() || undefined,
             echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
+            validiteJours: Number(validiteJours) || 15,
           }
         : {
             note: note.trim() || undefined,
             echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
+            validiteJours: Number(validiteJours) || 15,
           },
     );
     if (!res.ok) alert(res.reason);
@@ -601,6 +617,7 @@ function AchatEditor({
       lignes,
       note: note.trim() || undefined,
       echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
+      validiteJours: Number(validiteJours) || 15,
     });
     if (!save.ok) {
       alert(save.reason);
@@ -653,22 +670,20 @@ function AchatEditor({
             >
               {STATUT_ACHAT_LABELS[achat.statut]}
             </span>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setVoirBon((v) => !v)}
-            >
-              <FileDown className="h-4 w-4" />
-              {voirBon ? "Masquer le bon" : "Bon de commande"}
-            </button>
+            {!brouillon && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setVoirBon((v) => !v)}
+              >
+                <FileDown className="h-4 w-4" />
+                {voirBon ? "Masquer le bon" : "Bon de commande"}
+              </button>
+            )}
             {brouillon && (
               <>
                 <button type="button" className="btn btn-secondary" onClick={enregistrerCommande}>
                   Enregistrer
-                </button>
-                <button type="button" className="btn btn-primary" onClick={valider}>
-                  <ClipboardCheck className="h-4 w-4" />
-                  Valider la commande
                 </button>
                 <button
                   type="button"
@@ -701,45 +716,22 @@ function AchatEditor({
         }
       />
 
-      {voirBon && (
+      {(voirBon || brouillon) && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-2 font-display text-lg font-semibold">
             Bon de commande fournisseur
           </h2>
-          <p className="mb-3 text-xs text-muted">
-            Téléchargez ou imprimez le bon à envoyer au fournisseur.
-          </p>
-          <DocumentPrintActions
-            sheetRef={sheetRef}
-            filename={`${achat.numero}.pdf`}
-            className="mb-4"
-          />
-          <BonCommandeFournisseur
-            ref={sheetRef}
+          <ApercuBonCommandeFournisseur
             achat={{
               ...achat,
               lignes,
               note: note.trim() || achat.note,
               echeance: echeance ? isoMidiDepuisJour(echeance) : achat.echeance,
+              validiteJours: Number(validiteJours) || 15,
             }}
-            parametres={parametres}
-            produits={produits}
-            destinataire={(() => {
-              const t = tiersStore.find((x) => x.id === achat.fournisseurId);
-              const f = fournisseursStore.find((x) => x.id === achat.fournisseurId);
-              return {
-                nom: t?.nom ?? f?.nom ?? nomFrn,
-                telephone: t?.telephone ?? f?.telephone,
-                email: t?.email ?? f?.email,
-                adresse: t?.adresse ?? f?.adresse,
-                ville: t?.ville ?? f?.ville,
-                nif: t?.nif ?? f?.nif,
-                stat: t?.stat ?? f?.stat,
-              };
-            })()}
-            siteNom={
-              pointsDeVente.find((p) => p.id === achat.pointDeVenteId)?.nom ?? nomPdv
-            }
+            afficherLienEdition={false}
+            afficherValidation={brouillon}
+            onValider={valider}
           />
         </section>
       )}
@@ -789,6 +781,8 @@ function AchatEditor({
           setNote={setNote}
           echeance={echeance}
           setEcheance={setEcheance}
+          validiteJours={validiteJours}
+          setValiditeJours={setValiditeJours}
           brouillon={brouillon}
           libelleLigne={libelleLigne}
           unite={unite}
@@ -933,6 +927,8 @@ function CommandePanel({
   setNote,
   echeance,
   setEcheance,
+  validiteJours,
+  setValiditeJours,
   brouillon,
   libelleLigne,
   unite,
@@ -946,6 +942,8 @@ function CommandePanel({
   setNote: (n: string) => void;
   echeance: string;
   setEcheance: (e: string) => void;
+  validiteJours: string;
+  setValiditeJours: (v: string) => void;
   brouillon: boolean;
   libelleLigne: (l: AchatLigne) => string;
   unite: (id: string | undefined) => string;
@@ -1119,6 +1117,17 @@ function CommandePanel({
             className="input mt-1"
             value={echeance}
             onChange={(e) => setEcheance(e.target.value)}
+            disabled={achat.statut === "annule"}
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Validité (jours)
+          <input
+            type="number"
+            min={1}
+            className="input mt-1"
+            value={validiteJours}
+            onChange={(e) => setValiditeJours(e.target.value)}
             disabled={achat.statut === "annule"}
           />
         </label>

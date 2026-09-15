@@ -199,6 +199,7 @@ function FormulaireDp({
     date: string;
     lignes: { produitId: string; quantite: number }[];
     fournisseurIds: string[];
+    validiteJours?: number;
   }) => void;
 }) {
   const produits = useStore((s) => s.produits);
@@ -207,6 +208,7 @@ function FormulaireDp({
     [produits],
   );
   const [date, setDate] = useState(jourLocalISO());
+  const [validiteJours, setValiditeJours] = useState("15");
   const [lignes, setLignes] = useState([{ produitId: "", quantite: "1" }]);
   const [frns, setFrns] = useState<string[]>([]);
   const [rechercheFrn, setRechercheFrn] = useState("");
@@ -233,16 +235,29 @@ function FormulaireDp({
         .filter((l) => l.produitId)
         .map((l) => ({ produitId: l.produitId, quantite: Number(l.quantite) || 0 })),
       fournisseurIds: frns,
+      validiteJours: Number(validiteJours) || 15,
     });
   }
 
   return (
     <form onSubmit={onForm} className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
       <h2 className="mb-4 font-display text-lg font-semibold">Nouvelle demande de prix</h2>
-      <label className="mb-4 block text-xs font-semibold text-muted">
-        Date
-        <input type="date" className="input mt-1 max-w-xs" value={date} onChange={(e) => setDate(e.target.value)} />
-      </label>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 max-w-xl">
+        <label className="block text-xs font-semibold text-muted">
+          Date
+          <input type="date" className="input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Validité (jours)
+          <input
+            type="number"
+            min={1}
+            className="input mt-1"
+            value={validiteJours}
+            onChange={(e) => setValiditeJours(e.target.value)}
+          />
+        </label>
+      </div>
       <h3 className="mb-2 text-sm font-semibold">Articles à consulter</h3>
       {articles.length === 0 ? (
         <p className="mb-4 text-sm text-muted">

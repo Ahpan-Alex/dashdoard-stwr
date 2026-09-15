@@ -3,6 +3,7 @@
 import { forwardRef } from "react";
 import { formatDate, formatNumber } from "@/lib/format";
 import { libelleProduit } from "@/lib/produits";
+import { libelleValiditeDocument } from "@/lib/validite-document";
 import type { DemandePrix, Parametres, Produit } from "@/lib/types";
 
 export type DestinataireDp = {
@@ -70,7 +71,12 @@ export const DemandePrixDocument = forwardRef<HTMLDivElement, Props>(
           <p className="font-display font-semibold uppercase tracking-wide text-sea-800">
             Demande de prix N° {dp.numero}
           </p>
-          <span className="text-xs text-muted">Date : {formatDate(dp.date)}</span>
+          <div className="flex flex-wrap gap-4 text-xs text-muted">
+            <span>Date : {formatDate(dp.date)}</span>
+            <span>
+              Validité : {libelleValiditeDocument(dp.date, dp.validiteJours)}
+            </span>
+          </div>
         </div>
 
         <div className="mb-4 grid gap-3 sm:grid-cols-2">

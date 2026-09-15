@@ -26,6 +26,7 @@ import {
 } from "@/lib/commercial";
 import { mentionRegimeFiscal } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
+import { libelleValiditeDocument } from "@/lib/validite-document";
 import type {
   Client,
   LigneDocument,
@@ -39,6 +40,8 @@ type Props = {
   numero: string;
   date: string;
   echeance?: string;
+  /** Durée de validité affichée sur le document (devis / commande). */
+  validiteJours?: number;
   client: Client | undefined;
   pdv?: PointDeVente;
   parametres: Parametres;
@@ -96,6 +99,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
     dateIntervention,
     modePaiement,
     apercuModele = false,
+    validiteJours,
   } = props;
 
   const z = zonesDuModele(modele);
@@ -425,6 +429,11 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
             </span>
           )}
           {pdv && <span>Point de vente : {pdv.nom}</span>}
+          {(type === "devis" || type === "commande") && (
+            <span>
+              Validité : {libelleValiditeDocument(date, validiteJours)}
+            </span>
+          )}
         </div>
       </div>
 

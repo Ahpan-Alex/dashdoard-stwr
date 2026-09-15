@@ -47,6 +47,7 @@ export default function CommandesPage() {
     annulerTransformation,
     finaliserTransformation,
     pointDeVenteActifId,
+    exercicesComptables,
   } = useStore();
 
   const [open, setOpen] = useState(true);
@@ -63,6 +64,7 @@ export default function CommandesPage() {
     devisId: "",
     date: new Date().toISOString().slice(0, 10),
     dateLivraisonPrevue: "",
+    validiteJours: "15",
   });
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
@@ -77,6 +79,7 @@ export default function CommandesPage() {
       devisId: "",
       date: new Date().toISOString().slice(0, 10),
       dateLivraisonPrevue: "",
+      validiteJours: "15",
     });
     setSeed({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
     setAcompte(SAISIE_ACOMPTE_VIDE);
@@ -106,6 +109,7 @@ export default function CommandesPage() {
       devisId,
       clientId: d.clientId,
       pointDeVenteId: d.pointDeVenteId,
+      validiteJours: String(d.validiteJours ?? 15),
     }));
     setSeed({
       lignes: lignesToDraft(d.lignes),
@@ -179,6 +183,7 @@ export default function CommandesPage() {
               numero: nextNumero(
                 "CMD",
                 commandes.map((c) => c.numero),
+                { date: meta.date, exercices: exercicesComptables },
               ),
               date: new Date(`${meta.date}T12:00:00`).toISOString(),
               echeance: meta.dateLivraisonPrevue
@@ -192,6 +197,7 @@ export default function CommandesPage() {
               modele,
               conditionsPaiement: parametres.conditionsPaiementDefaut,
               referenceDevis: devis.find((d) => d.id === meta.devisId)?.numero,
+              validiteJours: Number(meta.validiteJours) || 15,
             }}
             confirmLabel="Confirmer la commande"
             onCancel={() => {
@@ -200,11 +206,12 @@ export default function CommandesPage() {
             }}
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
               if (!meta.clientId) return;
+              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
               const numero = nextNumero(
                 "CMD",
                 commandes.map((c) => c.numero),
+                { date: dateIso, exercices: exercicesComptables },
               );
-              const dateIso = new Date(`${meta.date}T12:00:00`).toISOString();
               const commandeId = addCommande({
                 numero,
                 clientId: meta.clientId,
@@ -215,6 +222,7 @@ export default function CommandesPage() {
                       `${meta.dateLivraisonPrevue}T12:00:00`,
                     ).toISOString()
                   : undefined,
+                validiteJours: Number(meta.validiteJours) || 15,
                 statut: "confirmee",
                 devisId: meta.devisId || undefined,
                 tauxTVA: parametres.tauxTVA,
@@ -334,6 +342,18 @@ export default function CommandesPage() {
                         ...meta,
                         dateLivraisonPrevue: e.target.value,
                       })
+                    }
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Validité (jours)
+                  <input
+                    type="number"
+                    min={1}
+                    className="input mt-1"
+                    value={meta.validiteJours}
+                    onChange={(e) =>
+                      setMeta({ ...meta, validiteJours: e.target.value })
                     }
                   />
                 </label>

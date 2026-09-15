@@ -45,6 +45,10 @@ export const PARAMETRES_MENUS = [
     label: "Modèles documents",
   },
   {
+    href: "/parametres/exercices",
+    label: "Exercices comptables",
+  },
+  {
     href: "/parametres/objectifs-revenu",
     label: "Objectifs de revenu",
   },

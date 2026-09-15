@@ -1,3 +1,4 @@
+import { jetonNumeroExercice, type OptsNumeroDocument } from "./exercices";
 import type {
   Acompte,
   AcompteDocumentLigne,
@@ -676,16 +677,24 @@ export function totalAcomptesClient(clientId: string, acomptes: Acompte[]) {
     .reduce((s, a) => s + a.montantTTC, 0);
 }
 
-export function nextNumero(prefix: string, existing: string[]) {
-  const year = new Date().getFullYear();
-  const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function nextNumero(
+  prefix: string,
+  existing: string[],
+  opts?: OptsNumeroDocument,
+) {
+  const jeton = jetonNumeroExercice(opts?.exercices, opts?.date);
+  const re = new RegExp(`^${escapeRegex(prefix)}-${escapeRegex(jeton)}-(\\d+)$`);
   let max = 0;
   for (const n of existing) {
     if (typeof n !== "string") continue;
     const m = n.match(re);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return `${prefix}-${year}-${String(max + 1).padStart(4, "0")}`;
+  return `${prefix}-${jeton}-${String(max + 1).padStart(4, "0")}`;
 }
 
 /** Décompose un montant TTC en HT + TVA. */
