@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
   ClipboardCheck,
+  FileDown,
   Info,
   PackagePlus,
   Plus,
@@ -15,6 +16,8 @@ import {
   Truck,
   Undo2,
 } from "lucide-react";
+import { BonCommandeFournisseur } from "@/components/bon-commande-fournisseur";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
@@ -541,6 +544,12 @@ function AchatEditor({
       ? (s.demandesPrix ?? []).find((d) => d.id === achat.demandePrixId)
       : undefined,
   );
+  const parametres = useStore((s) => s.parametres);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const fournisseursStore = useStore((s) => s.fournisseurs);
+  const tiersStore = useStore((s) => s.tiers);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [voirBon, setVoirBon] = useState(true);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("charge");
 
@@ -644,6 +653,14 @@ function AchatEditor({
             >
               {STATUT_ACHAT_LABELS[achat.statut]}
             </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setVoirBon((v) => !v)}
+            >
+              <FileDown className="h-4 w-4" />
+              {voirBon ? "Masquer le bon" : "Bon de commande"}
+            </button>
             {brouillon && (
               <>
                 <button type="button" className="btn btn-secondary" onClick={enregistrerCommande}>
@@ -683,6 +700,49 @@ function AchatEditor({
           </div>
         }
       />
+
+      {voirBon && (
+        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-2 font-display text-lg font-semibold">
+            Bon de commande fournisseur
+          </h2>
+          <p className="mb-3 text-xs text-muted">
+            Téléchargez ou imprimez le bon à envoyer au fournisseur.
+          </p>
+          <DocumentPrintActions
+            sheetRef={sheetRef}
+            filename={`${achat.numero}.pdf`}
+            className="mb-4"
+          />
+          <BonCommandeFournisseur
+            ref={sheetRef}
+            achat={{
+              ...achat,
+              lignes,
+              note: note.trim() || achat.note,
+              echeance: echeance ? isoMidiDepuisJour(echeance) : achat.echeance,
+            }}
+            parametres={parametres}
+            produits={produits}
+            destinataire={(() => {
+              const t = tiersStore.find((x) => x.id === achat.fournisseurId);
+              const f = fournisseursStore.find((x) => x.id === achat.fournisseurId);
+              return {
+                nom: t?.nom ?? f?.nom ?? nomFrn,
+                telephone: t?.telephone ?? f?.telephone,
+                email: t?.email ?? f?.email,
+                adresse: t?.adresse ?? f?.adresse,
+                ville: t?.ville ?? f?.ville,
+                nif: t?.nif ?? f?.nif,
+                stat: t?.stat ?? f?.stat,
+              };
+            })()}
+            siteNom={
+              pointsDeVente.find((p) => p.id === achat.pointDeVenteId)?.nom ?? nomPdv
+            }
+          />
+        </section>
+      )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total HT" value={formatCurrency(tot.ht)} hint={`TTC ${formatCurrency(tot.ttc)}`} />

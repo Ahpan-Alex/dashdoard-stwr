@@ -21,6 +21,7 @@ import {
   Factory,
   Banknote,
   Briefcase,
+  Archive,
   Settings,
   SlidersHorizontal,
   Waves,
@@ -115,10 +116,11 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Exploitation",
     links: [
-      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix"],
+      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix", "/documents"],
         children: [
           { href: "/achats", label: "Commandes fournisseurs", exact: true },
           { href: "/demandes-prix", label: "Demandes de prix" },
+          { href: "/documents", label: "Historique documents" },
         ],
       },
       { href: "/stocks", label: "Stocks", icon: Boxes },
@@ -166,6 +168,11 @@ const sections: { title: string; links: NavLink[] }[] = [
         label: "Vue commerciale",
         icon: Briefcase,
         permission: "commercial.lire",
+      },
+      {
+        href: "/documents",
+        label: "Historique documents",
+        icon: Archive,
       },
       {
         href: "/tiers",

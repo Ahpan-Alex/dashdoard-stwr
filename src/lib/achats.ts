@@ -160,6 +160,19 @@ export function statutLivraisonAchat(achat: Achat): LivraisonAchatStatut {
   return "livree";
 }
 
+/** Statut opérationnel pour pastilles : brouillon, en cours, partielle, livrée, annulée. */
+export function statutSuiviAchat(achat: Achat): {
+  id: "brouillon" | "en_cours" | "partielle" | "livree" | "annule";
+  label: string;
+} {
+  if (achat.statut === "brouillon") return { id: "brouillon", label: "Brouillon" };
+  if (achat.statut === "annule") return { id: "annule", label: "Annulée" };
+  const liv = statutLivraisonAchat(achat);
+  if (liv === "livree") return { id: "livree", label: "Livrée" };
+  if (liv === "partielle") return { id: "partielle", label: "Livraison partielle" };
+  return { id: "en_cours", label: "En cours" };
+}
+
 export function statutLivraisonRecord(liv: LivraisonAchat): LivraisonAchatStatut {
   if (liv.statut === "annulee") return "annulee";
   const prevue = liv.lignes.reduce((s, l) => s + l.quantitePrevue, 0);

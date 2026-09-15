@@ -1033,7 +1033,11 @@ export function couleurStatutDocument(statut: string): CouleurStatutDoc {
     case "envoyee":
     case "payee":
     case "impute":
+    case "cloturee":
       return "success";
+    case "partielle":
+    case "partiel":
+      return "coral";
     case "refuse":
     case "expire":
     case "annulee":

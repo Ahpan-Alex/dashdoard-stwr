@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  Archive,
   ClipboardList,
   FileText,
   Package,
@@ -23,6 +24,12 @@ import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
 const cards = [
+  {
+    href: "/documents",
+    title: "Historique documents",
+    description: "Tous les documents, pastilles de statut, PDF",
+    icon: Archive,
+  },
   {
     href: "/clients",
     title: "Clients",
