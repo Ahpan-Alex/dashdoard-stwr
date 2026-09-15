@@ -631,6 +631,8 @@ export type Achat = {
   /** Demande d'achat générée depuis un OF (composant en rupture). */
   ofId?: string;
   ofComposantId?: string;
+  /** Demande de prix d'origine, si la commande en est issue. */
+  demandePrixId?: string;
 };
 
 export type DemandePrixStatut = "brouillon" | "en_cours" | "cloturee" | "annulee";
@@ -658,6 +660,10 @@ export type DemandePrix = {
   lignes: DemandePrixLigne[];
   fournisseurIds: string[];
   offres: DemandePrixOffre[];
+  /** Fournisseur(s) choisis après comparatif. */
+  fournisseurIdsRetenus?: string[];
+  /** Commandes fournisseur générées depuis cette DP. */
+  achatIds?: string[];
   note?: string;
 };
 

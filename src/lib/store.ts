@@ -539,6 +539,7 @@ type Store = {
       lignes: DemandePrixLigne[];
       fournisseurIds: string[];
       offres: DemandePrixOffre[];
+      fournisseurIdsRetenus: string[];
       note: string;
     }>,
   ) => { ok: boolean; reason?: string };
@@ -552,6 +553,18 @@ type Store = {
     id: string,
     statut: DemandePrixStatut,
   ) => { ok: boolean; reason?: string };
+  transformerDemandePrixEnAchats: (
+    id: string,
+    data: {
+      pointDeVenteId: string;
+      date?: string;
+      commandes: {
+        fournisseurId: string;
+        lignes: { produitId: string; quantite: number; prixAchatUnitaire: number }[];
+        note?: string;
+      }[];
+    },
+  ) => { ok: true; achatIds: string[] } | { ok: false; reason: string };
 
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
@@ -3492,8 +3505,21 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = (state.demandesPrix ?? []).find((d) => d.id === id);
         if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
-        if (dpEstVerrouillee(prev)) {
-          return { ok: false, reason: "Cette demande de prix est clôturée ou annulée." };
+        if (prev.statut === "annulee") {
+          return { ok: false, reason: "Cette demande de prix est annulée." };
+        }
+        const patchRetenus = data.fournisseurIdsRetenus !== undefined;
+        const patchMetier =
+          data.lignes !== undefined ||
+          data.fournisseurIds !== undefined ||
+          data.offres !== undefined ||
+          data.date !== undefined;
+        if (dpEstVerrouillee(prev) && patchMetier) {
+          return {
+            ok: false,
+            reason:
+              "Cette demande est clôturée. Consultez-la, indiquez les fournisseurs retenus, ou transformez-la en commande.",
+          };
         }
         let lignes = data.lignes ?? prev.lignes;
         let fournisseurIds = data.fournisseurIds ?? prev.fournisseurIds;
@@ -3521,12 +3547,17 @@ export const useStore = create<Store>()((set, get) => ({
           }
           offres = nextOffres;
         }
+        const consultes = new Set(fournisseurIds);
+        const retenus = patchRetenus
+          ? [...new Set(data.fournisseurIdsRetenus ?? [])].filter((fid) => consultes.has(fid))
+          : prev.fournisseurIdsRetenus;
         const next: DemandePrix = {
           ...prev,
           ...data,
           lignes,
           fournisseurIds,
           offres,
+          fournisseurIdsRetenus: retenus,
         };
         set((s) => ({
           demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? next : d)),
@@ -3583,6 +3614,98 @@ export const useStore = create<Store>()((set, get) => ({
           ],
         }));
         return { ok: true };
+      },
+
+      transformerDemandePrixEnAchats: (id, data) => {
+        const state = get();
+        const prev = (state.demandesPrix ?? []).find((d) => d.id === id);
+        if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
+        if (prev.statut === "annulee") {
+          return { ok: false, reason: "Cette demande de prix est annulée." };
+        }
+        const retenus = prev.fournisseurIdsRetenus ?? [];
+        if (retenus.length === 0) {
+          return { ok: false, reason: "Indiquez le ou les fournisseurs retenus." };
+        }
+        if (!data.pointDeVenteId) {
+          return { ok: false, reason: "Choisissez un site de destination." };
+        }
+        if (data.commandes.length === 0) {
+          return { ok: false, reason: "Sélectionnez au moins un fournisseur à commander." };
+        }
+        const produits = state.produits ?? [];
+        const actor = getActiviteActor();
+        const nouveaux: Achat[] = [];
+        let achatsCourants = state.achats;
+        for (const cmd of data.commandes) {
+          if (!retenus.includes(cmd.fournisseurId)) {
+            return {
+              ok: false,
+              reason: "Chaque commande doit concerner un fournisseur retenu.",
+            };
+          }
+          if (cmd.lignes.length === 0) {
+            return { ok: false, reason: "Chaque commande doit avoir au moins un article." };
+          }
+          for (const l of cmd.lignes) {
+            if (!l.produitId || !(l.quantite > 0) || l.prixAchatUnitaire < 0) {
+              return {
+                ok: false,
+                reason: "Chaque ligne doit avoir un article, une quantité positive et un prix.",
+              };
+            }
+          }
+          const lignesAchat = cmd.lignes.map((l) => ({
+            id: uid("acl"),
+            produitId: l.produitId,
+            quantite: l.quantite,
+            prixAchatUnitaire: l.prixAchatUnitaire,
+            typeAchat: produits.find((p) => p.id === l.produitId)?.typeAchat,
+          }));
+          const motifNat = motifAchatNatureInterdite(produits, lignesAchat);
+          if (motifNat) return { ok: false, reason: motifNat };
+          const achatId = uid("ach");
+          const numero = nextNumeroAchat(achatsCourants);
+          const achat: Achat = {
+            id: achatId,
+            numero,
+            fournisseurId: cmd.fournisseurId,
+            pointDeVenteId: data.pointDeVenteId,
+            date: data.date ?? prev.date,
+            statut: "brouillon",
+            tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
+            lignes: lignesAchat,
+            livraisons: [],
+            paiements: [],
+            avoirs: [],
+            note:
+              cmd.note?.trim() ||
+              `Issu de la demande de prix ${prev.numero}`,
+            vendeurId: actor.id,
+            vendeurNom: actor.nom,
+            demandePrixId: prev.id,
+          };
+          nouveaux.push(achat);
+          achatsCourants = [achat, ...achatsCourants];
+        }
+        const achatIds = [...(prev.achatIds ?? []), ...nouveaux.map((a) => a.id)];
+        set((s) => ({
+          achats: [...nouveaux, ...s.achats],
+          demandesPrix: (s.demandesPrix ?? []).map((d) =>
+            d.id === id ? { ...d, achatIds } : d,
+          ),
+          journalActivites: [
+            ...nouveaux.map((a) =>
+              entreeActivite("creation", "achat", {
+                entiteId: a.id,
+                libelle: a.numero,
+                detail: `Depuis ${prev.numero}`,
+              }),
+            ),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, achatIds: nouveaux.map((a) => a.id) };
       },
 
       addVente: (vente) =>

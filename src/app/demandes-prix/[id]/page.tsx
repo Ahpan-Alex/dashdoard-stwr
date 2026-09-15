@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { DemandePrixDocument } from "@/components/demande-prix-document";
+import { DocumentPrintActions } from "@/components/document-print-actions";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
+import { TransformerDpAchat } from "@/components/transformer-dp-achat";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { createId } from "@/lib/id";
 import {
@@ -41,9 +44,13 @@ export default function DemandePrixDetailPage() {
   const modifierDemandePrix = useStore((s) => s.modifierDemandePrix);
   const changerStatutDemandePrix = useStore((s) => s.changerStatutDemandePrix);
   const patchOffreDemandePrix = useStore((s) => s.patchOffreDemandePrix);
+  const parametres = useStore((s) => s.parametres);
+  const achats = useStore((s) => s.achats);
   const [triPrix, setTriPrix] = useState<"asc" | "desc">("asc");
   const [nouvelArticleId, setNouvelArticleId] = useState("");
   const [nouvelleQte, setNouvelleQte] = useState("1");
+  const [frnDocument, setFrnDocument] = useState("");
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const fournisseurs = useMemo(
     () =>
@@ -65,6 +72,20 @@ export default function DemandePrixDetailPage() {
     fournisseurs.find((f) => f.id === fid)?.nom ??
     fournisseursLegacy.find((f) => f.id === fid)?.nom ??
     "Fournisseur";
+
+  const destinaireDoc = (fid: string) => {
+    const t = fournisseurs.find((f) => f.id === fid);
+    const legacy = fournisseursLegacy.find((f) => f.id === fid);
+    return {
+      nom: t?.nom ?? legacy?.nom ?? "Fournisseur",
+      telephone: t?.telephone ?? legacy?.telephone,
+      email: t?.email ?? legacy?.email,
+      adresse: t?.adresse ?? legacy?.adresse,
+      ville: t?.ville ?? legacy?.ville,
+      nif: t?.nif ?? legacy?.nif,
+      stat: t?.stat ?? legacy?.stat,
+    };
+  };
 
   const articles = useMemo(
     () => (produits ?? []).filter((p) => p?.actif && produitEstAchetable(p)),
@@ -138,6 +159,15 @@ export default function DemandePrixDetailPage() {
     if (!res.ok) alert(res.reason);
   }
 
+  function toggleRetenu(fid: string) {
+    const actuel = dp!.fournisseurIdsRetenus ?? [];
+    const next = actuel.includes(fid)
+      ? actuel.filter((x) => x !== fid)
+      : [...actuel, fid];
+    const res = modifierDemandePrix(dp!.id, { fournisseurIdsRetenus: next });
+    if (!res.ok) alert(res.reason);
+  }
+
   return (
     <div>
       <PageHeader
@@ -197,9 +227,8 @@ export default function DemandePrixDetailPage() {
         </div>
       )}
 
-      {brouillon && (
-        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-          <h2 className="mb-3 font-display text-lg font-semibold">Articles et fournisseurs</h2>
+      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-3 font-display text-lg font-semibold">Articles et fournisseurs consultés</h2>
           <div className="mb-4 space-y-2">
             {(dp.lignes ?? []).map((ligne) => {
               const p = produits.find((x) => x.id === ligne.produitId);
@@ -208,56 +237,74 @@ export default function DemandePrixDetailPage() {
                   <span>
                     {p ? `${p.code} — ${libelleProduit(p)}` : "Article"} · qté {ligne.quantite}
                   </span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => retirerArticle(ligne.id)}
-                  >
-                    Retirer
-                  </button>
+                  {brouillon && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => retirerArticle(ligne.id)}
+                    >
+                      Retirer
+                    </button>
+                  )}
                 </div>
               );
             })}
+            {(dp.lignes ?? []).length === 0 && (
+              <p className="text-sm text-muted">Aucun article.</p>
+            )}
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_8rem_auto]">
-            <SelecteurArticle
-              produits={articles}
-              value={nouvelArticleId}
-              onChange={setNouvelArticleId}
-              allowEmpty
-              emptyLabel="— Ajouter un article —"
-            />
-            <label className="block text-xs font-semibold text-muted">
-              Quantité
-              <input
-                type="number"
-                min={0}
-                step="any"
-                className="input mt-1"
-                value={nouvelleQte}
-                onChange={(e) => setNouvelleQte(e.target.value)}
+          {brouillon && (
+            <div className="grid gap-3 lg:grid-cols-[1fr_8rem_auto]">
+              <SelecteurArticle
+                produits={articles}
+                value={nouvelArticleId}
+                onChange={setNouvelArticleId}
+                allowEmpty
+                emptyLabel="— Ajouter un article —"
               />
-            </label>
-            <button type="button" className="btn btn-secondary self-end" onClick={ajouterArticle}>
-              <Plus className="h-4 w-4" />
-              Ajouter
-            </button>
-          </div>
+              <label className="block text-xs font-semibold text-muted">
+                Quantité
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  className="input mt-1"
+                  value={nouvelleQte}
+                  onChange={(e) => setNouvelleQte(e.target.value)}
+                />
+              </label>
+              <button type="button" className="btn btn-secondary self-end" onClick={ajouterArticle}>
+                <Plus className="h-4 w-4" />
+                Ajouter
+              </button>
+            </div>
+          )}
           <h3 className="mb-2 mt-5 text-sm font-semibold">Fournisseurs consultés</h3>
           <div className="flex flex-wrap gap-2">
-            {fournisseurs.map((f) => (
-              <label key={f.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm">
-                <input
-                  type="checkbox"
-                  checked={(dp.fournisseurIds ?? []).includes(f.id)}
-                  onChange={() => toggleFrn(f.id)}
-                />
-                {f.nom}
-              </label>
-            ))}
+            {brouillon
+              ? fournisseurs.map((f) => (
+                  <label
+                    key={f.id}
+                    className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={(dp.fournisseurIds ?? []).includes(f.id)}
+                      onChange={() => toggleFrn(f.id)}
+                    />
+                    {f.nom}
+                  </label>
+                ))
+              : (dp.fournisseurIds ?? []).map((fid) => (
+                  <span
+                    key={fid}
+                    className="rounded-lg border border-line px-3 py-1.5 text-sm"
+                  >
+                    {nomFrn(fid)}
+                  </span>
+                ))}
           </div>
         </section>
-      )}
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -389,6 +436,101 @@ export default function DemandePrixDetailPage() {
           </div>
         )}
       </section>
+
+      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+        <h2 className="mb-2 font-display text-lg font-semibold">Fournisseur(s) retenu(s)</h2>
+        <p className="mb-3 text-xs text-muted">
+          Cochez le ou les fournisseurs retenus après comparatif. Vous pouvez le faire même
+          après clôture.
+        </p>
+        {(dp.fournisseurIds ?? []).length === 0 ? (
+          <p className="text-sm text-muted">Aucun fournisseur consulté.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {(dp.fournisseurIds ?? []).map((fid) => (
+              <label
+                key={fid}
+                className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={(dp.fournisseurIdsRetenus ?? []).includes(fid)}
+                  disabled={dp.statut === "annulee"}
+                  onChange={() => toggleRetenu(fid)}
+                />
+                {nomFrn(fid)}
+              </label>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+        <h2 className="mb-2 font-display text-lg font-semibold">Document commercial</h2>
+        <p className="mb-3 text-xs text-muted">
+          Téléchargez ou imprimez la demande de prix adressée à un fournisseur consulté.
+        </p>
+        {(dp.fournisseurIds ?? []).length === 0 ? (
+          <p className="text-sm text-muted">Ajoutez un fournisseur consulté pour générer le document.</p>
+        ) : (
+          <>
+            <label className="mb-3 block max-w-md text-xs font-semibold text-muted">
+              Destinataire
+              <select
+                className="select mt-1"
+                value={frnDocument || (dp.fournisseurIds ?? [])[0] || ""}
+                onChange={(e) => setFrnDocument(e.target.value)}
+              >
+                {(dp.fournisseurIds ?? []).map((fid) => (
+                  <option key={fid} value={fid}>
+                    {nomFrn(fid)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <DocumentPrintActions
+              sheetRef={sheetRef}
+              filename={`${dp.numero}-${nomFrn(frnDocument || (dp.fournisseurIds ?? [])[0] || "")}.pdf`}
+              className="mb-4"
+            />
+            <DemandePrixDocument
+              ref={sheetRef}
+              dp={dp}
+              parametres={parametres}
+              produits={produits}
+              destinataire={destinaireDoc(frnDocument || (dp.fournisseurIds ?? [])[0] || "")}
+            />
+          </>
+        )}
+      </section>
+
+      {dp.statut !== "annulee" && (
+        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-2 font-display text-lg font-semibold">
+            Transformer en commande fournisseur
+          </h2>
+          <TransformerDpAchat dp={dp} nomFrn={nomFrn} />
+        </section>
+      )}
+
+      {(dp.achatIds ?? []).length > 0 && (
+        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-2 font-display text-lg font-semibold">Commandes générées</h2>
+          <ul className="space-y-1 text-sm">
+            {(dp.achatIds ?? []).map((aid) => {
+              const a = achats.find((x) => x.id === aid);
+              return (
+                <li key={aid}>
+                  <Link href={`/achats?id=${aid}`} className="font-semibold text-sea-800">
+                    {a?.numero ?? "Commande"}
+                  </Link>
+                  {a ? ` · ${nomFrn(a.fournisseurId)}` : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

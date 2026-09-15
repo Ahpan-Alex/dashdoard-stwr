@@ -106,8 +106,10 @@ export default function DemandesPrixPage() {
                 <th>N°</th>
                 <th>Date</th>
                 <th>Articles</th>
-                <th>Fournisseurs</th>
+                <th>Consultés</th>
+                <th>Retenus</th>
                 <th>Statut</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -119,10 +121,22 @@ export default function DemandesPrixPage() {
                     </Link>
                   </td>
                   <td>{formatDate(d.date)}</td>
-                  <td>{d.lignes.length}</td>
-                  <td>{d.fournisseurIds.length}</td>
+                  <td>{d.lignes?.length ?? 0}</td>
+                  <td>{d.fournisseurIds?.length ?? 0}</td>
+                  <td>
+                    {(d.fournisseurIdsRetenus ?? []).length > 0
+                      ? (d.fournisseurIdsRetenus ?? [])
+                          .map((id) => fournisseurs.find((f) => f.id === id)?.nom ?? "Fournisseur")
+                          .join(", ")
+                      : "—"}
+                  </td>
                   <td>
                     <span className={`badge ${badgeDp(d.statut)}`}>{DP_STATUT_LABELS[d.statut]}</span>
+                  </td>
+                  <td>
+                    <Link href={`/demandes-prix/${d.id}`} className="text-sm text-sea-800">
+                      Voir
+                    </Link>
                   </td>
                 </tr>
               ))}

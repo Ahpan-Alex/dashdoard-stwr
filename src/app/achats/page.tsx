@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -535,6 +536,11 @@ function AchatEditor({
   const ofLie = useStore((s) =>
     achat.ofId ? s.ordresFabrication.find((o) => o.id === achat.ofId) : undefined,
   );
+  const dpLie = useStore((s) =>
+    achat.demandePrixId
+      ? (s.demandesPrix ?? []).find((d) => d.id === achat.demandePrixId)
+      : undefined,
+  );
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("charge");
 
@@ -610,11 +616,20 @@ function AchatEditor({
 
       {modalCompteProduit}
 
+      {dpLie && (
+        <p className="mb-3 text-sm">
+          Issu de la{" "}
+          <Link href={`/demandes-prix/${dpLie.id}`} className="font-semibold text-sea-800">
+            demande de prix {dpLie.numero}
+          </Link>
+        </p>
+      )}
+
       <PageHeader
         title={achat.numero}
         description={`${nomFrn} — ${nomPdv}${
           ofLie ? ` · OF ${ofLie.numero}` : ""
-        }`}
+        }${dpLie ? ` · DP ${dpLie.numero}` : ""}`}
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">

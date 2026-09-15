@@ -1,5 +1,6 @@
 import { nextNumero } from "./commercial";
-import type { DemandePrix, DemandePrixOffre, DemandePrixStatut } from "./types";
+import { libelleProduit } from "./produits";
+import type { DemandePrix, DemandePrixOffre, DemandePrixStatut, Produit } from "./types";
 
 export const DP_STATUT_LABELS: Record<DemandePrixStatut, string> = {
   brouillon: "Brouillon",
@@ -73,4 +74,43 @@ export function trierOffresParPrix(
     if (pa !== pb) return sens === "asc" ? pa - pb : pb - pa;
     return a.fournisseurId.localeCompare(b.fournisseurId);
   });
+}
+
+export function fournisseursRetenusIds(dp: Pick<DemandePrix, "fournisseurIdsRetenus">) {
+  return dp.fournisseurIdsRetenus ?? [];
+}
+
+export type LigneCommandeDepuisDp = {
+  produitId: string;
+  quantite: number;
+  prixAchatUnitaire: number;
+  designation: string;
+};
+
+/** Lignes préremplies pour un fournisseur retenu (prix de son offre, sinon 0). */
+export function lignesCommandeDepuisDp(
+  dp: Pick<DemandePrix, "lignes" | "offres">,
+  fournisseurId: string,
+  produits: Produit[],
+): LigneCommandeDepuisDp[] {
+  return (dp.lignes ?? [])
+    .filter((l) => l.produitId)
+    .map((l) => {
+      const p = produits.find((x) => x.id === l.produitId);
+      const offre = offreLigneFournisseur(dp, l.id, fournisseurId);
+      return {
+        produitId: l.produitId,
+        quantite: l.quantite,
+        prixAchatUnitaire: offre?.prixUnitaire ?? 0,
+        designation: p
+          ? `${p.code || ""} — ${libelleProduit(p) || "Article"}`.replace(/^ — /, "")
+          : "Article",
+      };
+    });
+}
+
+export function dpPeutEtreTransformee(dp: Pick<DemandePrix, "statut" | "fournisseurIdsRetenus" | "lignes">) {
+  if (dp.statut === "annulee") return false;
+  if ((dp.lignes ?? []).length === 0) return false;
+  return fournisseursRetenusIds(dp).length > 0;
 }
