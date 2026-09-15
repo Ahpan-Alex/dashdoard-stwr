@@ -10,7 +10,12 @@ import type {
   MissionAchatRealise,
   MissionAchatStatut,
   MissionDepenseDiverse,
+  MissionJustificatif,
+  MissionJustificatifType,
+  MissionLignePrevisionnelle,
+  MissionMouvementFondsType,
   MissionReglementStatut,
+  MissionValidationAction,
   MissionValidationEtape,
   CategorieProduit,
   Produit,
@@ -23,11 +28,47 @@ export const TIERS_DIVERS_MARCHE_ID = "frn-divers-marche";
 export const TIERS_DIVERS_MARCHE_NOM = "Divers / Marché";
 
 export const MISSION_STATUT_LABELS: Record<MissionAchatStatut, string> = {
+  brouillon: "Brouillon",
+  soumise: "Soumise",
+  validee: "Validée",
+  fonds_remis: "Fonds remis",
   en_cours: "En cours",
-  cloture: "Clôturé",
-  annule: "Annulé",
-  cloture_annule: "Clôturé — Annulé",
+  a_regulariser: "À régulariser",
+  cloture: "Clôturée",
+  rejetee: "Rejetée",
+  annule: "Annulée",
+  cloture_annule: "Clôturée — Annulée",
 };
+
+export const MISSION_JUSTIFICATIF_LABELS: Record<MissionJustificatifType, string> = {
+  facture: "Facture",
+  recu: "Reçu",
+  bon_livraison: "Bon de livraison",
+  autre: "Autre",
+};
+
+export const MISSION_FONDS_TYPE_LABELS: Record<MissionMouvementFondsType, string> = {
+  demande: "Demande",
+  validation: "Validation",
+  remise: "Remise",
+  restitution: "Restitution par l'acheteur",
+  remboursement: "Remboursement à l'acheteur",
+};
+
+export const MISSION_STATUTS_EXECUTION: MissionAchatStatut[] = [
+  "fonds_remis",
+  "en_cours",
+  "a_regulariser",
+];
+
+export const MISSION_STATUTS_OUVERTS: MissionAchatStatut[] = [
+  "brouillon",
+  "soumise",
+  "validee",
+  "fonds_remis",
+  "en_cours",
+  "a_regulariser",
+];
 
 export const MISSION_REGLEMENT_LABELS: Record<MissionReglementStatut, string> = {
   non_regle: "Non réglé",
@@ -42,7 +83,24 @@ export function nextNumeroMission(missions: MissionAchat[]) {
 }
 
 export function missionEstVerrouillee(m: Pick<MissionAchat, "statut">) {
-  return m.statut === "cloture" || m.statut === "cloture_annule" || m.statut === "annule";
+  return (
+    m.statut === "cloture" ||
+    m.statut === "cloture_annule" ||
+    m.statut === "annule" ||
+    m.statut === "rejetee"
+  );
+}
+
+export function montantLignePrevisionnelle(
+  l: Pick<MissionLignePrevisionnelle, "quantiteSouhaitee" | "prixUnitaireEstime">,
+) {
+  return Math.max(0, l.quantiteSouhaitee) * Math.max(0, l.prixUnitaireEstime ?? 0);
+}
+
+export function budgetPrevisionnelMission(
+  m: Pick<MissionAchat, "lignesPrevisionnelles">,
+) {
+  return m.lignesPrevisionnelles.reduce((s, l) => s + montantLignePrevisionnelle(l), 0);
 }
 
 export function montantLigneRealisee(l: Pick<MissionAchatRealise, "quantite" | "prixUnitaire">) {
@@ -61,9 +119,104 @@ export function totalDepenseMission(m: Pick<MissionAchat, "achatsRealises" | "de
   return totalAchatsRealises(m) + totalDepensesDiverses(m);
 }
 
-/** Positif = à rendre par l'acheteur ; négatif = à rembourser par l'entreprise. */
-export function soldeMission(m: Pick<MissionAchat, "montantAvance" | "achatsRealises" | "depensesDiverses">) {
-  return m.montantAvance - totalDepenseMission(m);
+export function quantiteReceptionneeLigne(l: MissionAchatRealise) {
+  if (typeof l.quantiteReceptionnee === "number" && Number.isFinite(l.quantiteReceptionnee)) {
+    return Math.max(0, l.quantiteReceptionnee);
+  }
+  return Math.max(0, l.quantite);
+}
+
+export function quantiteManquanteLigne(l: MissionAchatRealise) {
+  return Math.max(0, Math.max(0, l.quantite) - quantiteReceptionneeLigne(l));
+}
+
+export function statutReceptionLigne(l: MissionAchatRealise) {
+  const achetee = Math.max(0, l.quantite);
+  const recu = quantiteReceptionneeLigne(l);
+  if (achetee <= 0) return "non_achete" as const;
+  if (recu <= 0) return "non_receptionne" as const;
+  if (recu + 1e-9 < achetee) return "partiel" as const;
+  return "complet" as const;
+}
+
+export function fondsDemandesMission(m: MissionAchat) {
+  const demandes = (m.mouvementsFonds ?? []).filter((x) => x.type === "demande");
+  if (demandes.length) return demandes.reduce((s, x) => s + Math.max(0, x.montant), 0);
+  return Math.max(0, m.montantAvanceDemandee ?? m.montantAvance ?? 0);
+}
+
+export function fondsValidesMission(m: MissionAchat) {
+  const vals = (m.mouvementsFonds ?? []).filter((x) => x.type === "validation");
+  if (vals.length) return vals.reduce((s, x) => s + Math.max(0, x.montant), 0);
+  if (m.montantAvanceValidee != null) return Math.max(0, m.montantAvanceValidee);
+  if (m.statut === "brouillon" || m.statut === "soumise" || m.statut === "rejetee") {
+    return 0;
+  }
+  return Math.max(0, m.montantAvance);
+}
+
+export function fondsRemisMission(m: MissionAchat) {
+  const remises = (m.mouvementsFonds ?? []).filter((x) => x.type === "remise");
+  if (remises.length) return remises.reduce((s, x) => s + Math.max(0, x.montant), 0);
+  return Math.max(0, m.montantAvance);
+}
+
+export function justificatifsMission(m: MissionAchat): MissionJustificatif[] {
+  return m.justificatifs ?? [];
+}
+
+/** Les missions créées avant le dossier unique n'ont pas le tableau `justificatifs`. */
+export function missionSuitJustificatifs(m: MissionAchat) {
+  return Array.isArray(m.justificatifs);
+}
+
+export function achatEstJustifie(m: MissionAchat, l: MissionAchatRealise) {
+  if (montantLigneRealisee(l) <= 0) return true;
+  if (!missionSuitJustificatifs(m)) return true;
+  if (l.numeroJustificatif?.trim()) return true;
+  return justificatifsMission(m).some(
+    (j) => j.ligneAchatId === l.id && Boolean(j.numero?.trim() || j.libelle?.trim()),
+  );
+}
+
+export function depenseEstJustifiee(m: MissionAchat, d: MissionDepenseDiverse) {
+  if (Math.max(0, d.montant) <= 0) return true;
+  if (!missionSuitJustificatifs(m)) return true;
+  if (d.numeroJustificatif?.trim()) return true;
+  return justificatifsMission(m).some(
+    (j) => j.depenseId === d.id && Boolean(j.numero?.trim() || j.libelle?.trim()),
+  );
+}
+
+export function depensesJustifieesMission(m: MissionAchat) {
+  const achats = m.achatsRealises.reduce(
+    (s, l) => s + (achatEstJustifie(m, l) ? montantLigneRealisee(l) : 0),
+    0,
+  );
+  const divers = m.depensesDiverses.reduce(
+    (s, d) => s + (depenseEstJustifiee(m, d) ? Math.max(0, d.montant) : 0),
+    0,
+  );
+  return achats + divers;
+}
+
+export function depensesNonJustifieesMission(m: MissionAchat) {
+  return Math.max(0, totalDepenseMission(m) - depensesJustifieesMission(m));
+}
+
+export function nbJustificatifsManquants(m: MissionAchat) {
+  const achats = m.achatsRealises.filter(
+    (l) => montantLigneRealisee(l) > 0 && !achatEstJustifie(m, l),
+  ).length;
+  const divers = m.depensesDiverses.filter(
+    (d) => d.montant > 0 && !depenseEstJustifiee(m, d),
+  ).length;
+  return achats + divers;
+}
+
+/** Solde = fonds remis − dépenses justifiées. Positif = à restituer ; négatif = à rembourser. */
+export function soldeMission(m: MissionAchat) {
+  return fondsRemisMission(m) - depensesJustifieesMission(m);
 }
 
 export function libelleSoldeMission(solde: number) {
@@ -89,21 +242,24 @@ export function entreesDepuisMission(
   produits: Produit[],
   tiers: Tiers[],
 ): EntreeStock[] {
-  if (mission.statut === "en_cours" || mission.statut === "annule") return [];
+  if (mission.statut !== "cloture" && mission.statut !== "cloture_annule") {
+    return [];
+  }
   const date = mission.dateCloture ?? mission.date;
   const dateAnnul = mission.dateAnnulation ?? date;
   const contre = mission.statut === "cloture_annule";
 
   const out: EntreeStock[] = [];
   for (const l of mission.achatsRealises) {
-    if (l.quantite <= 0 || !l.produitId) continue;
+    const qte = quantiteReceptionneeLigne(l);
+    if (qte <= 0 || !l.produitId) continue;
     const prod = produits.find((p) => p.id === l.produitId);
     const frn = tiers.find((t) => t.id === l.fournisseurId);
     const base: EntreeStock = {
       id: `ent-miss-${mission.id}-${l.id}`,
       pointDeVenteId: mission.siteDestinataireId,
       produitId: l.produitId,
-      quantite: l.quantite,
+      quantite: qte,
       prixAchatUnitaire: l.prixUnitaire,
       prixVenteUnitaire: prod?.prixVenteHT ?? 0,
       fournisseur: frn?.nom ?? TIERS_DIVERS_MARCHE_NOM,
@@ -118,7 +274,7 @@ export function entreesDepuisMission(
       out.push({
         ...base,
         id: `ent-miss-ann-${mission.id}-${l.id}`,
-        quantite: -l.quantite,
+        quantite: -qte,
         date: dateAnnul,
         origine: "mission_achat_annulation",
         note: `${mission.numero} — contre-mouvement`,
@@ -168,9 +324,15 @@ export function peutSaisirMission(
   mission: Pick<MissionAchat, "acheteurUserId" | "statut">,
   opts: { userId?: string; gerer: boolean },
 ) {
-  if (mission.statut !== "en_cours") return false;
+  if (!MISSION_STATUTS_EXECUTION.includes(mission.statut)) return false;
   if (opts.gerer) return true;
   return Boolean(opts.userId && opts.userId === mission.acheteurUserId);
+}
+
+export function peutModifierDossierMission(
+  mission: Pick<MissionAchat, "statut">,
+) {
+  return mission.statut === "brouillon";
 }
 
 export function listerMouvementsBloquantAnnulationMission(
@@ -202,7 +364,9 @@ export function listerMouvementsBloquantAnnulationMission(
   );
   const produitIds = [
     ...new Set(
-      mission.achatsRealises.filter((l) => l.quantite > 0).map((l) => l.produitId),
+      mission.achatsRealises
+        .filter((l) => quantiteReceptionneeLigne(l) > 0)
+        .map((l) => l.produitId),
     ),
   ];
   let negatif = false;
@@ -311,6 +475,54 @@ export function etapeValidationMission(
   };
 }
 
+export function evenementsSaisieMission(
+  prev: MissionAchat,
+  next: MissionAchat,
+): { action: MissionValidationAction; detail: string }[] {
+  const out: { action: MissionValidationAction; detail: string }[] = [];
+  if (next.achatsRealises.length > prev.achatsRealises.length) {
+    out.push({ action: "ajouter_achat", detail: "Ajout d'un achat" });
+  }
+  const justifieAvant = (id: string, kind: "achat" | "depense") => {
+    if (kind === "achat") {
+      const l = prev.achatsRealises.find((x) => x.id === id);
+      return Boolean(l?.numeroJustificatif?.trim());
+    }
+    const d = prev.depensesDiverses.find((x) => x.id === id);
+    return Boolean(d?.numeroJustificatif?.trim());
+  };
+  for (const l of next.achatsRealises) {
+    if (l.numeroJustificatif?.trim() && !justifieAvant(l.id, "achat")) {
+      out.push({
+        action: "ajouter_justificatif",
+        detail: `Justificatif achat ${l.numeroJustificatif.trim()}`,
+      });
+    }
+  }
+  for (const d of next.depensesDiverses) {
+    if (d.numeroJustificatif?.trim() && !justifieAvant(d.id, "depense")) {
+      out.push({
+        action: "ajouter_justificatif",
+        detail: `Justificatif dépense ${d.numeroJustificatif.trim()}`,
+      });
+    }
+  }
+  if ((next.justificatifs ?? []).length > (prev.justificatifs ?? []).length) {
+    out.push({ action: "ajouter_justificatif", detail: "Justificatif de mission" });
+  }
+  const recuNouveau = next.achatsRealises.some((l) => {
+    const avant = prev.achatsRealises.find((x) => x.id === l.id);
+    return (
+      typeof l.quantiteReceptionnee === "number" &&
+      typeof avant?.quantiteReceptionnee !== "number"
+    );
+  });
+  if (recuNouveau) {
+    out.push({ action: "reception", detail: "Réception des articles" });
+  }
+  return out;
+}
+
 export type SyntheseAvancesAcheteur = {
   acheteurUserId: string;
   acheteurNom: string;
@@ -336,9 +548,9 @@ export function syntheseAvancesParAcheteur(missions: MissionAchat[]): SyntheseAv
       };
       map.set(m.acheteurUserId, row);
     }
-    if (m.statut === "en_cours") {
+    if (MISSION_STATUTS_OUVERTS.includes(m.statut)) {
       row.nbEnCours += 1;
-      row.totalAvancesEnCours += m.montantAvance;
+      row.totalAvancesEnCours += fondsRemisMission(m);
     }
     if (m.statut === "cloture" && m.statutReglement === "non_regle") {
       row.nbClotureesNonReglees += 1;
@@ -372,16 +584,158 @@ export function missionsFiltrees(
 
 export function triMissionsSuivi(missions: MissionAchat[]) {
   return [...missions].sort((a, b) => {
-    const ra = a.statutReglement === "non_regle" && a.statut === "cloture" ? 0 : 1;
-    const rb = b.statutReglement === "non_regle" && b.statut === "cloture" ? 0 : 1;
-    if (ra !== rb) return ra - rb;
-    const na = a.statut === "en_cours" ? 0 : 1;
-    const nb = b.statut === "en_cours" ? 0 : 1;
-    if (na !== nb) return na - nb;
+    const prio = (m: MissionAchat) => {
+      if (m.statut === "a_regulariser") return 0;
+      if (m.statutReglement === "non_regle" && m.statut === "cloture") return 1;
+      if (m.statut === "en_cours" || m.statut === "fonds_remis") return 2;
+      return 3;
+    };
+    const d = prio(a) - prio(b);
+    if (d !== 0) return d;
     return b.date.localeCompare(a.date);
   });
 }
 
 export function depensesValides(lignes: MissionDepenseDiverse[]) {
   return lignes.filter((d) => d.nature.trim() && d.montant > 0);
+}
+
+export type AnomalieMission = {
+  gravite: "warning" | "danger";
+  code: string;
+  libelle: string;
+};
+
+export function totauxArticlesMission(m: MissionAchat) {
+  const prevu = m.lignesPrevisionnelles.reduce(
+    (s, l) => s + Math.max(0, l.quantiteSouhaitee),
+    0,
+  );
+  const achete = m.achatsRealises.reduce((s, l) => s + Math.max(0, l.quantite), 0);
+  const recu = m.achatsRealises.reduce((s, l) => s + quantiteReceptionneeLigne(l), 0);
+  return { prevu, achete, recu };
+}
+
+export function fondsNonRegularises(m: MissionAchat) {
+  return Math.abs(soldeMission(m)) >= 0.5 && m.statutReglement !== "regle";
+}
+
+export function anomaliesMission(m: MissionAchat): AnomalieMission[] {
+  const out: AnomalieMission[] = [];
+  const budget = budgetPrevisionnelMission(m);
+  const depense = totalDepenseMission(m);
+  const fondsValides = fondsValidesMission(m);
+  if (budget > 0 && depense > budget + 0.5) {
+    out.push({
+      gravite: "danger",
+      code: "depassement_budget",
+      libelle: "Dépassement du budget prévisionnel",
+    });
+  }
+  if (fondsValides > 0 && depense > fondsValides + 0.5) {
+    out.push({
+      gravite: "danger",
+      code: "depense_superieure_autorisee",
+      libelle: "Dépense supérieure au montant autorisé",
+    });
+  }
+  const prevuIds = new Set(m.lignesPrevisionnelles.map((l) => l.produitId));
+  for (const l of m.achatsRealises) {
+    if (l.quantite <= 0) continue;
+    if (!l.previsionId && !prevuIds.has(l.produitId)) {
+      out.push({
+        gravite: "warning",
+        code: "article_imprevu",
+        libelle: "Article acheté non prévu à la mission",
+      });
+      break;
+    }
+  }
+  for (const l of m.achatsRealises) {
+    if (!l.previsionId) continue;
+    const prev = m.lignesPrevisionnelles.find((p) => p.id === l.previsionId);
+    if (prev && l.quantite > prev.quantiteSouhaitee + 1e-9) {
+      out.push({
+        gravite: "warning",
+        code: "quantite_superieure",
+        libelle: "Quantité achetée supérieure à la quantité autorisée",
+      });
+      break;
+    }
+  }
+  const nJust = nbJustificatifsManquants(m);
+  if (nJust > 0) {
+    out.push({
+      gravite: "danger",
+      code: "sans_justificatif",
+      libelle: `${nJust} dépense(s) sans justificatif`,
+    });
+  }
+  if (m.achatsRealises.some((l) => l.quantite > 0 && statutReceptionLigne(l) !== "complet")) {
+    out.push({
+      gravite: "warning",
+      code: "non_receptionne",
+      libelle: "Article acheté non entièrement réceptionné",
+    });
+  }
+  if (fondsNonRegularises(m) && MISSION_STATUTS_EXECUTION.includes(m.statut)) {
+    out.push({
+      gravite: "warning",
+      code: "fonds_non_regularises",
+      libelle:
+        soldeMission(m) > 0
+          ? "Solde à restituer par l'acheteur"
+          : "Montant supplémentaire à rembourser à l'acheteur",
+    });
+  }
+  return out;
+}
+
+export function indicateurMission(
+  m: MissionAchat,
+): "conforme" | "ecart" | "probleme" {
+  const ano = anomaliesMission(m);
+  if (ano.some((a) => a.gravite === "danger")) return "probleme";
+  if (ano.length > 0) return "ecart";
+  return "conforme";
+}
+
+export function motifClotureImpossible(
+  m: MissionAchat,
+  opts?: { exceptionJustificatifs?: boolean },
+) {
+  if (
+    m.statut !== "en_cours" &&
+    m.statut !== "fonds_remis" &&
+    m.statut !== "a_regulariser"
+  ) {
+    return "Seule une mission en cours, fonds remis ou à régulariser peut être clôturée.";
+  }
+  if (fondsNonRegularises(m)) {
+    return "Clôture impossible : les fonds ne sont pas régularisés (restitution ou remboursement).";
+  }
+  if (
+    nbJustificatifsManquants(m) > 0 &&
+    !opts?.exceptionJustificatifs &&
+    !m.clotureExceptionJustificatifs
+  ) {
+    return "Clôture impossible : des dépenses n'ont pas de justificatif. Un responsable peut autoriser une exception.";
+  }
+  return null;
+}
+
+export function syntheseFinanciereMission(m: MissionAchat) {
+  const solde = soldeMission(m);
+  return {
+    fondsDemandes: fondsDemandesMission(m),
+    fondsValides: fondsValidesMission(m),
+    fondsRemis: fondsRemisMission(m),
+    budget: budgetPrevisionnelMission(m),
+    totalDepenses: totalDepenseMission(m),
+    depensesJustifiees: depensesJustifieesMission(m),
+    depensesNonJustifiees: depensesNonJustifieesMission(m),
+    solde,
+    aRestituer: solde > 0.5 ? solde : 0,
+    aRembourser: solde < -0.5 ? -solde : 0,
+  };
 }

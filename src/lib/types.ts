@@ -1348,17 +1348,32 @@ export type OrdreFabrication = {
 };
 
 export type MissionAchatStatut =
+  | "brouillon"
+  | "soumise"
+  | "validee"
+  | "fonds_remis"
   | "en_cours"
+  | "a_regulariser"
   | "cloture"
+  | "rejetee"
   | "annule"
   | "cloture_annule";
 
 export type MissionReglementStatut = "non_regle" | "regle";
 
+export type MissionJustificatifType =
+  | "facture"
+  | "recu"
+  | "bon_livraison"
+  | "autre";
+
 export type MissionLignePrevisionnelle = {
   id: string;
   produitId: string;
   quantiteSouhaitee: number;
+  prixUnitaireEstime?: number;
+  fournisseurId?: string;
+  commentaire?: string;
 };
 
 export type MissionAchatRealise = {
@@ -1369,20 +1384,70 @@ export type MissionAchatRealise = {
   quantite: number;
   prixUnitaire: number;
   fournisseurId: string;
+  dateAchat?: string;
+  numeroJustificatif?: string;
+  typeJustificatif?: MissionJustificatifType;
+  modePaiement?: string;
+  commentaire?: string;
+  /** Absent = quantité achetée (rétrocompatibilité / entrée en stock). */
+  quantiteReceptionnee?: number;
 };
 
 export type MissionDepenseDiverse = {
   id: string;
   nature: string;
   montant: number;
+  date?: string;
+  numeroJustificatif?: string;
+  typeJustificatif?: MissionJustificatifType;
+  commentaire?: string;
+};
+
+export type MissionJustificatif = {
+  id: string;
+  type: MissionJustificatifType;
+  numero?: string;
+  date?: string;
+  libelle?: string;
+  ligneAchatId?: string;
+  depenseId?: string;
+};
+
+export type MissionMouvementFondsType =
+  | "demande"
+  | "validation"
+  | "remise"
+  | "restitution"
+  | "remboursement";
+
+export type MissionMouvementFonds = {
+  id: string;
+  type: MissionMouvementFondsType;
+  montant: number;
+  date: string;
+  modePaiement?: string;
+  compteSource?: string;
+  responsableUserId?: string;
+  responsableNom?: string;
+  reference?: string;
+  note?: string;
 };
 
 export type MissionValidationAction =
+  | "creer"
+  | "soumettre"
+  | "valider"
+  | "rejeter"
+  | "remettre_fonds"
+  | "ajouter_achat"
+  | "ajouter_justificatif"
+  | "reception"
   | "confirmer_cloture"
   | "annuler_cloture"
   | "retour_edition"
   | "annuler_document"
-  | "regler";
+  | "regler"
+  | "exception_justificatifs";
 
 export type MissionValidationEtape = {
   id: string;
@@ -1399,18 +1464,30 @@ export type MissionAchat = {
   acheteurUserId: string;
   acheteurNom: string;
   date: string;
+  /** Date prévue de la mission (terrain). Absent = date de création. */
+  datePrevue?: string;
   siteDestinataireId: string;
+  service?: string;
+  objet?: string;
+  fournisseursPrevus?: string;
   montantAvance: number;
+  montantAvanceDemandee?: number;
+  montantAvanceValidee?: number;
+  valideurUserId?: string;
+  valideurNom?: string;
   statut: MissionAchatStatut;
   lignesPrevisionnelles: MissionLignePrevisionnelle[];
   achatsRealises: MissionAchatRealise[];
   depensesDiverses: MissionDepenseDiverse[];
+  justificatifs?: MissionJustificatif[];
+  mouvementsFonds?: MissionMouvementFonds[];
   statutReglement: MissionReglementStatut;
   dateReglement?: string;
   dateCloture?: string;
   dateAnnulation?: string;
   validations: MissionValidationEtape[];
   note?: string;
+  clotureExceptionJustificatifs?: boolean;
 };
 
 export type AppState = {

@@ -141,13 +141,17 @@ import {
 import {
   depensesValides,
   etapeValidationMission,
+  evenementsSaisieMission,
   listerMouvementsBloquantAnnulationMission,
   messageAnnulationMissionRefusee,
   missionEstVerrouillee,
+  motifClotureImpossible,
   motifLigneMissionInvalide,
   nextNumeroMission,
+  peutModifierDossierMission,
   peutSaisirMission,
   regenererEntreesMission,
+  soldeMission,
   TIERS_DIVERS_MARCHE_ID,
   upsertTiersDiversMarche,
 } from "./missions";
@@ -243,7 +247,9 @@ import type {
   MissionAchat,
   MissionAchatRealise,
   MissionDepenseDiverse,
+  MissionJustificatif,
   MissionLignePrevisionnelle,
+  MissionMouvementFonds,
   MissionReglementStatut,
   DemandePrix,
   DemandePrixLigne,
@@ -512,9 +518,20 @@ type Store = {
     acheteurUserId: string;
     acheteurNom: string;
     date: string;
+    datePrevue?: string;
     siteDestinataireId: string;
+    service?: string;
+    objet?: string;
+    fournisseursPrevus?: string;
     montantAvance: number;
-    lignesPrevisionnelles: { produitId: string; quantiteSouhaitee: number }[];
+    montantAvanceDemandee?: number;
+    lignesPrevisionnelles: {
+      produitId: string;
+      quantiteSouhaitee: number;
+      prixUnitaireEstime?: number;
+      fournisseurId?: string;
+      commentaire?: string;
+    }[];
     note?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierMissionAchat: (
@@ -523,15 +540,41 @@ type Store = {
       acheteurUserId: string;
       acheteurNom: string;
       date: string;
+      datePrevue: string;
       siteDestinataireId: string;
+      service: string;
+      objet: string;
+      fournisseursPrevus: string;
       montantAvance: number;
+      montantAvanceDemandee: number;
       lignesPrevisionnelles: MissionLignePrevisionnelle[];
       achatsRealises: MissionAchatRealise[];
       depensesDiverses: MissionDepenseDiverse[];
+      justificatifs: MissionJustificatif[];
+      mouvementsFonds: MissionMouvementFonds[];
       note: string;
     }>,
   ) => { ok: boolean; reason?: string };
-  cloturerMissionAchat: (id: string) => { ok: boolean; reason?: string };
+  soumettreMissionAchat: (id: string) => { ok: boolean; reason?: string };
+  validerMissionAchat: (id: string) => { ok: boolean; reason?: string };
+  rejeterMissionAchat: (
+    id: string,
+    motif?: string,
+  ) => { ok: boolean; reason?: string };
+  remettreFondsMissionAchat: (
+    id: string,
+    data: {
+      montant: number;
+      date: string;
+      modePaiement?: string;
+      compteSource?: string;
+      reference?: string;
+    },
+  ) => { ok: boolean; reason?: string };
+  cloturerMissionAchat: (
+    id: string,
+    opts?: { exceptionJustificatifs?: boolean },
+  ) => { ok: boolean; reason?: string };
   annulerMissionAchat: (id: string) => { ok: boolean; reason?: string };
   reglerMissionAchat: (
     id: string,
@@ -3166,7 +3209,8 @@ export const useStore = create<Store>()((set, get) => ({
         if (!data.siteDestinataireId) {
           return { ok: false, reason: "Choisissez le site destinataire." };
         }
-        if (!(data.montantAvance >= 0)) {
+        const demande = data.montantAvanceDemandee ?? data.montantAvance;
+        if (!(demande >= 0) || !(data.montantAvance >= 0)) {
           return { ok: false, reason: "Le montant de l'avance ne peut pas être négatif." };
         }
         const state = get();
@@ -3187,6 +3231,9 @@ export const useStore = create<Store>()((set, get) => ({
             id: uid("misp"),
             produitId: l.produitId,
             quantiteSouhaitee: l.quantiteSouhaitee,
+            prixUnitaireEstime: l.prixUnitaireEstime,
+            fournisseurId: l.fournisseurId,
+            commentaire: l.commentaire,
           });
         }
         const achatsRealises: MissionAchatRealise[] = prevus.map((p) => ({
@@ -3194,23 +3241,44 @@ export const useStore = create<Store>()((set, get) => ({
           previsionId: p.id,
           produitId: p.produitId,
           quantite: 0,
-          prixUnitaire: 0,
-          fournisseurId: TIERS_DIVERS_MARCHE_ID,
+          prixUnitaire: p.prixUnitaireEstime ?? 0,
+          fournisseurId: p.fournisseurId || TIERS_DIVERS_MARCHE_ID,
         }));
+        const actor = getActiviteActor();
+        const mouvementsFonds: MissionMouvementFonds[] =
+          demande > 0
+            ? [
+                {
+                  id: uid("misf"),
+                  type: "demande",
+                  montant: demande,
+                  date: data.date,
+                  responsableUserId: actor.id,
+                  responsableNom: actor.nom,
+                },
+              ]
+            : [];
         const nouveau: MissionAchat = {
           id: uid("mis"),
           numero: nextNumeroMission(state.missionsAchat ?? []),
           acheteurUserId: data.acheteurUserId,
           acheteurNom: data.acheteurNom.trim(),
           date: data.date,
+          datePrevue: data.datePrevue,
           siteDestinataireId: data.siteDestinataireId,
-          montantAvance: data.montantAvance,
-          statut: "en_cours",
+          service: data.service,
+          objet: data.objet,
+          fournisseursPrevus: data.fournisseursPrevus,
+          montantAvance: 0,
+          montantAvanceDemandee: demande,
+          statut: "brouillon",
           lignesPrevisionnelles: prevus,
           achatsRealises,
           depensesDiverses: [],
+          justificatifs: [],
+          mouvementsFonds,
           statutReglement: "non_regle",
-          validations: [],
+          validations: [etapeValidationMission("creer", actor)],
           note: data.note,
         };
         const sync = etatAvecTiersDivers(state);
@@ -3224,7 +3292,7 @@ export const useStore = create<Store>()((set, get) => ({
                 entreeActivite("creation", "mission_achat", {
                   entiteId: nouveau.id,
                   libelle: nouveau.numero,
-                  detail: `${nouveau.acheteurNom} — avance ${Math.round(nouveau.montantAvance)} Ar`,
+                  detail: `${nouveau.acheteurNom}${nouveau.objet ? ` — ${nouveau.objet}` : ""}`,
                 }),
                 ...s.journalActivites,
               ],
@@ -3239,18 +3307,24 @@ export const useStore = create<Store>()((set, get) => ({
         const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
         if (!prev) return { ok: false, reason: "Mission introuvable." };
         if (missionEstVerrouillee(prev)) {
-          return { ok: false, reason: "Cette mission est clôturée ou annulée : aucune modification possible." };
+          return { ok: false, reason: "Cette mission est clôturée, rejetée ou annulée : aucune modification possible." };
         }
         const gerer = actorPeutGererMissions();
-        if (!actorPeutSaisirMission(prev)) {
+        const saisie = actorPeutSaisirMission(prev);
+        if (!gerer && !saisie) {
           return { ok: false, reason: "Seul l'acheteur assigné peut saisir les achats de cette mission." };
         }
         const headerKeys = [
           "acheteurUserId",
           "acheteurNom",
           "date",
+          "datePrevue",
           "siteDestinataireId",
+          "service",
+          "objet",
+          "fournisseursPrevus",
           "montantAvance",
+          "montantAvanceDemandee",
           "lignesPrevisionnelles",
         ] as const;
         if (!gerer) {
@@ -3259,6 +3333,16 @@ export const useStore = create<Store>()((set, get) => ({
               return {
                 ok: false,
                 reason: "L'en-tête et la liste prévisionnelle sont réservés au responsable achats.",
+              };
+            }
+          }
+        } else if (!peutModifierDossierMission(prev)) {
+          const structureKeys = headerKeys.filter((k) => k !== "montantAvance");
+          for (const k of structureKeys) {
+            if (data[k] !== undefined) {
+              return {
+                ok: false,
+                reason: "Une mission validée ne peut plus être modifiée librement.",
               };
             }
           }
@@ -3328,36 +3412,97 @@ export const useStore = create<Store>()((set, get) => ({
         if (data.montantAvance != null && data.montantAvance < 0) {
           return { ok: false, reason: "Le montant de l'avance ne peut pas être négatif." };
         }
-        const next: MissionAchat = {
+        let next: MissionAchat = {
           ...prev,
           ...data,
           lignesPrevisionnelles,
           achatsRealises,
           depensesDiverses,
+          justificatifs: data.justificatifs ?? prev.justificatifs,
+          mouvementsFonds: data.mouvementsFonds ?? prev.mouvementsFonds,
         };
+        if (
+          prev.statut === "fonds_remis" &&
+          next.achatsRealises.some((l) => l.quantite > 0)
+        ) {
+          next = { ...next, statut: "en_cours" };
+        }
+        const actor = getActiviteActor();
+        const evenements = evenementsSaisieMission(prev, next);
+        if (evenements.length) {
+          next = {
+            ...next,
+            validations: [
+              ...next.validations,
+              ...evenements.map((e) =>
+                etapeValidationMission(e.action, actor, e.detail),
+              ),
+            ],
+          };
+        }
         set((s) => ({
           missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          ...(evenements.length
+            ? {
+                journalActivites: [
+                  entreeActivite("modification", "mission_achat", {
+                    entiteId: id,
+                    libelle: prev.numero,
+                    detail: evenements.map((e) => e.detail).join(" · "),
+                  }),
+                  ...s.journalActivites,
+                ],
+              }
+            : {}),
         }));
         return { ok: true };
       },
 
-      cloturerMissionAchat: (id) => {
+      cloturerMissionAchat: (id, opts) => {
         if (!actorPeutGererMissions()) {
           return { ok: false, reason: "La clôture est réservée au responsable achats." };
         }
         const state = get();
         const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
         if (!prev) return { ok: false, reason: "Mission introuvable." };
-        if (prev.statut !== "en_cours") {
-          return { ok: false, reason: "Seule une mission en cours peut être clôturée." };
+        const motif = motifClotureImpossible(prev, opts);
+        if (motif) {
+          if (
+            prev.statut === "en_cours" ||
+            prev.statut === "fonds_remis"
+          ) {
+            const actor = getActiviteActor();
+            const next: MissionAchat = {
+              ...prev,
+              statut: "a_regulariser",
+              validations: [
+                ...prev.validations,
+                etapeValidationMission("retour_edition", actor, motif),
+              ],
+            };
+            set((s) => ({
+              missionsAchat: (s.missionsAchat ?? []).map((m) =>
+                m.id === id ? next : m,
+              ),
+              journalActivites: [
+                entreeActivite("modification", "mission_achat", {
+                  entiteId: id,
+                  libelle: prev.numero,
+                  detail: "Passage à régulariser",
+                }),
+                ...s.journalActivites,
+              ],
+            }));
+          }
+          return { ok: false, reason: motif };
         }
         for (const l of prev.achatsRealises) {
-          const motif = motifLigneMissionInvalide(
+          const motifLigne = motifLigneMissionInvalide(
             l,
             state.produits,
             state.categoriesProduits,
           );
-          if (motif) return { ok: false, reason: motif };
+          if (motifLigne) return { ok: false, reason: motifLigne };
         }
         const actor = getActiviteActor();
         const next: MissionAchat = {
@@ -3365,8 +3510,14 @@ export const useStore = create<Store>()((set, get) => ({
           statut: "cloture",
           dateCloture: new Date().toISOString(),
           depensesDiverses: depensesValides(prev.depensesDiverses),
+          clotureExceptionJustificatifs:
+            Boolean(opts?.exceptionJustificatifs) ||
+            prev.clotureExceptionJustificatifs,
           validations: [
             ...prev.validations,
+            ...(opts?.exceptionJustificatifs
+              ? [etapeValidationMission("exception_justificatifs", actor)]
+              : []),
             etapeValidationMission("confirmer_cloture", actor),
           ],
         };
@@ -3384,7 +3535,7 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite("validation", "mission_achat", {
                 entiteId: id,
                 libelle: prev.numero,
-                detail: "Clôture — entrée en stock et écritures 401",
+                detail: "Clôture — entrée en stock (qté réceptionnée) et écritures 401",
               }),
               ...s.journalActivites,
             ],
@@ -3404,7 +3555,7 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Cette mission est déjà annulée." };
         }
         const actor = getActiviteActor();
-        if (prev.statut === "en_cours") {
+        if (prev.statut !== "cloture") {
           const next: MissionAchat = {
             ...prev,
             statut: "annule",
@@ -3471,17 +3622,32 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
         if (!prev) return { ok: false, reason: "Mission introuvable." };
-        if (prev.statut !== "cloture") {
-          return { ok: false, reason: "Seul le solde d'une mission clôturée peut être marqué réglé." };
+        if (prev.statut !== "cloture" && prev.statut !== "a_regulariser" && prev.statut !== "en_cours" && prev.statut !== "fonds_remis") {
+          return { ok: false, reason: "Le règlement n'est possible qu'en cours de mission ou après clôture." };
         }
         if (data.statutReglement === "regle" && !data.dateReglement) {
           return { ok: false, reason: "Indiquez la date de règlement." };
         }
         const actor = getActiviteActor();
+        const mouvements = [...(prev.mouvementsFonds ?? [])];
+        if (data.statutReglement === "regle" && prev.statutReglement !== "regle") {
+          const solde = soldeMission(prev);
+          if (Math.abs(solde) >= 0.5) {
+            mouvements.push({
+              id: uid("misf"),
+              type: solde > 0 ? "restitution" : "remboursement",
+              montant: Math.abs(solde),
+              date: data.dateReglement ?? new Date().toISOString(),
+              responsableUserId: actor.id,
+              responsableNom: actor.nom,
+            });
+          }
+        }
         const next: MissionAchat = {
           ...prev,
           statutReglement: data.statutReglement,
           dateReglement: data.statutReglement === "regle" ? data.dateReglement : undefined,
+          mouvementsFonds: mouvements,
           validations: [
             ...prev.validations,
             etapeValidationMission(
@@ -3498,6 +3664,175 @@ export const useStore = create<Store>()((set, get) => ({
               entiteId: id,
               libelle: prev.numero,
               detail: data.statutReglement === "regle" ? "Règlement de l'avance" : "Règlement annulé",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      soumettreMissionAchat: (id) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La soumission est réservée au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut !== "brouillon") {
+          return { ok: false, reason: "Seule une mission brouillon peut être soumise." };
+        }
+        if (prev.lignesPrevisionnelles.length === 0) {
+          return { ok: false, reason: "Ajoutez au moins un article prévu." };
+        }
+        const actor = getActiviteActor();
+        const next: MissionAchat = {
+          ...prev,
+          statut: "soumise",
+          validations: [...prev.validations, etapeValidationMission("soumettre", actor)],
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          journalActivites: [
+            entreeActivite("validation", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Soumission pour validation",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      validerMissionAchat: (id) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La validation est réservée au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut !== "soumise") {
+          return { ok: false, reason: "Seule une mission soumise peut être validée." };
+        }
+        const actor = getActiviteActor();
+        const demande = prev.montantAvanceDemandee ?? 0;
+        const mouvements = [...(prev.mouvementsFonds ?? [])];
+        if (demande > 0) {
+          mouvements.push({
+            id: uid("misf"),
+            type: "validation",
+            montant: demande,
+            date: new Date().toISOString(),
+            responsableUserId: actor.id,
+            responsableNom: actor.nom,
+          });
+        }
+        const next: MissionAchat = {
+          ...prev,
+          statut: "validee",
+          montantAvanceValidee: demande,
+          valideurUserId: actor.id,
+          valideurNom: actor.nom,
+          mouvementsFonds: mouvements,
+          validations: [...prev.validations, etapeValidationMission("valider", actor)],
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          journalActivites: [
+            entreeActivite("validation", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: actor.nom ? `Validée par ${actor.nom}` : "Validation",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      rejeterMissionAchat: (id, motif) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "Le rejet est réservé au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut !== "soumise" && prev.statut !== "brouillon") {
+          return { ok: false, reason: "Cette mission ne peut plus être rejetée." };
+        }
+        const actor = getActiviteActor();
+        const next: MissionAchat = {
+          ...prev,
+          statut: "rejetee",
+          validations: [
+            ...prev.validations,
+            etapeValidationMission("rejeter", actor, motif),
+          ],
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          journalActivites: [
+            entreeActivite("annulation", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: motif ? `Rejet — ${motif}` : "Rejet",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      remettreFondsMissionAchat: (id, data) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La remise des fonds est réservée au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (
+          prev.statut !== "validee" &&
+          prev.statut !== "fonds_remis" &&
+          prev.statut !== "en_cours"
+        ) {
+          return { ok: false, reason: "Les fonds se remettent après validation de la mission." };
+        }
+        if (!(data.montant > 0)) {
+          return { ok: false, reason: "Indiquez un montant remis positif." };
+        }
+        const actor = getActiviteActor();
+        const mouvement: MissionMouvementFonds = {
+          id: uid("misf"),
+          type: "remise",
+          montant: data.montant,
+          date: data.date,
+          modePaiement: data.modePaiement,
+          compteSource: data.compteSource,
+          reference: data.reference,
+          responsableUserId: actor.id,
+          responsableNom: actor.nom,
+        };
+        const mouvements = [...(prev.mouvementsFonds ?? []), mouvement];
+        const remis = mouvements
+          .filter((x) => x.type === "remise")
+          .reduce((s, x) => s + x.montant, 0);
+        const next: MissionAchat = {
+          ...prev,
+          statut: prev.statut === "en_cours" ? "en_cours" : "fonds_remis",
+          montantAvance: remis,
+          mouvementsFonds: mouvements,
+          validations: [
+            ...prev.validations,
+            etapeValidationMission(
+              "remettre_fonds",
+              actor,
+              `${Math.round(data.montant)} Ar${data.reference ? ` — ${data.reference}` : ""}`,
+            ),
+          ],
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          journalActivites: [
+            entreeActivite("modification", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: `Remise de fonds ${Math.round(data.montant)} Ar`,
             }),
             ...s.journalActivites,
           ],

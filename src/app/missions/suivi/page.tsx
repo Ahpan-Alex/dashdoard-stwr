@@ -27,7 +27,16 @@ import { Banknote } from "lucide-react";
 
 function badgeMission(statut: MissionAchatStatut) {
   if (statut === "cloture") return "badge-success";
-  if (statut === "en_cours") return "badge-sand";
+  if (statut === "brouillon" || statut === "soumise" || statut === "validee") {
+    return "badge-sea";
+  }
+  if (
+    statut === "en_cours" ||
+    statut === "fonds_remis" ||
+    statut === "a_regulariser"
+  ) {
+    return "badge-sand";
+  }
   return "badge-danger";
 }
 

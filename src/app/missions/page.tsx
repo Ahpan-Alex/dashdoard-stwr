@@ -30,7 +30,16 @@ import type { MissionAchatStatut } from "@/lib/types";
 
 function badgeMission(statut: MissionAchatStatut) {
   if (statut === "cloture") return "badge-success";
-  if (statut === "en_cours") return "badge-sand";
+  if (statut === "brouillon" || statut === "soumise" || statut === "validee") {
+    return "badge-sea";
+  }
+  if (
+    statut === "en_cours" ||
+    statut === "fonds_remis" ||
+    statut === "a_regulariser"
+  ) {
+    return "badge-sand";
+  }
   return "badge-danger";
 }
 
@@ -100,7 +109,7 @@ function MissionsContent() {
     <div>
       <PageHeader
         title="Missions d'achat"
-        description="Avance de caisse, achats terrain (formels ou marché) et rapprochement informatif au retour. Aucun mouvement de trésorerie n'est généré."
+        description="Dossier unique : planification, fonds, achats terrain, réception, justificatifs et entrée en stock à la clôture."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/missions/suivi" className="btn btn-secondary">
@@ -143,7 +152,22 @@ function MissionsContent() {
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
         <StatCard
           label="En cours"
-          value={String(visiblesMissions.filter((m) => m.statut === "en_cours").length)}
+          value={String(
+            visiblesMissions.filter(
+              (m) =>
+                m.statut === "en_cours" ||
+                m.statut === "fonds_remis" ||
+                m.statut === "a_regulariser",
+            ).length,
+          )}
+        />
+        <StatCard
+          label="À valider"
+          value={String(
+            visiblesMissions.filter(
+              (m) => m.statut === "brouillon" || m.statut === "soumise",
+            ).length,
+          )}
         />
         <StatCard
           label="Clôturées"
@@ -171,7 +195,7 @@ function MissionsContent() {
         <EmptyState
           icon={<Banknote className="h-5 w-5" />}
           title="Aucune mission d'achat"
-          description="Le responsable achats assigne un acheteur, une liste prévisionnelle et une avance en espèces."
+          description="Le responsable achats crée un brouillon, valide la mission, puis remet les fonds à l'acheteur."
         />
       ) : (
         <>
@@ -249,9 +273,19 @@ function FormulaireMission({
     acheteurUserId: string;
     acheteurNom: string;
     date: string;
+    datePrevue?: string;
     siteDestinataireId: string;
+    service?: string;
+    objet?: string;
+    fournisseursPrevus?: string;
     montantAvance: number;
-    lignesPrevisionnelles: { produitId: string; quantiteSouhaitee: number }[];
+    montantAvanceDemandee?: number;
+    note?: string;
+    lignesPrevisionnelles: {
+      produitId: string;
+      quantiteSouhaitee: number;
+      prixUnitaireEstime?: number;
+    }[];
   }) => void;
 }) {
   const catalogue = useStore((s) => s.produits);
@@ -265,27 +299,42 @@ function FormulaireMission({
   );
   const [acheteurId, setAcheteurId] = useState(acheteurs[0]?.id ?? "");
   const [date, setDate] = useState(jourLocalISO());
+  const [datePrevue, setDatePrevue] = useState(jourLocalISO());
   const [siteId, setSiteId] = useState(defautSite || sites[0]?.id || "");
+  const [service, setService] = useState("");
+  const [objet, setObjet] = useState("");
+  const [fournisseursPrevus, setFournisseursPrevus] = useState("");
   const [avance, setAvance] = useState("");
-  const [lignes, setLignes] = useState<{ produitId: string; quantiteSouhaitee: string }[]>([
-    { produitId: produits[0]?.id ?? "", quantiteSouhaitee: "1" },
-  ]);
+  const [note, setNote] = useState("");
+  const [lignes, setLignes] = useState<
+    { produitId: string; quantiteSouhaitee: string; prixUnitaireEstime: string }[]
+  >([{ produitId: produits[0]?.id ?? "", quantiteSouhaitee: "1", prixUnitaireEstime: "" }]);
 
   function onForm(e: FormEvent) {
     e.preventDefault();
     const acheteur = acheteurs.find((a) => a.id === acheteurId);
     if (!acheteur || !siteId) return;
+    const demande = Number(avance) || 0;
     onSubmit({
       acheteurUserId: acheteur.id,
       acheteurNom: acheteur.nom,
       date: isoMidiDepuisJour(date),
+      datePrevue: isoMidiDepuisJour(datePrevue),
       siteDestinataireId: siteId,
-      montantAvance: Number(avance) || 0,
+      service: service.trim() || undefined,
+      objet: objet.trim() || undefined,
+      fournisseursPrevus: fournisseursPrevus.trim() || undefined,
+      montantAvance: 0,
+      montantAvanceDemandee: demande,
+      note: note.trim() || undefined,
       lignesPrevisionnelles: lignes
         .filter((l) => l.produitId)
         .map((l) => ({
           produitId: l.produitId,
           quantiteSouhaitee: Number(l.quantiteSouhaitee) || 0,
+          prixUnitaireEstime: l.prixUnitaireEstime
+            ? Number(l.prixUnitaireEstime) || 0
+            : undefined,
         })),
     });
   }
@@ -296,9 +345,13 @@ function FormulaireMission({
       className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5"
     >
       <h2 className="mb-4 font-display text-lg font-semibold">Nouvelle mission d&apos;achat</h2>
+      <p className="mb-4 text-xs text-muted">
+        La mission est créée en brouillon. Soumettez-la, validez-la, puis remettez les fonds
+        depuis la fiche.
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs font-semibold text-muted">
-          Acheteur
+          Acheteur responsable
           <select
             className="select mt-1"
             value={acheteurId}
@@ -314,13 +367,22 @@ function FormulaireMission({
           </select>
         </label>
         <label className="block text-xs font-semibold text-muted">
-          Date de la mission
+          Date de création
           <input
             type="date"
             className="input mt-1"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Date prévue
+          <input
+            type="date"
+            className="input mt-1"
+            value={datePrevue}
+            onChange={(e) => setDatePrevue(e.target.value)}
           />
         </label>
         <label className="block text-xs font-semibold text-muted">
@@ -340,7 +402,15 @@ function FormulaireMission({
           </select>
         </label>
         <label className="block text-xs font-semibold text-muted">
-          Montant de l&apos;avance remise
+          Service / département
+          <input
+            className="input mt-1"
+            value={service}
+            onChange={(e) => setService(e.target.value)}
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Avance demandée
           <input
             type="number"
             min={0}
@@ -348,14 +418,38 @@ function FormulaireMission({
             className="input mt-1"
             value={avance}
             onChange={(e) => setAvance(e.target.value)}
-            required
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted sm:col-span-2">
+          Objet de la mission
+          <input
+            className="input mt-1"
+            value={objet}
+            onChange={(e) => setObjet(e.target.value)}
+            placeholder="Ex. Achat fournitures de bureau"
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted sm:col-span-2">
+          Fournisseurs prévus (si connus)
+          <input
+            className="input mt-1"
+            value={fournisseursPrevus}
+            onChange={(e) => setFournisseursPrevus(e.target.value)}
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted sm:col-span-2">
+          Observations
+          <textarea
+            className="input mt-1 min-h-[4rem]"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
           />
         </label>
       </div>
 
-      <h3 className="mb-2 mt-5 text-sm font-semibold">Liste prévisionnelle</h3>
+      <h3 className="mb-2 mt-5 text-sm font-semibold">Articles à acheter</h3>
       <div className="space-y-2">
-          {lignes.map((l, i) => (
+        {lignes.map((l, i) => (
           <div key={i} className="rounded-[var(--radius)] border border-line p-3">
             <SelecteurArticle
               produits={produits}
@@ -367,29 +461,43 @@ function FormulaireMission({
               emptyLabel="— Choisir un article —"
             />
             <div className="mt-2 flex flex-wrap items-end gap-2">
-            <input
-              type="number"
-              min={0}
-              step="any"
-              className="input w-32"
-              value={l.quantiteSouhaitee}
-              onChange={(e) =>
-                setLignes(
-                  lignes.map((x, j) =>
-                    j === i ? { ...x, quantiteSouhaitee: e.target.value } : x,
-                  ),
-                )
-              }
-              placeholder="Qté souhaitée"
-            />
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setLignes(lignes.filter((_, j) => j !== i))}
-              disabled={lignes.length === 1}
-            >
-              Retirer
-            </button>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input w-32"
+                value={l.quantiteSouhaitee}
+                onChange={(e) =>
+                  setLignes(
+                    lignes.map((x, j) =>
+                      j === i ? { ...x, quantiteSouhaitee: e.target.value } : x,
+                    ),
+                  )
+                }
+                placeholder="Qté prévue"
+              />
+              <input
+                type="number"
+                min={0}
+                className="input w-36"
+                value={l.prixUnitaireEstime}
+                onChange={(e) =>
+                  setLignes(
+                    lignes.map((x, j) =>
+                      j === i ? { ...x, prixUnitaireEstime: e.target.value } : x,
+                    ),
+                  )
+                }
+                placeholder="PU estimatif"
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setLignes(lignes.filter((_, j) => j !== i))}
+                disabled={lignes.length === 1}
+              >
+                Retirer
+              </button>
             </div>
           </div>
         ))}
@@ -398,14 +506,21 @@ function FormulaireMission({
         type="button"
         className="btn btn-secondary mt-2"
         onClick={() =>
-          setLignes([...lignes, { produitId: produits[0]?.id ?? "", quantiteSouhaitee: "1" }])
+          setLignes([
+            ...lignes,
+            {
+              produitId: produits[0]?.id ?? "",
+              quantiteSouhaitee: "1",
+              prixUnitaireEstime: "",
+            },
+          ])
         }
       >
         Ajouter un article
       </button>
       <div className="mt-4 flex gap-2">
         <button type="submit" className="btn btn-primary">
-          Créer la mission
+          Créer le brouillon
         </button>
         <button type="button" className="btn btn-secondary" onClick={onClose}>
           Annuler
