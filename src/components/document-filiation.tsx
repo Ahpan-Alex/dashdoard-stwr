@@ -13,6 +13,8 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { BonDeLivraison, Commande } from "@/lib/types";
+import { OF_STATUT_LABELS } from "@/lib/fabrication";
+import Link from "next/link";
 
 export function DocumentFiliation({ documentId }: { documentId: string }) {
   const transformations = useStore((s) => s.transformations ?? []);
@@ -56,6 +58,32 @@ export function DocumentFiliation({ documentId }: { documentId: string }) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+export function OfLiesCommande({ commandeId }: { commandeId: string }) {
+  const ofs = useStore((s) =>
+    (s.ordresFabrication ?? []).filter(
+      (o) => o.commandeId === commandeId && o.statut !== "annule",
+    ),
+  );
+  if (ofs.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-[var(--radius)] border border-line bg-card px-4 py-3 text-sm no-print">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        Ordres de fabrication
+      </p>
+      <ul className="space-y-1">
+        {ofs.map((o) => (
+          <li key={o.id}>
+            <Link href={`/fabrication/${o.id}`} className="font-semibold text-sea-800">
+              {o.numero}
+            </Link>{" "}
+            — {OF_STATUT_LABELS[o.statut]}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

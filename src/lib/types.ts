@@ -2,8 +2,8 @@ import type { PreferencesAffichage } from "./affichage-tableaux";
 import type { AlertesSuivi, ParametresAlertes } from "./alertes";
 import type { ModeleDocument, PreferencesModeles } from "./document-templates";
 
-/** Rôle opérationnel d’un site. Un site peut cumuler les deux. */
-export type RoleSite = "entrepot" | "point_de_vente";
+/** Rôle opérationnel d’un site. Un site peut cumuler entrepôt et point de vente. */
+export type RoleSite = "entrepot" | "point_de_vente" | "atelier" | "atelier_final";
 
 export type PointDeVente = {
   id: string;
@@ -85,10 +85,53 @@ export type Produit = {
    */
   typeAchat?: TypeAchat;
   /**
+   * Nature de stock (indépendante du type d'achat comptable).
+   * Absent = matière première / article acheté (rétrocompatibilité).
+   */
+  natureStock?: NatureStock;
+  /** Jusqu’à deux nomenclatures (automatique + alternative nommée). */
+  nomenclatures?: NomenclatureProduit[];
+  /**
    * TVA applicable sur ce produit.
    * Absent : déduit du taux TVA catalogue (rétrocompatibilité).
    */
   taxable?: boolean;
+  /**
+   * Critère de rang par défaut des fournisseurs habituels (fiche produit).
+   * Pas de réglage global entreprise.
+   */
+  criteresClassementFournisseurs?: CritereClassementFournisseur;
+  /** Rangs de priorité d'approvisionnement (1 = proposé par défaut à l'achat). */
+  fournisseursPriorite?: ProduitFournisseurRang[];
+};
+
+export type CritereClassementFournisseur = "prix" | "delai";
+
+export type ProduitFournisseurRang = {
+  fournisseurId: string;
+  rang: number;
+  /** Rang saisi à la main, conservé si le critère automatique change. */
+  manuel?: boolean;
+};
+
+/** Classification logistique du produit — distincte du type d'achat (classe 6). */
+export type NatureStock = "matiere_premiere" | "semi_fini" | "fini";
+
+export type TypeNomenclature = "automatique" | "alternative";
+
+export type NomenclatureLigne = {
+  id: string;
+  composantId: string;
+  /** Quantité de composant pour 1 unité du produit fabriqué. */
+  quantite: number;
+};
+
+export type NomenclatureProduit = {
+  id: string;
+  type: TypeNomenclature;
+  /** « Nomenclature standard » ou nom libre pour l’alternative. */
+  nom: string;
+  lignes: NomenclatureLigne[];
 };
 
 export type TarifClient = {
@@ -137,13 +180,23 @@ export type EntreeStock = {
     | "livraison_achat"
     | "retour_fournisseur"
     | "transfert_sortie"
-    | "transfert_entree";
+    | "transfert_entree"
+    | "of_sortie"
+    | "of_entree"
+    | "of_retour"
+    | "of_annulation"
+    | "mission_achat"
+    | "mission_achat_annulation";
   /** Achat fournisseur d'origine (livraison ou retour). */
   achatId?: string;
   livraisonId?: string;
   avoirAchatId?: string;
   /** Transfert inter-sites d'origine. */
   transfertId?: string;
+  /** Ordre de fabrication d'origine. */
+  ofId?: string;
+  /** Mission d'achat (avance de caisse) d'origine. */
+  missionAchatId?: string;
   /** Date limite de consommation du lot (si le produit gère la péremption). */
   datePeremption?: string;
 };
@@ -453,6 +506,8 @@ export type Tiers = {
   compteClientId?: string;
   /** Compte 401 (ou sous-compte) si rôle Fournisseur. Unique parmi les tiers. */
   compteFournisseurId?: string;
+  /** Tiers technique (ex. Divers / Marché) : non supprimable. */
+  systeme?: boolean;
 };
 
 export type AchatStatut = "brouillon" | "valide" | "annule";
@@ -554,6 +609,37 @@ export type Achat = {
   /** Utilisateur à la saisie (colonne « Vendeur » de la fiche Tiers). */
   vendeurId?: string;
   vendeurNom?: string;
+  /** Demande d'achat générée depuis un OF (composant en rupture). */
+  ofId?: string;
+  ofComposantId?: string;
+};
+
+export type DemandePrixStatut = "brouillon" | "en_cours" | "cloturee" | "annulee";
+
+export type DemandePrixLigne = {
+  id: string;
+  produitId: string;
+  quantite: number;
+};
+
+export type DemandePrixOffre = {
+  id: string;
+  ligneId: string;
+  fournisseurId: string;
+  /** 0 = pas encore de prix proposé. */
+  prixUnitaire: number;
+  delaiJours?: number;
+};
+
+export type DemandePrix = {
+  id: string;
+  numero: string;
+  date: string;
+  statut: DemandePrixStatut;
+  lignes: DemandePrixLigne[];
+  fournisseurIds: string[];
+  offres: DemandePrixOffre[];
+  note?: string;
 };
 
 export type TransfertStockStatut =
@@ -961,6 +1047,9 @@ export type ActiviteEntite =
   | "acompte"
   | "inventaire"
   | "transfert"
+  | "ordre_fabrication"
+  | "mission_achat"
+  | "demande_prix"
   | "tiers"
   | "parametres"
   | "compte_comptable"
@@ -1011,7 +1100,7 @@ export type CompteComptable = {
 
 export type JournalEcriture = "vente" | "achat";
 
-export type SourceEcriture = "facture" | "achat" | "avoir_achat";
+export type SourceEcriture = "facture" | "achat" | "avoir_achat" | "mission_achat";
 
 export type LigneEcritureComptable = {
   id: string;
@@ -1049,6 +1138,171 @@ export type TransfertComptable = {
   nomFichier: string;
 };
 
+export type OrdreFabricationStatut =
+  | "brouillon"
+  | "en_cours"
+  | "cloture"
+  | "annule"
+  | "cloture_annule";
+
+export type OfNomenclatureLigne = {
+  id: string;
+  composantId: string;
+  quantiteUnitaire: number;
+};
+
+export type OfSortieMatiere = {
+  id: string;
+  date: string;
+  composantId: string;
+  siteSourceId: string;
+  quantite: number;
+  /** CUMP du site source figé à la sortie, non recalculable. */
+  cumpSortie: number;
+  valeur: number;
+  /** Entrée de production qui a absorbé ce coût (pot). */
+  affecteEntreeId?: string;
+  achatId?: string;
+};
+
+export type OfFraisAdditionnel = {
+  id: string;
+  date: string;
+  libelle: string;
+  montant: number;
+  affecteEntreeId?: string;
+};
+
+export type OfEntreeProduction = {
+  id: string;
+  date: string;
+  quantite: number;
+  coutUnitaire: number;
+  coutTotal: number;
+};
+
+export type OfRetourMatiere = {
+  id: string;
+  sortieId: string;
+  composantId: string;
+  quantite: number;
+  destination: "magasin" | "atelier";
+  siteDestinataireId: string;
+  cumpOrigine: number;
+};
+
+export type OfEcartFabrication = {
+  montant: number;
+  raison?: string;
+};
+
+export type OfValidationAction =
+  | "demarrer"
+  | "confirmer_cloture"
+  | "annuler_cloture"
+  | "retour_edition"
+  | "annuler_document";
+
+export type OfValidationEtape = {
+  id: string;
+  date: string;
+  userId?: string;
+  userNom?: string;
+  action: OfValidationAction;
+  detail?: string;
+};
+
+export type OrdreFabrication = {
+  id: string;
+  numero: string;
+  atelierId: string;
+  produitId: string;
+  quantitePrevue: number;
+  nomenclatureSource: TypeNomenclature;
+  nomenclatureNom: string;
+  nomenclatureLignes: OfNomenclatureLigne[];
+  /** Fabrication sur commande (MTO). Vide = réappro stock (MTS). */
+  commandeId?: string;
+  statut: OrdreFabricationStatut;
+  dateCreation: string;
+  dateCloturePrevue?: string;
+  dateClotureReelle?: string;
+  dateAnnulation?: string;
+  sorties: OfSortieMatiere[];
+  frais: OfFraisAdditionnel[];
+  entreesProduction: OfEntreeProduction[];
+  retoursMatieres: OfRetourMatiere[];
+  ecart?: OfEcartFabrication;
+  validations: OfValidationEtape[];
+  note?: string;
+};
+
+export type MissionAchatStatut =
+  | "en_cours"
+  | "cloture"
+  | "annule"
+  | "cloture_annule";
+
+export type MissionReglementStatut = "non_regle" | "regle";
+
+export type MissionLignePrevisionnelle = {
+  id: string;
+  produitId: string;
+  quantiteSouhaitee: number;
+};
+
+export type MissionAchatRealise = {
+  id: string;
+  previsionId?: string;
+  produitId: string;
+  /** 0 accepté si l'article n'a pas été trouvé. */
+  quantite: number;
+  prixUnitaire: number;
+  fournisseurId: string;
+};
+
+export type MissionDepenseDiverse = {
+  id: string;
+  nature: string;
+  montant: number;
+};
+
+export type MissionValidationAction =
+  | "confirmer_cloture"
+  | "annuler_cloture"
+  | "retour_edition"
+  | "annuler_document"
+  | "regler";
+
+export type MissionValidationEtape = {
+  id: string;
+  date: string;
+  userId?: string;
+  userNom?: string;
+  action: MissionValidationAction;
+  detail?: string;
+};
+
+export type MissionAchat = {
+  id: string;
+  numero: string;
+  acheteurUserId: string;
+  acheteurNom: string;
+  date: string;
+  siteDestinataireId: string;
+  montantAvance: number;
+  statut: MissionAchatStatut;
+  lignesPrevisionnelles: MissionLignePrevisionnelle[];
+  achatsRealises: MissionAchatRealise[];
+  depensesDiverses: MissionDepenseDiverse[];
+  statutReglement: MissionReglementStatut;
+  dateReglement?: string;
+  dateCloture?: string;
+  dateAnnulation?: string;
+  validations: MissionValidationEtape[];
+  note?: string;
+};
+
 export type AppState = {
   parametres: Parametres;
   identiteNavigation: IdentiteNavigation;
@@ -1075,6 +1329,9 @@ export type AppState = {
   transformations: TransformationCommerciale[];
   achats: Achat[];
   transfertsStock: TransfertStock[];
+  ordresFabrication: OrdreFabrication[];
+  missionsAchat: MissionAchat[];
+  demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];

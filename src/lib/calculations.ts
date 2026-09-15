@@ -638,7 +638,7 @@ export function totalAchats(
   );
   const legacy = filterByPos(entrees, pointDeVenteId)
     .filter((e) => !e.achatId)
-    .filter((e) => e.origine !== "stock_initial")
+    .filter((e) => !e.origine || e.origine === "achat")
     .filter((e) => (range ? inDateRange(e.date, range) : true))
     .reduce((s, e) => s + montantAchat(e), 0);
   return depuisAchats + legacy;

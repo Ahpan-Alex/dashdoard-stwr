@@ -45,6 +45,8 @@ import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
 import { createId } from "@/lib/id";
 import { libelleProduit } from "@/lib/produits";
+import { produitEstAchetable } from "@/lib/nature-stock";
+import { fichesFournisseursProduit, fournisseurPrioritaireId } from "@/lib/classement-fournisseurs";
 import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import {
   comptesParClasse,
@@ -98,6 +100,7 @@ function AchatsListe() {
     achats,
     fournisseurs,
     produits,
+    demandesPrix,
     pointsDeVente,
     pointDeVenteActifId,
     parametres,
@@ -123,6 +126,7 @@ function AchatsListe() {
     pointDeVenteId: "",
     date: AUJOURD_HUI,
     echeance: "",
+    produitRefId: "",
   });
 
   useEffect(() => {
@@ -283,6 +287,32 @@ function AchatsListe() {
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block text-xs font-semibold text-muted">
+              Article (pour proposer le fournisseur rang 1)
+              <select
+                className="select mt-1"
+                value={form.produitRefId}
+                onChange={(e) => {
+                  const produitRefId = e.target.value;
+                  const p = produits.find((x) => x.id === produitRefId);
+                  const prioritaire = p
+                    ? fournisseurPrioritaireId(p, { achats, demandesPrix })
+                    : undefined;
+                  setForm({
+                    ...form,
+                    produitRefId,
+                    fournisseurId: prioritaire || form.fournisseurId,
+                  });
+                }}
+              >
+                <option value="">— Optionnel —</option>
+                {produits.filter((p) => p.actif && produitEstAchetable(p)).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {libelleProduit(p)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-semibold text-muted">
               Fournisseur
               <select
                 className="select mt-1"
@@ -292,14 +322,34 @@ function AchatsListe() {
                 }
               >
                 <option value="">— Choisir —</option>
-                {fournisseurs
-                  .filter((f) => f.actif)
-                  .map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nom}
-                    </option>
-                  ))}
+                {(form.produitRefId
+                  ? (() => {
+                      const p = produits.find((x) => x.id === form.produitRefId);
+                      const classes = p
+                        ? fichesFournisseursProduit(p, { achats, demandesPrix })
+                        : [];
+                      const ids = new Set(classes.map((c) => c.fournisseurId));
+                      const ranked = classes.map((c) => ({
+                        id: c.fournisseurId,
+                        nom: `${c.rang}. ${nomFrn(c.fournisseurId)}`,
+                      }));
+                      const rest = fournisseurs
+                        .filter((f) => f.actif && !ids.has(f.id))
+                        .map((f) => ({ id: f.id, nom: f.nom }));
+                      return [...ranked, ...rest];
+                    })()
+                  : fournisseurs.filter((f) => f.actif).map((f) => ({ id: f.id, nom: f.nom }))
+                ).map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nom}
+                  </option>
+                ))}
               </select>
+              {form.produitRefId && (
+                <span className="mt-1 block font-normal text-[11px]">
+                  Rang 1 proposé par défaut. Choisir 2, 3… ne modifie pas le classement de la fiche produit.
+                </span>
+              )}
             </label>
             <label className="block text-xs font-semibold text-muted">
               Site principal
@@ -382,7 +432,7 @@ function AchatsListe() {
             onChange={(e) => setFiltreProduit(e.target.value)}
           >
             <option value="">Tous</option>
-            {produits.map((p) => (
+            {produits.filter((p) => produitEstAchetable(p)).map((p) => (
               <option key={p.id} value={p.id}>
                 {libelleProduit(p)}
               </option>
@@ -492,6 +542,9 @@ function AchatEditor({
     validerAvoirAchat,
     supprimerAvoirAchat,
   } = useStore();
+  const ofLie = useStore((s) =>
+    achat.ofId ? s.ordresFabrication.find((o) => o.id === achat.ofId) : undefined,
+  );
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("charge");
 
@@ -569,7 +622,9 @@ function AchatEditor({
 
       <PageHeader
         title={achat.numero}
-        description={`${nomFrn} — ${nomPdv}`}
+        description={`${nomFrn} — ${nomPdv}${
+          ofLie ? ` · OF ${ofLie.numero}` : ""
+        }`}
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -833,6 +888,10 @@ function CommandePanel({
   onSave: () => void;
 }) {
   const produits = useStore((s) => s.produits);
+  const achats = useStore((s) => s.achats);
+  const demandesPrix = useStore((s) => s.demandesPrix ?? []);
+  const fournisseurs = useStore((s) => s.fournisseurs);
+  const updateAchat = useStore((s) => s.updateAchat);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const comptesComptables = useStore((s) => s.comptesComptables);
   const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
@@ -884,6 +943,15 @@ function CommandePanel({
       return;
     }
     const p = produits.find((x) => x.id === produitId);
+    if (p && !produitEstAchetable(p)) {
+      alert(
+        "Les semi-finis et finis n'entrent pas par achat : utilisez un ordre de fabrication.",
+      );
+      return;
+    }
+    const fiches = p ? fichesFournisseursProduit(p, { achats, demandesPrix }) : [];
+    const prioritaire = fiches[0];
+    const dernierChezFrn = fiches.find((f) => f.fournisseurId === achat.fournisseurId);
     setLignes([
       ...lignes,
       {
@@ -891,10 +959,28 @@ function CommandePanel({
         produitId,
         typeAchat: p?.typeAchat ?? typeNouveau,
         quantite: 1,
-        prixAchatUnitaire: p?.prixAchat ?? 0,
+        prixAchatUnitaire:
+          dernierChezFrn?.dernierPrix ?? p?.prixAchat ?? 0,
         repartitions: [{ pointDeVenteId: achat.pointDeVenteId, quantite: 1 }],
       },
     ]);
+    if (
+      brouillon &&
+      prioritaire &&
+      prioritaire.fournisseurId !== achat.fournisseurId &&
+      lignes.length === 0
+    ) {
+      const nomPrio =
+        fournisseurs.find((f) => f.id === prioritaire.fournisseurId)?.nom ?? "Fournisseur";
+      if (
+        confirm(
+          `Le fournisseur prioritaire (rang 1) pour cet article est « ${nomPrio} ». Basculer ? Le classement de la fiche produit ne sera pas modifié.`,
+        )
+      ) {
+        const res = updateAchat(achat.id, { fournisseurId: prioritaire.fournisseurId });
+        if (!res.ok) alert(res.reason);
+      }
+    }
   };
 
   const majQuantite = (id: string, quantite: number) => {
@@ -917,11 +1003,48 @@ function CommandePanel({
 
   return (
     <div>
-      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <p className="text-sm text-muted">
           Commande du <strong className="text-ink">{formatDate(achat.date)}</strong>
           {achat.tauxTVA > 0 ? ` · TVA ${achat.tauxTVA} %` : " · HT (sans TVA)"}
         </p>
+        {brouillon && (
+          <label className="block text-xs font-semibold text-muted">
+            Fournisseur
+            <select
+              className="select mt-1"
+              value={achat.fournisseurId}
+              onChange={(e) => {
+                const res = updateAchat(achat.id, { fournisseurId: e.target.value });
+                if (!res.ok) alert(res.reason);
+              }}
+            >
+              {(() => {
+                const premierProduit = lignes.find((l) => l.produitId)?.produitId;
+                const p = produits.find((x) => x.id === premierProduit);
+                const classes = p
+                  ? fichesFournisseursProduit(p, { achats, demandesPrix })
+                  : [];
+                const ids = new Set(classes.map((c) => c.fournisseurId));
+                const ranked = classes.map((c) => ({
+                  id: c.fournisseurId,
+                  nom: `${c.rang}. ${fournisseurs.find((f) => f.id === c.fournisseurId)?.nom ?? c.fournisseurId}`,
+                }));
+                const rest = fournisseurs
+                  .filter((f) => f.actif && !ids.has(f.id))
+                  .map((f) => ({ id: f.id, nom: f.nom }));
+                return [...ranked, ...rest];
+              })().map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nom}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block font-normal text-[11px]">
+              Basculer vers le rang 2, 3… ne modifie pas le classement enregistré sur la fiche produit.
+            </span>
+          </label>
+        )}
         <label className="block text-xs font-semibold text-muted">
           Échéance
           <input
@@ -1017,7 +1140,7 @@ function CommandePanel({
                 onChange={(e) => setProduitId(e.target.value)}
               >
                 {produits
-                  .filter((p) => p.actif)
+                  .filter((p) => p.actif && produitEstAchetable(p))
                   .map((p) => (
                     <option key={p.id} value={p.id}>
                       {libelleProduit(p)}

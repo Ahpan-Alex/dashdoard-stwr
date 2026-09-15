@@ -30,7 +30,9 @@ export type Permission =
   | "sites.vue_globale"
   | "ventes.deroger_credit"
   | "comptabilite.lire"
-  | "comptabilite.gerer";
+  | "comptabilite.gerer"
+  | "missions.lire"
+  | "missions.gerer";
 
 export const ROLE_LABELS: Record<RoleId, string> = {
   admin_entreprise: "Administrateur entreprise",
@@ -67,6 +69,8 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "ventes.deroger_credit",
     "comptabilite.lire",
     "comptabilite.gerer",
+    "missions.lire",
+    "missions.gerer",
   ],
   comptable: [
     "factures.lire",
@@ -89,6 +93,8 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "ventes.deroger_credit",
     "comptabilite.lire",
     "comptabilite.gerer",
+    "missions.lire",
+    "missions.gerer",
   ],
   commercial: [
     "factures.lire",
@@ -101,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "commercial.lire",
     "commercial.gerer",
     "rentabilite.lire",
+    "missions.lire",
   ],
   caissier: [
     "factures.lire",
@@ -109,6 +116,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "produits.lire",
     "clients.lire",
     "commercial.lire",
+    "missions.lire",
   ],
   lecture_seule: [
     "factures.lire",
@@ -120,6 +128,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "parametres.lire",
     "audit.lire",
     "comptabilite.lire",
+    "missions.lire",
   ],
 };
 
@@ -149,6 +158,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "ventes.deroger_credit": "Ventes — dérogation au plafond de crédit",
   "comptabilite.lire": "Comptabilité — lecture",
   "comptabilite.gerer": "Comptabilité — plan et écritures",
+  "missions.lire": "Missions d'achat — lecture",
+  "missions.gerer": "Missions d'achat — création, clôture et règlement",
 };
 
 export function roleHasPermission(role: RoleId, permission: Permission) {

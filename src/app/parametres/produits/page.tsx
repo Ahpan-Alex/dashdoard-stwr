@@ -38,8 +38,12 @@ import {
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_PRODUIT,
 } from "@/lib/comptabilite";
-import type { CategorieProduit, Produit, TypeAchat } from "@/lib/types";
+import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeAchat } from "@/lib/types";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
+import { NomenclatureEditor } from "@/components/nomenclature-editor";
+import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
+import { natureStockDuProduit, NATURE_STOCK_LABELS } from "@/lib/nature-stock";
+import { nomenclaturesDuProduit } from "@/lib/nomenclature";
 
 type ProduitFormState = {
   code: string;
@@ -59,6 +63,8 @@ type ProduitFormState = {
   typeAchat: TypeAchat;
   compteChargeId: string;
   compteVenteId: string;
+  natureStock: NatureStock;
+  nomenclatures: NomenclatureProduit[];
 };
 
 function parseSeuilOptionnel(raw: string): number | undefined {
@@ -89,6 +95,8 @@ function formDepuisProduit(p: Produit): ProduitFormState {
       : "marchandises",
     compteChargeId: p.compteChargeId ?? "",
     compteVenteId: p.compteVenteId ?? "",
+    natureStock: natureStockDuProduit(p),
+    nomenclatures: nomenclaturesDuProduit(p),
   };
 }
 
@@ -106,6 +114,7 @@ export default function ParametresProduitsPage() {
     bonsDeLivraison,
     factures,
     achats,
+    missionsAchat,
     parametres,
     addProduit,
     updateProduit,
@@ -139,6 +148,9 @@ export default function ParametresProduitsPage() {
     "actifs",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ficheOnglet, setFicheOnglet] = useState<"tarifs" | "historique" | "fournisseurs">(
+    "tarifs",
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [alertDoublons, setAlertDoublons] = useState<string | null>(null);
@@ -167,6 +179,8 @@ export default function ParametresProduitsPage() {
       typeAchat: "marchandises",
       compteChargeId: "",
       compteVenteId: "",
+      natureStock: "matiere_premiere",
+      nomenclatures: [],
     };
   }
 
@@ -391,6 +405,8 @@ export default function ParametresProduitsPage() {
       seuilSurstock: parseSeuilOptionnel(form.seuilSurstock),
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
+      natureStock: form.natureStock,
+      nomenclatures: form.nomenclatures,
       compteChargeId: form.compteChargeId || undefined,
       compteVenteId: form.compteVenteId || undefined,
     };
@@ -801,6 +817,22 @@ export default function ParametresProduitsPage() {
                 ))}
               </select>
             </label>
+            <NomenclatureEditor
+              natureStock={form.natureStock}
+              nomenclatures={form.nomenclatures}
+              parentId={editingId ?? undefined}
+              produits={produits}
+              onNatureChange={(n) =>
+                setForm({
+                  ...form,
+                  natureStock: n,
+                  nomenclatures: n === "matiere_premiere" ? [] : form.nomenclatures,
+                })
+              }
+              onNomenclaturesChange={(nomenclatures) =>
+                setForm({ ...form, nomenclatures })
+              }
+            />
             {moduleCompta && (
               <>
                 <label className="block text-xs font-semibold text-muted">
@@ -1017,6 +1049,7 @@ export default function ParametresProduitsPage() {
                 <th>Code</th>
                 <th>Libellé</th>
                 <th>Catégorie</th>
+                <th>Nature</th>
                 <th>Vente HT</th>
                 {avecTVA && <th>TVA</th>}
                 <th>Statut</th>
@@ -1053,6 +1086,9 @@ export default function ParametresProduitsPage() {
                   </td>
                   <td className="text-xs">
                     {cheminCategorie(p.categorieId, categoriesProduits)}
+                  </td>
+                  <td className="text-xs">
+                    {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
                   </td>
                   <td>{formatCurrency(p.prixVenteHT)}</td>
                   {avecTVA && <td>{p.tauxTVA} %</td>}
@@ -1107,6 +1143,8 @@ export default function ParametresProduitsPage() {
                             bonsDeLivraison,
                             factures,
                             achats,
+                            missionsAchat,
+                            demandesPrix: useStore.getState().demandesPrix,
                           });
                           if (ref) {
                             alert(
@@ -1137,8 +1175,8 @@ export default function ParametresProduitsPage() {
         <div className="rounded-[var(--radius)] border border-line bg-card p-4 lg:col-span-2">
           {!selected ? (
             <p className="text-sm text-muted">
-              Sélectionnez un produit pour voir tarifs clients et historique des
-              prix.
+              Sélectionnez un produit pour voir tarifs, historique des prix et
+              fournisseurs.
             </p>
           ) : (
             <div className="space-y-4">
@@ -1150,7 +1188,8 @@ export default function ParametresProduitsPage() {
                   {selected.libelleLong}
                 </p>
                 <p className="text-xs text-muted">
-                  Achat {formatCurrency(selected.prixAchat)} · Détail{" "}
+                  {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]} · Achat{" "}
+                  {formatCurrency(selected.prixAchat)} · Détail{" "}
                   {formatCurrency(selected.prixVenteHT)}
                   {selected.prixVenteGrosHT != null
                     ? ` · Gros ${formatCurrency(selected.prixVenteGrosHT)}`
@@ -1194,6 +1233,26 @@ export default function ParametresProduitsPage() {
                 </div>
               </div>
 
+              <div className="mt-4 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["tarifs", "Tarifs clients"],
+                      ["historique", "Historique des prix"],
+                      ["fournisseurs", "Fournisseurs"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`btn ${ficheOnglet === id ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => setFicheOnglet(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+              {ficheOnglet === "tarifs" && (
               <div>
                 <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
                   Tarifs clients
@@ -1269,7 +1328,9 @@ export default function ParametresProduitsPage() {
                   </button>
                 </div>
               </div>
+              )}
 
+              {ficheOnglet === "historique" && (
               <div>
                 <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
                   Historique des prix
@@ -1292,6 +1353,11 @@ export default function ParametresProduitsPage() {
                   </ul>
                 )}
               </div>
+              )}
+
+              {ficheOnglet === "fournisseurs" && (
+                <FournisseursProduitPanel produit={selected} />
+              )}
             </div>
           )}
         </div>

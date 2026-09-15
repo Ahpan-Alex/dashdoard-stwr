@@ -18,6 +18,7 @@ import type {
   Fournisseur,
   JournalEcriture,
   LigneEcritureComptable,
+  MissionAchat,
   Parametres,
   Produit,
   RoleCompteComptable,
@@ -25,6 +26,7 @@ import type {
   Tiers,
   TypeAchat,
 } from "./types";
+import { montantLigneRealisee, TIERS_DIVERS_MARCHE_NOM } from "./missions";
 import {
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_LIBRES,
@@ -931,6 +933,105 @@ export function ecritureDepuisAvoirAchat(opts: {
   };
 }
 
+function ecritureMissionFournisseur(opts: {
+  mission: MissionAchat;
+  fournisseurId: string;
+  lignes: MissionAchat["achatsRealises"];
+  produits: Produit[];
+  comptes: CompteComptable[];
+  parametres: Parametres;
+  tiers?: Tiers[];
+  contre: boolean;
+}): EcritureComptable | null {
+  const { mission, fournisseurId, contre } = opts;
+  const fiche = opts.tiers?.find((t) => t.id === fournisseurId);
+  const nom = fiche?.nom ?? TIERS_DIVERS_MARCHE_NOM;
+  const ventilations = ventilerAchat(
+    opts.lignes.map((l) => ({
+      produitId: l.produitId,
+      designation: opts.produits.find((p) => p.id === l.produitId)?.libelleCourt ?? "Article",
+      quantite: l.quantite,
+      prixAchatUnitaire: l.prixUnitaire,
+    })),
+    opts.produits,
+    { ...opts.parametres, assujettiTVA: false },
+  );
+  const prefix = contre
+    ? `ecr-mis-ann-${mission.id}-${fournisseurId}`
+    : `ecr-mis-${mission.id}-${fournisseurId}`;
+  const lignesProduits = ventilerVersComptes({
+    prefix,
+    ventilations,
+    produits: opts.produits,
+    comptes: opts.comptes,
+    tauxTVA: 0,
+    assujetti: false,
+    produitsAuCredit: contre,
+    natureCompte: "charge",
+    compteTva: undefined,
+    libelleTva: "TVA déductible",
+  });
+  const lignes = equilibrer(lignesProduits, {
+    id: `${prefix}-ctp`,
+    compte: compteFournisseurDuTiers(fiche, opts.comptes),
+    fallbackLibelle: `Fournisseurs — ${nom}`,
+    debitSiPositif: contre,
+  });
+  if (lignes.every((l) => l.debit === 0 && l.credit === 0)) return null;
+  return {
+    id: prefix,
+    date: contre
+      ? (mission.dateAnnulation ?? mission.dateCloture ?? mission.date)
+      : (mission.dateCloture ?? mission.date),
+    libelle: contre
+      ? `Annulation mission ${mission.numero} — ${nom}`
+      : `Mission ${mission.numero} — ${nom}`,
+    piece: mission.numero,
+    journal: "achat",
+    sourceType: "mission_achat",
+    sourceId: mission.id,
+    lignes,
+  };
+}
+
+export function ecrituresDepuisMission(opts: {
+  mission: MissionAchat;
+  produits: Produit[];
+  comptes: CompteComptable[];
+  parametres: Parametres;
+  tiers?: Tiers[];
+}): EcritureComptable[] {
+  const { mission } = opts;
+  if (mission.statut !== "cloture" && mission.statut !== "cloture_annule") return [];
+  const parFournisseur = new Map<string, MissionAchat["achatsRealises"]>();
+  for (const l of mission.achatsRealises) {
+    if (l.quantite <= 0 || montantLigneRealisee(l) <= 0) continue;
+    const arr = parFournisseur.get(l.fournisseurId) ?? [];
+    arr.push(l);
+    parFournisseur.set(l.fournisseurId, arr);
+  }
+  const out: EcritureComptable[] = [];
+  for (const [fournisseurId, lignes] of parFournisseur) {
+    const e = ecritureMissionFournisseur({
+      ...opts,
+      fournisseurId,
+      lignes,
+      contre: false,
+    });
+    if (e && ecritureEstEquilibree(e)) out.push(e);
+    if (mission.statut === "cloture_annule") {
+      const ev = ecritureMissionFournisseur({
+        ...opts,
+        fournisseurId,
+        lignes,
+        contre: true,
+      });
+      if (ev && ecritureEstEquilibree(ev)) out.push(ev);
+    }
+  }
+  return out;
+}
+
 export const JOURNAL_ECRITURE_LABELS: Record<JournalEcriture, string> = {
   vente: "Vente",
   achat: "Achat",
@@ -964,6 +1065,7 @@ export function regenererEcrituresComptables(opts: {
   clients: Client[];
   fournisseurs: Fournisseur[];
   tiers?: Tiers[];
+  missionsAchat?: MissionAchat[];
   existantes?: EcritureComptable[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
@@ -1002,6 +1104,17 @@ export function regenererEcrituresComptables(opts: {
         tiers: opts.tiers,
       });
       if (ev && ecritureEstEquilibree(ev)) generees.push(ev);
+    }
+  }
+  for (const mission of opts.missionsAchat ?? []) {
+    for (const e of ecrituresDepuisMission({
+      mission,
+      produits: opts.produits,
+      comptes: opts.comptesComptables,
+      parametres: opts.parametres,
+      tiers: opts.tiers,
+    })) {
+      generees.push(e);
     }
   }
   const prevById = new Map((opts.existantes ?? []).map((e) => [e.id, e]));

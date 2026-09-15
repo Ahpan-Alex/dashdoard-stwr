@@ -4,6 +4,8 @@ import type { Achat, AchatLigne, AchatLigneRepartition, PointDeVente, RoleSite }
 export const ROLE_SITE_LABELS: Record<RoleSite, string> = {
   entrepot: "Entrepôt",
   point_de_vente: "Point de vente",
+  atelier: "Atelier",
+  atelier_final: "Atelier final",
 };
 
 export function rolesSiteDuSite(site: Pick<PointDeVente, "rolesSite">): RoleSite[] {
@@ -14,9 +16,28 @@ export function libelleRolesSite(site: Pick<PointDeVente, "rolesSite">): string 
   const r = rolesSiteDuSite(site);
   const hasE = r.includes("entrepot");
   const hasP = r.includes("point_de_vente");
-  if (hasE && hasP) return "Entrepôt et point de vente";
-  if (hasE) return "Entrepôt";
-  return "Point de vente";
+  const ateliers = r.filter((x) => x === "atelier" || x === "atelier_final");
+  const parts: string[] = [];
+  if (ateliers.length) {
+    parts.push(ateliers.map((a) => ROLE_SITE_LABELS[a]).join(" · "));
+  }
+  if (hasE && hasP) parts.push("Entrepôt et point de vente");
+  else if (hasE) parts.push("Entrepôt");
+  else if (hasP) parts.push("Point de vente");
+  return parts.join(" · ") || "Point de vente";
+}
+
+export function siteEstAtelier(site: Pick<PointDeVente, "rolesSite">) {
+  const r = rolesSiteDuSite(site);
+  return r.includes("atelier") || r.includes("atelier_final");
+}
+
+export function siteEstAtelierFinal(site: Pick<PointDeVente, "rolesSite">) {
+  return rolesSiteDuSite(site).includes("atelier_final");
+}
+
+export function sitesMagasin(sites: PointDeVente[]) {
+  return sites.filter((s) => s.actif && rolesSiteDuSite(s).includes("entrepot"));
 }
 
 /**

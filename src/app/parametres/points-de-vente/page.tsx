@@ -52,6 +52,8 @@ export default function ParametresPointsDeVentePage() {
     rapportsFinJournee,
     achats,
     transfertsStock,
+    ordresFabrication,
+    missionsAchat,
     addPointDeVente,
     updatePointDeVente,
     deletePointDeVente,
@@ -78,6 +80,8 @@ export default function ParametresPointsDeVentePage() {
       rapportsFinJournee,
       achats,
       transfertsStock,
+      ordresFabrication,
+      missionsAchat,
     };
   }
 
@@ -108,7 +112,7 @@ export default function ParametresPointsDeVentePage() {
     e.preventDefault();
     if (!form.nom.trim()) return;
     if (form.rolesSite.length === 0) {
-      setError("Choisissez au moins un rôle : entrepôt et/ou point de vente.");
+      setError("Choisissez au moins un rôle (entrepôt, point de vente ou atelier).");
       return;
     }
     setError(null);
@@ -153,7 +157,7 @@ export default function ParametresPointsDeVentePage() {
     <div>
       <PageHeader
         title="Sites"
-        description="Entrepôts, points de vente, ou les deux. Chaque site a son propre stock et son propre CUMP — sans limite de nombre."
+        description="Entrepôts, points de vente et ateliers. Chaque site a son propre stock et son propre CUMP — sans limite de nombre."
         showPosSelector={false}
         actions={
           <button className="btn btn-primary" onClick={ouvrirCreation}>
@@ -184,21 +188,32 @@ export default function ParametresPointsDeVentePage() {
             <div className="block text-xs font-semibold text-muted">
               Rôle du site
               <div className="mt-2 flex flex-wrap gap-4 text-sm font-normal text-ink">
-                {(["entrepot", "point_de_vente"] as const).map((role) => (
+                {(
+                  [
+                    ["entrepot", "Entrepôt de stockage"],
+                    ["point_de_vente", "Point de vente"],
+                    ["atelier", "Atelier de fabrication"],
+                    ["atelier_final", "Atelier final (assemblage / stock vente)"],
+                  ] as const
+                ).map(([role, label]) => (
                   <label key={role} className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={form.rolesSite.includes(role)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          rolesSite: e.target.checked
-                            ? [...form.rolesSite, role]
-                            : form.rolesSite.filter((r) => r !== role),
-                        })
-                      }
+                      onChange={(e) => {
+                        let next = e.target.checked
+                          ? [...form.rolesSite, role]
+                          : form.rolesSite.filter((r) => r !== role);
+                        if (e.target.checked && role === "atelier") {
+                          next = next.filter((r) => r !== "atelier_final");
+                        }
+                        if (e.target.checked && role === "atelier_final") {
+                          next = next.filter((r) => r !== "atelier");
+                        }
+                        setForm({ ...form, rolesSite: next });
+                      }}
                     />
-                    {role === "entrepot" ? "Entrepôt de stockage" : "Point de vente"}
+                    {label}
                   </label>
                 ))}
               </div>

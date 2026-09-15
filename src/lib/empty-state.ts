@@ -3,6 +3,7 @@ import {
   PARAMETRES_ALERTES_DEFAUT,
 } from "./alertes";
 import { createDefaultModeles } from "./document-templates";
+import { ficheTiersDiversMarche } from "./missions";
 import { seedCategoriesProduits } from "./produits";
 import type { AppState } from "./types";
 
@@ -56,7 +57,7 @@ export function emptyAppState(): AppState {
     mouvementsCompteCourant: [],
     clients: [],
     fournisseurs: [],
-    tiers: [],
+    tiers: [ficheTiersDiversMarche()],
     devis: [],
     commandes: [],
     bonsDeLivraison: [],
@@ -65,6 +66,9 @@ export function emptyAppState(): AppState {
     transformations: [],
     achats: [],
     transfertsStock: [],
+    ordresFabrication: [],
+    missionsAchat: [],
+    demandesPrix: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
     produits: [],
@@ -106,6 +110,9 @@ export function pickAppState(state: AppState): AppState {
     transformations: state.transformations ?? [],
     achats: state.achats ?? [],
     transfertsStock: state.transfertsStock ?? [],
+    ordresFabrication: state.ordresFabrication ?? [],
+    missionsAchat: state.missionsAchat ?? [],
+    demandesPrix: state.demandesPrix ?? [],
     pointsDeVente: state.pointsDeVente,
     categoriesProduits: state.categoriesProduits,
     produits: state.produits,

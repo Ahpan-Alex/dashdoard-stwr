@@ -247,6 +247,19 @@ export function produitEstReference(
     bonsDeLivraison: BonDeLivraison[];
     factures: Facture[];
     achats?: Achat[];
+    ordresFabrication?: {
+      produitId: string;
+      nomenclatureLignes?: { composantId: string }[];
+      sorties?: { composantId: string }[];
+    }[];
+    missionsAchat?: {
+      lignesPrevisionnelles?: { produitId: string }[];
+      achatsRealises?: { produitId: string }[];
+    }[];
+    demandesPrix?: {
+      lignes?: { produitId: string }[];
+    }[];
+    nomenclaturesProduits?: Produit[];
   },
 ) {
   if (ctx.entrees.some((e) => e.produitId === produitId)) return true;
@@ -258,6 +271,39 @@ export function produitEstReference(
   if (ctx.bonsDeLivraison.some((b) => inLignes(b.lignes))) return true;
   if (ctx.factures.some((f) => inLignes(f.lignes))) return true;
   if ((ctx.achats ?? []).some((a) => inLignes(a.lignes))) return true;
+  if (
+    (ctx.ordresFabrication ?? []).some(
+      (o) =>
+        o.produitId === produitId ||
+        (o.nomenclatureLignes ?? []).some((l) => l.composantId === produitId) ||
+        (o.sorties ?? []).some((s) => s.composantId === produitId),
+    )
+  ) {
+    return true;
+  }
+  if (
+    (ctx.missionsAchat ?? []).some(
+      (m) =>
+        (m.lignesPrevisionnelles ?? []).some((l) => l.produitId === produitId) ||
+        (m.achatsRealises ?? []).some((l) => l.produitId === produitId),
+    )
+  ) {
+    return true;
+  }
+  if ((ctx.demandesPrix ?? []).some((d) => (d.lignes ?? []).some((l) => l.produitId === produitId))) {
+    return true;
+  }
+  if (
+    (ctx.nomenclaturesProduits ?? []).some(
+      (p) =>
+        p.id !== produitId &&
+        (p.nomenclatures ?? []).some((n) =>
+          n.lignes.some((l) => l.composantId === produitId),
+        ),
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 

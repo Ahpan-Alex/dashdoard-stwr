@@ -22,6 +22,7 @@ import {
 import {
   BadgesAvancementCommande,
   DocumentFiliation,
+  OfLiesCommande,
 } from "@/components/document-filiation";
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
@@ -797,6 +798,7 @@ export default function ListeCommandesPage() {
               })}
             />
             <DocumentFiliation documentId={preview.id} />
+            <OfLiesCommande commandeId={preview.id} />
           </div>
         </div>
       )}
@@ -877,6 +879,7 @@ export default function ListeCommandesPage() {
             />
           )}
           <DocumentFiliation documentId={pendingCmd.id} />
+          <OfLiesCommande commandeId={pendingCmd.id} />
         </TransformationValidationModal>
       )}
     </div>

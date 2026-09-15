@@ -68,7 +68,7 @@ import {
   creerSnapshotPresentation,
 } from "./document-presentation";
 import { emptyAppState, pickAppState } from "./empty-state";
-import { motifRepartitionInvalide, sitesAchat, utilisateurRattacheAuSite } from "./sites";
+import { motifRepartitionInvalide, siteEstAtelier, sitesAchat, utilisateurRattacheAuSite } from "./sites";
 import {
   appliquerRoleUnique,
   appliquerSeedComptesDefaut,
@@ -118,6 +118,50 @@ import {
   regenererEntreesTransfert,
   stockSuffisantPourTransfert,
 } from "./transferts";
+import {
+  affecterPotAEntree,
+  allouerReliquatSurSorties,
+  copierNomenclatureVersOf,
+  coutsNonAffectes,
+  cumpCourantSite,
+  etapeValidation,
+  listerMouvementsBloquantAnnulationOf,
+  messageAnnulationRefusee,
+  montantEcartCloture,
+  motifAchatNatureInterdite,
+  motifProduitOfInvalide,
+  nextNumeroOf,
+  ofEstVerrouille,
+  ofPeutMouvementer,
+  regenererEntreesOf,
+  reliquatsMatieres,
+  stockDisponibleComposant,
+} from "./fabrication";
+import {
+  depensesValides,
+  etapeValidationMission,
+  listerMouvementsBloquantAnnulationMission,
+  messageAnnulationMissionRefusee,
+  missionEstVerrouillee,
+  motifLigneMissionInvalide,
+  nextNumeroMission,
+  peutSaisirMission,
+  regenererEntreesMission,
+  TIERS_DIVERS_MARCHE_ID,
+  upsertTiersDiversMarche,
+} from "./missions";
+import {
+  dpEstVerrouillee,
+  nextNumeroDemandePrix,
+} from "./demandes-prix";
+import {
+  cycleNomenclature,
+  normaliserNomenclatures,
+} from "./nomenclature";
+import {
+  natureStockDuProduit,
+  produitEstFabrique,
+} from "./nature-stock";
 import { createId } from "./id";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
@@ -171,6 +215,17 @@ import type {
   TransfertStockLigne,
   TransformationCommerciale,
   Vente,
+  OrdreFabrication,
+  TypeNomenclature,
+  MissionAchat,
+  MissionAchatRealise,
+  MissionDepenseDiverse,
+  MissionLignePrevisionnelle,
+  MissionReglementStatut,
+  DemandePrix,
+  DemandePrixLigne,
+  DemandePrixOffre,
+  DemandePrixStatut,
 } from "./types";
 
 type Store = {
@@ -191,6 +246,9 @@ type Store = {
   transformations: TransformationCommerciale[];
   achats: Achat[];
   transfertsStock: TransfertStock[];
+  ordresFabrication: OrdreFabrication[];
+  missionsAchat: MissionAchat[];
+  demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   produits: Produit[];
@@ -354,6 +412,125 @@ type Store = {
     dateReception?: string,
   ) => { ok: boolean; reason?: string };
   annulerTransfert: (id: string) => { ok: boolean; reason?: string };
+
+  creerOrdreFabrication: (data: {
+    atelierId: string;
+    produitId: string;
+    quantitePrevue: number;
+    nomenclatureSource?: TypeNomenclature;
+    commandeId?: string;
+    dateCloturePrevue?: string;
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  modifierOrdreFabrication: (
+    id: string,
+    data: Partial<
+      Pick<
+        OrdreFabrication,
+        | "atelierId"
+        | "produitId"
+        | "quantitePrevue"
+        | "nomenclatureSource"
+        | "nomenclatureNom"
+        | "nomenclatureLignes"
+        | "commandeId"
+        | "dateCloturePrevue"
+        | "note"
+      >
+    >,
+  ) => { ok: boolean; reason?: string };
+  demarrerOrdreFabrication: (id: string) => { ok: boolean; reason?: string };
+  ajouterSortieOf: (
+    ofId: string,
+    data: {
+      date: string;
+      composantId: string;
+      siteSourceId: string;
+      quantite: number;
+    },
+  ) => { ok: boolean; reason?: string; id?: string };
+  supprimerSortieOf: (ofId: string, sortieId: string) => { ok: boolean; reason?: string };
+  ajouterFraisOf: (
+    ofId: string,
+    data: { date: string; libelle: string; montant: number },
+  ) => { ok: boolean; reason?: string };
+  supprimerFraisOf: (ofId: string, fraisId: string) => { ok: boolean; reason?: string };
+  enregistrerEntreeProductionOf: (
+    ofId: string,
+    data: { date: string; quantite: number },
+  ) => { ok: boolean; reason?: string };
+  cloturerOrdreFabrication: (
+    id: string,
+    data: {
+      retours: {
+        composantId: string;
+        destination: "magasin" | "atelier";
+        siteDestinataireId: string;
+      }[];
+      raisonEcart?: string;
+    },
+  ) => { ok: boolean; reason?: string };
+  annulerOrdreFabrication: (id: string) => { ok: boolean; reason?: string };
+  creerDemandeAchatDepuisOf: (
+    ofId: string,
+    data: {
+      composantId: string;
+      fournisseurId: string;
+      quantite: number;
+      pointDeVenteId: string;
+    },
+  ) => { ok: true; achatId: string } | { ok: false; reason: string };
+
+  creerMissionAchat: (data: {
+    acheteurUserId: string;
+    acheteurNom: string;
+    date: string;
+    siteDestinataireId: string;
+    montantAvance: number;
+    lignesPrevisionnelles: { produitId: string; quantiteSouhaitee: number }[];
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  modifierMissionAchat: (
+    id: string,
+    data: Partial<{
+      acheteurUserId: string;
+      acheteurNom: string;
+      date: string;
+      siteDestinataireId: string;
+      montantAvance: number;
+      lignesPrevisionnelles: MissionLignePrevisionnelle[];
+      achatsRealises: MissionAchatRealise[];
+      depensesDiverses: MissionDepenseDiverse[];
+      note: string;
+    }>,
+  ) => { ok: boolean; reason?: string };
+  cloturerMissionAchat: (id: string) => { ok: boolean; reason?: string };
+  annulerMissionAchat: (id: string) => { ok: boolean; reason?: string };
+  reglerMissionAchat: (
+    id: string,
+    data: { statutReglement: MissionReglementStatut; dateReglement?: string },
+  ) => { ok: boolean; reason?: string };
+
+  creerDemandePrix: (data: {
+    date: string;
+    lignes: { produitId: string; quantite: number }[];
+    fournisseurIds: string[];
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  modifierDemandePrix: (
+    id: string,
+    data: Partial<{
+      date: string;
+      lignes: DemandePrixLigne[];
+      fournisseurIds: string[];
+      offres: DemandePrixOffre[];
+      note: string;
+    }>,
+  ) => { ok: boolean; reason?: string };
+  changerStatutDemandePrix: (
+    id: string,
+    statut: DemandePrixStatut,
+  ) => { ok: boolean; reason?: string };
 
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
@@ -669,6 +846,7 @@ function journalDepuis(state: {
   clients: Client[];
   fournisseurs: Fournisseur[];
   tiers?: Tiers[];
+  missionsAchat?: MissionAchat[];
   ecrituresComptables?: EcritureComptable[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
@@ -680,6 +858,7 @@ function journalDepuis(state: {
     clients: state.clients,
     fournisseurs: state.fournisseurs,
     tiers: state.tiers,
+    missionsAchat: state.missionsAchat,
     existantes: state.ecrituresComptables,
   });
 }
@@ -694,6 +873,7 @@ function avecJournal<T extends Record<string, unknown>>(
     clients: Client[];
     fournisseurs: Fournisseur[];
     tiers?: Tiers[];
+    missionsAchat?: MissionAchat[];
     ecrituresComptables?: EcritureComptable[];
   },
   patch: T,
@@ -937,6 +1117,29 @@ function entreeActivite(
     libelle: opts?.libelle,
     detail: opts?.detail,
   };
+}
+
+function actorPeutGererMissions() {
+  return useAuthStore.getState().hasPermission("missions.gerer");
+}
+
+function actorPeutSaisirMission(m: Pick<MissionAchat, "acheteurUserId" | "statut">) {
+  return peutSaisirMission(m, {
+    gerer: actorPeutGererMissions(),
+    userId: useAuthStore.getState().currentUser()?.id,
+  });
+}
+
+function etatAvecTiersDivers(state: {
+  clients: Client[];
+  fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
+}) {
+  return syncTiersState({
+    clients: state.clients,
+    fournisseurs: state.fournisseurs,
+    tiers: upsertTiersDiversMarche(state.tiers ?? []),
+  });
 }
 
 type DocSource = Devis | Commande | BonDeLivraison;
@@ -1533,6 +1736,8 @@ export const useStore = create<Store>()((set, get) => ({
           rapportsFinJournee: state.rapportsFinJournee,
           achats: state.achats,
           transfertsStock: state.transfertsStock,
+          ordresFabrication: state.ordresFabrication,
+          missionsAchat: state.missionsAchat,
         });
         if (motif) return { ok: false, reason: motif };
         set((s) => ({
@@ -1680,6 +1885,8 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const motifRep = motifRepartitionInvalide(prev.lignes);
         if (motifRep) return { ok: false, reason: motifRep };
+        const motifNat = motifAchatNatureInterdite(get().produits, prev.lignes);
+        if (motifNat) return { ok: false, reason: motifNat };
         if (moduleComptabiliteActif(get().parametres)) {
           const motifCompta = motifLignesAchatInvalides(
             prev.lignes,
@@ -2327,6 +2534,989 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
+      creerOrdreFabrication: (data) => {
+        const state = get();
+        if (!utilisateurCourantPeutAgirSurSite(data.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à cet atelier." };
+        }
+        const atelier = state.pointsDeVente.find((s) => s.id === data.atelierId);
+        if (!atelier || !siteEstAtelier(atelier)) {
+          return { ok: false, reason: "Choisissez un site de type atelier." };
+        }
+        const produit = state.produits.find((p) => p.id === data.produitId);
+        const motifProd = motifProduitOfInvalide(produit);
+        if (motifProd) return { ok: false, reason: motifProd };
+        if (data.quantitePrevue <= 0) {
+          return { ok: false, reason: "La quantité prévue doit être positive." };
+        }
+        if (data.commandeId) {
+          const cmd = state.commandes.find((c) => c.id === data.commandeId);
+          if (!cmd) return { ok: false, reason: "Commande client introuvable." };
+        }
+        const source = data.nomenclatureSource ?? "automatique";
+        const copie = copierNomenclatureVersOf(produit!, source);
+        const nouveau: OrdreFabrication = {
+          id: uid("of"),
+          numero: nextNumeroOf(state.ordresFabrication),
+          atelierId: data.atelierId,
+          produitId: data.produitId,
+          quantitePrevue: data.quantitePrevue,
+          nomenclatureSource: source,
+          nomenclatureNom: copie.nom,
+          nomenclatureLignes: copie.lignes,
+          commandeId: data.commandeId,
+          statut: "brouillon",
+          dateCreation: new Date().toISOString(),
+          dateCloturePrevue: data.dateCloturePrevue,
+          sorties: [],
+          frais: [],
+          entreesProduction: [],
+          retoursMatieres: [],
+          validations: [],
+          note: data.note,
+        };
+        set((s) => ({
+          ordresFabrication: [nouveau, ...s.ordresFabrication],
+          journalActivites: [
+            entreeActivite("creation", "ordre_fabrication", {
+              entiteId: nouveau.id,
+              libelle: nouveau.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id: nouveau.id };
+      },
+
+      modifierOrdreFabrication: (id, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (ofEstVerrouille(prev)) {
+          return { ok: false, reason: "Cet OF est clôturé ou annulé : aucune modification possible." };
+        }
+        if (prev.statut === "en_cours") {
+          const interdit = ["atelierId", "produitId", "nomenclatureSource"] as const;
+          for (const k of interdit) {
+            if (data[k] != null && data[k] !== prev[k]) {
+              return {
+                ok: false,
+                reason: "Atelier, produit et nomenclature de référence sont figés une fois l'OF démarré. Les lignes restent éditables pour cet OF uniquement.",
+              };
+            }
+          }
+        }
+        if (data.atelierId && !utilisateurCourantPeutAgirSurSite(data.atelierId)) {
+          return { ok: false, reason: "Vous n'êtes pas rattaché à cet atelier." };
+        }
+        if (data.atelierId) {
+          const atelier = state.pointsDeVente.find((s) => s.id === data.atelierId);
+          if (!atelier || !siteEstAtelier(atelier)) {
+            return { ok: false, reason: "Choisissez un site de type atelier." };
+          }
+        }
+        let nomenclatureLignes = data.nomenclatureLignes ?? prev.nomenclatureLignes;
+        let nomenclatureNom = data.nomenclatureNom ?? prev.nomenclatureNom;
+        let nomenclatureSource = data.nomenclatureSource ?? prev.nomenclatureSource;
+        const produitId = data.produitId ?? prev.produitId;
+        if (data.produitId || data.nomenclatureSource) {
+          const produit = state.produits.find((p) => p.id === produitId);
+          const motifProd = motifProduitOfInvalide(produit);
+          if (motifProd) return { ok: false, reason: motifProd };
+          if (!data.nomenclatureLignes) {
+            const copie = copierNomenclatureVersOf(produit!, nomenclatureSource);
+            nomenclatureLignes = copie.lignes;
+            nomenclatureNom = copie.nom;
+          }
+        }
+        const next: OrdreFabrication = {
+          ...prev,
+          ...data,
+          nomenclatureLignes,
+          nomenclatureNom,
+          nomenclatureSource,
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+        }));
+        return { ok: true };
+      },
+
+      demarrerOrdreFabrication: (id) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (prev.statut !== "brouillon") {
+          return { ok: false, reason: "Seul un brouillon peut être démarré." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        const actor = getActiviteActor();
+        const next: OrdreFabrication = {
+          ...prev,
+          statut: "en_cours",
+          validations: [
+            ...prev.validations,
+            etapeValidation("demarrer", actor),
+          ],
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+          journalActivites: [
+            entreeActivite("validation", "ordre_fabrication", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Démarrage",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      ajouterSortieOf: (ofId, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) {
+          return { ok: false, reason: "Les sorties ne sont possibles que sur un OF en cours." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        if (data.quantite <= 0) return { ok: false, reason: "Quantité invalide." };
+        const composant = state.produits.find((p) => p.id === data.composantId);
+        if (!composant) return { ok: false, reason: "Composant introuvable." };
+        const dispo = stockDisponibleComposant({
+          produitId: data.composantId,
+          siteId: data.siteSourceId,
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+        });
+        if (dispo + 1e-9 < data.quantite) {
+          return {
+            ok: false,
+            reason: `Stock insuffisant sur le site source (disponible : ${dispo}). Créez une demande d'achat pour la quantité manquante.`,
+          };
+        }
+        const etat = cumpCourantSite({
+          produitId: data.composantId,
+          siteId: data.siteSourceId,
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+          produit: composant,
+        });
+        const sortie = {
+          id: uid("ofs"),
+          date: data.date,
+          composantId: data.composantId,
+          siteSourceId: data.siteSourceId,
+          quantite: data.quantite,
+          cumpSortie: etat.cump,
+          valeur: data.quantite * etat.cump,
+        };
+        const next: OrdreFabrication = {
+          ...prev,
+          sorties: [...prev.sorties, sortie],
+        };
+        const entrees = regenererEntreesOf(state.entrees, next, state.produits);
+        if (
+          stockDevientNegatif(
+            entrees,
+            state.ventes,
+            state.inventaires,
+            data.siteSourceId,
+            [data.composantId],
+          )
+        ) {
+          return { ok: false, reason: "Stock insuffisant sur le site source." };
+        }
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === ofId ? next : o)),
+          entrees,
+        }));
+        return { ok: true, id: sortie.id };
+      },
+
+      supprimerSortieOf: (ofId, sortieId) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) {
+          return { ok: false, reason: "OF non modifiable." };
+        }
+        const sortie = prev.sorties.find((s) => s.id === sortieId);
+        if (!sortie) return { ok: false, reason: "Sortie introuvable." };
+        if (sortie.affecteEntreeId) {
+          return {
+            ok: false,
+            reason: "Cette sortie a déjà alimenté une entrée de production : elle est figée.",
+          };
+        }
+        const next: OrdreFabrication = {
+          ...prev,
+          sorties: prev.sorties.filter((s) => s.id !== sortieId),
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === ofId ? next : o)),
+          entrees: regenererEntreesOf(s.entrees, next, s.produits),
+        }));
+        return { ok: true };
+      },
+
+      ajouterFraisOf: (ofId, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) {
+          return { ok: false, reason: "Les frais ne sont possibles que sur un OF en cours." };
+        }
+        if (!data.libelle.trim() || !(data.montant > 0)) {
+          return { ok: false, reason: "Libellé et montant positif requis." };
+        }
+        const next: OrdreFabrication = {
+          ...prev,
+          frais: [
+            ...prev.frais,
+            {
+              id: uid("off"),
+              date: data.date,
+              libelle: data.libelle.trim(),
+              montant: data.montant,
+            },
+          ],
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === ofId ? next : o)),
+        }));
+        return { ok: true };
+      },
+
+      supprimerFraisOf: (ofId, fraisId) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) return { ok: false, reason: "OF non modifiable." };
+        const ligne = prev.frais.find((f) => f.id === fraisId);
+        if (!ligne) return { ok: false, reason: "Frais introuvable." };
+        if (ligne.affecteEntreeId) {
+          return { ok: false, reason: "Ce frais a déjà alimenté une entrée de production." };
+        }
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) =>
+            o.id === ofId
+              ? { ...o, frais: o.frais.filter((f) => f.id !== fraisId) }
+              : o,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      enregistrerEntreeProductionOf: (ofId, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) {
+          return { ok: false, reason: "Les entrées de production sont possibles tant que l'OF est en cours." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        if (data.quantite <= 0) return { ok: false, reason: "Quantité produite invalide." };
+        const pot = coutsNonAffectes(prev);
+        const coutTotal = pot.total;
+        const coutUnitaire = coutTotal / data.quantite;
+        const entree = {
+          id: uid("ofe"),
+          date: data.date,
+          quantite: data.quantite,
+          coutUnitaire,
+          coutTotal,
+        };
+        const affectes = affecterPotAEntree(prev, entree);
+        const next: OrdreFabrication = {
+          ...prev,
+          sorties: affectes.sorties,
+          frais: affectes.frais,
+          entreesProduction: [...prev.entreesProduction, entree],
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === ofId ? next : o)),
+          entrees: regenererEntreesOf(s.entrees, next, s.produits),
+        }));
+        return { ok: true };
+      },
+
+      cloturerOrdreFabrication: (id, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (prev.statut !== "en_cours") {
+          return { ok: false, reason: "Seuls les OF en cours peuvent être clôturés." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        const reliquats = reliquatsMatieres(prev);
+        const retours: OrdreFabrication["retoursMatieres"] = [];
+        for (const rel of reliquats) {
+          const choix = data.retours.find((r) => r.composantId === rel.composantId);
+          const destination = choix?.destination ?? "atelier";
+          const siteDestinataireId =
+            destination === "atelier"
+              ? prev.atelierId
+              : (choix?.siteDestinataireId ?? prev.atelierId);
+          const parts = allouerReliquatSurSorties(
+            prev.sorties,
+            rel.composantId,
+            rel.reliquat,
+          );
+          for (const p of parts) {
+            retours.push({
+              id: uid("ofr"),
+              sortieId: p.sortieId,
+              composantId: rel.composantId,
+              quantite: p.quantite,
+              destination,
+              siteDestinataireId,
+              cumpOrigine: p.cumpOrigine,
+            });
+          }
+        }
+        const montantEcart = montantEcartCloture(prev, retours);
+        const actor = getActiviteActor();
+        const next: OrdreFabrication = {
+          ...prev,
+          statut: "cloture",
+          dateClotureReelle: new Date().toISOString(),
+          retoursMatieres: retours,
+          ecart:
+            montantEcart > 1e-6
+              ? { montant: montantEcart, raison: data.raisonEcart?.trim() || undefined }
+              : undefined,
+          validations: [
+            ...prev.validations,
+            etapeValidation(
+              "confirmer_cloture",
+              actor,
+              montantEcart > 1e-6
+                ? `Écart de fabrication ${Math.round(montantEcart)} Ar`
+                : undefined,
+            ),
+          ],
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+          entrees: regenererEntreesOf(s.entrees, next, s.produits),
+          journalActivites: [
+            entreeActivite("validation", "ordre_fabrication", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Clôture",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      annulerOrdreFabrication: (id) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (prev.statut === "annule" || prev.statut === "cloture_annule") {
+          return { ok: false, reason: "Cet OF est déjà annulé." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        const actor = getActiviteActor();
+        if (prev.statut === "brouillon") {
+          const next: OrdreFabrication = {
+            ...prev,
+            statut: "annule",
+            dateAnnulation: new Date().toISOString(),
+            validations: [...prev.validations, etapeValidation("annuler_document", actor)],
+          };
+          set((s) => ({
+            ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+            journalActivites: [
+              entreeActivite("annulation", "ordre_fabrication", {
+                entiteId: id,
+                libelle: prev.numero,
+              }),
+              ...s.journalActivites,
+            ],
+          }));
+          return { ok: true };
+        }
+        const bloquants = listerMouvementsBloquantAnnulationOf(prev, {
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+          factures: state.factures,
+          transfertsStock: state.transfertsStock,
+          ordresFabrication: state.ordresFabrication,
+          produits: state.produits,
+        });
+        const motif = messageAnnulationRefusee(bloquants);
+        if (motif) return { ok: false, reason: motif };
+        const next: OrdreFabrication = {
+          ...prev,
+          statut: prev.statut === "cloture" ? "cloture_annule" : "annule",
+          dateAnnulation: new Date().toISOString(),
+          validations: [...prev.validations, etapeValidation("annuler_document", actor)],
+        };
+        const entrees = regenererEntreesOf(state.entrees, next, state.produits);
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+          entrees,
+          journalActivites: [
+            entreeActivite("annulation", "ordre_fabrication", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail:
+                next.statut === "cloture_annule"
+                  ? "Contre-mouvement (OF clôturé)"
+                  : "Annulation avec contre-mouvement",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      creerDemandeAchatDepuisOf: (ofId, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const composant = state.produits.find((p) => p.id === data.composantId);
+        if (!composant) return { ok: false, reason: "Composant introuvable." };
+        if (!produitEstFabrique(composant) && natureStockDuProduit(composant) !== "matiere_premiere") {
+          return { ok: false, reason: "Composant invalide." };
+        }
+        if (produitEstFabrique(composant)) {
+          return {
+            ok: false,
+            reason:
+              "Ce composant est un semi-fini : il ne s'achète pas. Créez un OF amont ou transférez le stock depuis l'atelier source.",
+          };
+        }
+        if (data.quantite <= 0) return { ok: false, reason: "Quantité invalide." };
+        const fournisseur = state.fournisseurs.find((f) => f.id === data.fournisseurId);
+        if (!fournisseur) return { ok: false, reason: "Fournisseur introuvable." };
+        const achatId = uid("ach");
+        const numero = nextNumeroAchat(state.achats);
+        const actor = getActiviteActor();
+        set((s) => ({
+          achats: [
+            {
+              id: achatId,
+              numero,
+              fournisseurId: data.fournisseurId,
+              pointDeVenteId: data.pointDeVenteId,
+              date: new Date().toISOString(),
+              statut: "brouillon" as const,
+              tauxTVA: s.parametres.assujettiTVA ? s.parametres.tauxTVA : 0,
+              lignes: [
+                {
+                  id: uid("al"),
+                  produitId: data.composantId,
+                  typeAchat: composant.typeAchat ?? "matieres_premieres",
+                  quantite: data.quantite,
+                  prixAchatUnitaire: composant.prixAchat,
+                  repartitions: [
+                    { pointDeVenteId: data.pointDeVenteId, quantite: data.quantite },
+                  ],
+                },
+              ],
+              livraisons: [],
+              paiements: [],
+              avoirs: [],
+              note: `Demande générée depuis l'OF ${prev.numero}`,
+              vendeurId: actor.id,
+              vendeurNom: actor.nom,
+              ofId,
+              ofComposantId: data.composantId,
+            },
+            ...s.achats,
+          ],
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: numero,
+              detail: `Depuis OF ${prev.numero}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, achatId };
+      },
+
+      creerMissionAchat: (data) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La création d'une mission est réservée au responsable achats." };
+        }
+        if (!data.acheteurUserId || !data.acheteurNom.trim()) {
+          return { ok: false, reason: "Assignez un acheteur." };
+        }
+        if (!data.siteDestinataireId) {
+          return { ok: false, reason: "Choisissez le site destinataire." };
+        }
+        if (!(data.montantAvance >= 0)) {
+          return { ok: false, reason: "Le montant de l'avance ne peut pas être négatif." };
+        }
+        const state = get();
+        const site = state.pointsDeVente.find((s) => s.id === data.siteDestinataireId);
+        if (!site) return { ok: false, reason: "Site destinataire introuvable." };
+        const prevus: MissionLignePrevisionnelle[] = [];
+        for (const l of data.lignesPrevisionnelles) {
+          if (!l.produitId || !(l.quantiteSouhaitee > 0)) {
+            return { ok: false, reason: "Chaque ligne prévisionnelle doit avoir un article et une quantité souhaitée positive." };
+          }
+          const motif = motifLigneMissionInvalide(
+            { id: "tmp", produitId: l.produitId, quantite: 0, prixUnitaire: 0, fournisseurId: TIERS_DIVERS_MARCHE_ID },
+            state.produits,
+          );
+          if (motif) return { ok: false, reason: motif };
+          prevus.push({
+            id: uid("misp"),
+            produitId: l.produitId,
+            quantiteSouhaitee: l.quantiteSouhaitee,
+          });
+        }
+        const achatsRealises: MissionAchatRealise[] = prevus.map((p) => ({
+          id: uid("misr"),
+          previsionId: p.id,
+          produitId: p.produitId,
+          quantite: 0,
+          prixUnitaire: 0,
+          fournisseurId: TIERS_DIVERS_MARCHE_ID,
+        }));
+        const nouveau: MissionAchat = {
+          id: uid("mis"),
+          numero: nextNumeroMission(state.missionsAchat ?? []),
+          acheteurUserId: data.acheteurUserId,
+          acheteurNom: data.acheteurNom.trim(),
+          date: data.date,
+          siteDestinataireId: data.siteDestinataireId,
+          montantAvance: data.montantAvance,
+          statut: "en_cours",
+          lignesPrevisionnelles: prevus,
+          achatsRealises,
+          depensesDiverses: [],
+          statutReglement: "non_regle",
+          validations: [],
+          note: data.note,
+        };
+        const sync = etatAvecTiersDivers(state);
+        set((s) =>
+          avecJournal(
+            { ...s, ...sync },
+            {
+              ...sync,
+              missionsAchat: [nouveau, ...(s.missionsAchat ?? [])],
+              journalActivites: [
+                entreeActivite("creation", "mission_achat", {
+                  entiteId: nouveau.id,
+                  libelle: nouveau.numero,
+                  detail: `${nouveau.acheteurNom} — avance ${Math.round(nouveau.montantAvance)} Ar`,
+                }),
+                ...s.journalActivites,
+              ],
+            },
+          ),
+        );
+        return { ok: true, id: nouveau.id };
+      },
+
+      modifierMissionAchat: (id, data) => {
+        const state = get();
+        const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (missionEstVerrouillee(prev)) {
+          return { ok: false, reason: "Cette mission est clôturée ou annulée : aucune modification possible." };
+        }
+        const gerer = actorPeutGererMissions();
+        if (!actorPeutSaisirMission(prev)) {
+          return { ok: false, reason: "Seul l'acheteur assigné peut saisir les achats de cette mission." };
+        }
+        const headerKeys = [
+          "acheteurUserId",
+          "acheteurNom",
+          "date",
+          "siteDestinataireId",
+          "montantAvance",
+          "lignesPrevisionnelles",
+        ] as const;
+        if (!gerer) {
+          for (const k of headerKeys) {
+            if (data[k] !== undefined) {
+              return {
+                ok: false,
+                reason: "L'en-tête et la liste prévisionnelle sont réservés au responsable achats.",
+              };
+            }
+          }
+        }
+        let lignesPrevisionnelles = data.lignesPrevisionnelles ?? prev.lignesPrevisionnelles;
+        if (data.lignesPrevisionnelles) {
+          for (const l of data.lignesPrevisionnelles) {
+            if (!l.produitId || !(l.quantiteSouhaitee > 0)) {
+              return { ok: false, reason: "Chaque ligne prévisionnelle doit avoir un article et une quantité souhaitée positive." };
+            }
+            const motif = motifLigneMissionInvalide(
+              { id: l.id, produitId: l.produitId, quantite: 0, prixUnitaire: 0, fournisseurId: TIERS_DIVERS_MARCHE_ID },
+              state.produits,
+            );
+            if (motif) return { ok: false, reason: motif };
+          }
+        }
+        let achatsRealises = data.achatsRealises ?? prev.achatsRealises;
+        if (data.achatsRealises) {
+          for (const l of data.achatsRealises) {
+            const motif = motifLigneMissionInvalide(l, state.produits);
+            if (motif) return { ok: false, reason: motif };
+            if (!l.fournisseurId) {
+              return { ok: false, reason: "Chaque achat réalisé doit être rattaché à un tiers." };
+            }
+          }
+        } else if (data.lignesPrevisionnelles) {
+          const prevusIds = new Set(lignesPrevisionnelles.map((l) => l.id));
+          const kept = prev.achatsRealises.filter((l) => {
+            if (!l.previsionId) return true;
+            if (prevusIds.has(l.previsionId)) return true;
+            return l.quantite > 0;
+          });
+          const existingPrev = new Set(kept.map((l) => l.previsionId).filter(Boolean));
+          const added = lignesPrevisionnelles
+            .filter((p) => !existingPrev.has(p.id))
+            .map((p) => ({
+              id: uid("misr"),
+              previsionId: p.id,
+              produitId: p.produitId,
+              quantite: 0,
+              prixUnitaire: 0,
+              fournisseurId: TIERS_DIVERS_MARCHE_ID,
+            }));
+          achatsRealises = [
+            ...kept.map((l) => {
+              const p = lignesPrevisionnelles.find((x) => x.id === l.previsionId);
+              if (p && l.quantite === 0) return { ...l, produitId: p.produitId };
+              return l;
+            }),
+            ...added,
+          ];
+        }
+        let depensesDiverses = data.depensesDiverses ?? prev.depensesDiverses;
+        if (data.depensesDiverses) {
+          depensesDiverses = data.depensesDiverses.map((d) => ({
+            ...d,
+            nature: d.nature,
+            montant: Math.max(0, d.montant),
+          }));
+        }
+        if (data.montantAvance != null && data.montantAvance < 0) {
+          return { ok: false, reason: "Le montant de l'avance ne peut pas être négatif." };
+        }
+        const next: MissionAchat = {
+          ...prev,
+          ...data,
+          lignesPrevisionnelles,
+          achatsRealises,
+          depensesDiverses,
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+        }));
+        return { ok: true };
+      },
+
+      cloturerMissionAchat: (id) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La clôture est réservée au responsable achats." };
+        }
+        const state = get();
+        const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut !== "en_cours") {
+          return { ok: false, reason: "Seule une mission en cours peut être clôturée." };
+        }
+        for (const l of prev.achatsRealises) {
+          const motif = motifLigneMissionInvalide(l, state.produits);
+          if (motif) return { ok: false, reason: motif };
+        }
+        const actor = getActiviteActor();
+        const next: MissionAchat = {
+          ...prev,
+          statut: "cloture",
+          dateCloture: new Date().toISOString(),
+          depensesDiverses: depensesValides(prev.depensesDiverses),
+          validations: [
+            ...prev.validations,
+            etapeValidationMission("confirmer_cloture", actor),
+          ],
+        };
+        const entrees = regenererEntreesMission(
+          state.entrees,
+          next,
+          state.produits,
+          upsertTiersDiversMarche(state.tiers ?? []),
+        );
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            entrees,
+            journalActivites: [
+              entreeActivite("validation", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: "Clôture — entrée en stock et écritures 401",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true };
+      },
+
+      annulerMissionAchat: (id) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "L'annulation est réservée au responsable achats." };
+        }
+        const state = get();
+        const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut === "annule" || prev.statut === "cloture_annule") {
+          return { ok: false, reason: "Cette mission est déjà annulée." };
+        }
+        const actor = getActiviteActor();
+        if (prev.statut === "en_cours") {
+          const next: MissionAchat = {
+            ...prev,
+            statut: "annule",
+            dateAnnulation: new Date().toISOString(),
+            validations: [...prev.validations, etapeValidationMission("annuler_document", actor)],
+          };
+          set((s) => ({
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            journalActivites: [
+              entreeActivite("annulation", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+              }),
+              ...s.journalActivites,
+            ],
+          }));
+          return { ok: true };
+        }
+        const bloquants = listerMouvementsBloquantAnnulationMission(prev, {
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+          factures: state.factures,
+          transfertsStock: state.transfertsStock,
+          ordresFabrication: state.ordresFabrication,
+          produits: state.produits,
+          tiers: upsertTiersDiversMarche(state.tiers ?? []),
+        });
+        const motif = messageAnnulationMissionRefusee(bloquants);
+        if (motif) return { ok: false, reason: motif };
+        const next: MissionAchat = {
+          ...prev,
+          statut: "cloture_annule",
+          dateAnnulation: new Date().toISOString(),
+          validations: [...prev.validations, etapeValidationMission("annuler_cloture", actor)],
+        };
+        const entrees = regenererEntreesMission(
+          state.entrees,
+          next,
+          state.produits,
+          upsertTiersDiversMarche(state.tiers ?? []),
+        );
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            entrees,
+            journalActivites: [
+              entreeActivite("annulation", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: "Contre-mouvement (mission clôturée)",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true };
+      },
+
+      reglerMissionAchat: (id, data) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "Le règlement de l'avance est réservé au responsable achats." };
+        }
+        const state = get();
+        const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (prev.statut !== "cloture") {
+          return { ok: false, reason: "Seul le solde d'une mission clôturée peut être marqué réglé." };
+        }
+        if (data.statutReglement === "regle" && !data.dateReglement) {
+          return { ok: false, reason: "Indiquez la date de règlement." };
+        }
+        const actor = getActiviteActor();
+        const next: MissionAchat = {
+          ...prev,
+          statutReglement: data.statutReglement,
+          dateReglement: data.statutReglement === "regle" ? data.dateReglement : undefined,
+          validations: [
+            ...prev.validations,
+            etapeValidationMission(
+              "regler",
+              actor,
+              data.statutReglement === "regle" ? data.dateReglement : "Non réglé",
+            ),
+          ],
+        };
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+          journalActivites: [
+            entreeActivite("modification", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: data.statutReglement === "regle" ? "Règlement de l'avance" : "Règlement annulé",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      creerDemandePrix: (data) => {
+        if (data.lignes.length === 0) {
+          return { ok: false, reason: "Ajoutez au moins un article." };
+        }
+        if (data.fournisseurIds.length < 1) {
+          return { ok: false, reason: "Sélectionnez au moins un fournisseur à consulter." };
+        }
+        for (const l of data.lignes) {
+          if (!l.produitId || !(l.quantite > 0)) {
+            return { ok: false, reason: "Chaque ligne doit avoir un article et une quantité positive." };
+          }
+        }
+        const state = get();
+        const lignes: DemandePrixLigne[] = data.lignes.map((l) => ({
+          id: uid("dpl"),
+          produitId: l.produitId,
+          quantite: l.quantite,
+        }));
+        const offres: DemandePrixOffre[] = [];
+        for (const ligne of lignes) {
+          for (const fournisseurId of data.fournisseurIds) {
+            offres.push({
+              id: uid("dpo"),
+              ligneId: ligne.id,
+              fournisseurId,
+              prixUnitaire: 0,
+            });
+          }
+        }
+        const nouveau: DemandePrix = {
+          id: uid("dp"),
+          numero: nextNumeroDemandePrix(state.demandesPrix ?? []),
+          date: data.date,
+          statut: "brouillon",
+          lignes,
+          fournisseurIds: [...new Set(data.fournisseurIds)],
+          offres,
+          note: data.note,
+        };
+        set((s) => ({
+          demandesPrix: [nouveau, ...(s.demandesPrix ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "demande_prix", {
+              entiteId: nouveau.id,
+              libelle: nouveau.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id: nouveau.id };
+      },
+
+      modifierDemandePrix: (id, data) => {
+        const state = get();
+        const prev = (state.demandesPrix ?? []).find((d) => d.id === id);
+        if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
+        if (dpEstVerrouillee(prev)) {
+          return { ok: false, reason: "Cette demande de prix est clôturée ou annulée." };
+        }
+        let lignes = data.lignes ?? prev.lignes;
+        let fournisseurIds = data.fournisseurIds ?? prev.fournisseurIds;
+        let offres = data.offres ?? prev.offres;
+        if (data.lignes || data.fournisseurIds) {
+          if (lignes.length === 0) return { ok: false, reason: "Ajoutez au moins un article." };
+          if (fournisseurIds.length === 0) {
+            return { ok: false, reason: "Sélectionnez au moins un fournisseur." };
+          }
+          const nextOffres: DemandePrixOffre[] = [];
+          for (const ligne of lignes) {
+            for (const fournisseurId of fournisseurIds) {
+              const exist =
+                offres.find((o) => o.ligneId === ligne.id && o.fournisseurId === fournisseurId) ??
+                prev.offres.find((o) => o.ligneId === ligne.id && o.fournisseurId === fournisseurId);
+              nextOffres.push(
+                exist ?? {
+                  id: uid("dpo"),
+                  ligneId: ligne.id,
+                  fournisseurId,
+                  prixUnitaire: 0,
+                },
+              );
+            }
+          }
+          offres = nextOffres;
+        }
+        const next: DemandePrix = {
+          ...prev,
+          ...data,
+          lignes,
+          fournisseurIds,
+          offres,
+        };
+        set((s) => ({
+          demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? next : d)),
+        }));
+        return { ok: true };
+      },
+
+      changerStatutDemandePrix: (id, statut) => {
+        const state = get();
+        const prev = (state.demandesPrix ?? []).find((d) => d.id === id);
+        if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
+        if (prev.statut === "annulee") {
+          return { ok: false, reason: "Cette demande est déjà annulée." };
+        }
+        if (prev.statut === "cloturee" && statut !== "annulee") {
+          return { ok: false, reason: "Document verrouillé." };
+        }
+        set((s) => ({
+          demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? { ...d, statut } : d)),
+          journalActivites: [
+            entreeActivite(
+              statut === "annulee" ? "annulation" : "validation",
+              "demande_prix",
+              { entiteId: id, libelle: prev.numero, detail: statut },
+            ),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
       addVente: (vente) =>
         set((state) => ({
           ventes: [{ ...vente, id: uid("v") }, ...state.ventes],
@@ -2427,9 +3617,22 @@ export const useStore = create<Store>()((set, get) => ({
 
       addProduit: (produit) => {
         const state = get();
+        const nature = natureStockDuProduit(produit);
+        const nomenclatures = normaliserNomenclatures(
+          produit.nomenclatures,
+          produitEstFabrique({ natureStock: nature }),
+        );
+        if (nomenclatures) {
+          const cycle = cycleNomenclature(
+            "nouveau",
+            nomenclatures,
+            [{ ...produit, id: "nouveau", nomenclatures }, ...state.produits],
+          );
+          if (cycle) return { ok: false, reason: cycle };
+        }
         const seeded = seedComptesDefautState(state);
         const nouveau = assignerComptesProduit(
-          { ...produit, id: uid("prod") },
+          { ...produit, id: uid("prod"), natureStock: nature, nomenclatures },
           seeded.comptesComptables,
         );
         set((s) => ({
@@ -2449,6 +3652,49 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = state.produits.find((p) => p.id === id);
         if (!prev) return { ok: false, reason: "Produit introuvable." };
+        const natureCible = data.natureStock ?? natureStockDuProduit(prev);
+        if (natureCible !== natureStockDuProduit(prev)) {
+          const achete = state.entrees.some(
+            (e) =>
+              e.produitId === id &&
+              (e.origine === "livraison_achat" ||
+                e.origine === "achat" ||
+                e.origine === "retour_fournisseur" ||
+                !e.origine),
+          );
+          const fabrique = state.entrees.some(
+            (e) => e.produitId === id && e.origine === "of_entree",
+          );
+          if (produitEstFabrique({ natureStock: natureCible }) && achete) {
+            return {
+              ok: false,
+              reason:
+                "Ce produit a déjà été acheté : il ne peut pas devenir semi-fini ou fini. Créez une nouvelle fiche.",
+            };
+          }
+          if (natureCible === "matiere_premiere" && fabrique) {
+            return {
+              ok: false,
+              reason:
+                "Ce produit a déjà été fabriqué par un OF : il ne peut pas devenir matière première.",
+            };
+          }
+        }
+        const nomenclatures = normaliserNomenclatures(
+          data.nomenclatures !== undefined ? data.nomenclatures : prev.nomenclatures,
+          produitEstFabrique({ natureStock: natureCible }),
+        );
+        if (nomenclatures) {
+          const cycle = cycleNomenclature(
+            id,
+            nomenclatures,
+            state.produits.map((p) =>
+              p.id === id ? { ...p, nomenclatures, natureStock: natureCible } : p,
+            ),
+          );
+          if (cycle) return { ok: false, reason: cycle };
+        }
+        data = { ...data, natureStock: natureCible, nomenclatures };
         const seeded = seedComptesDefautState(state);
         const auth = useAuthStore.getState();
         const patch: Partial<Produit> = { ...data };
@@ -2563,6 +3809,10 @@ export const useStore = create<Store>()((set, get) => ({
             bonsDeLivraison: state.bonsDeLivraison,
             factures: state.factures,
             achats: state.achats,
+            ordresFabrication: state.ordresFabrication,
+            missionsAchat: state.missionsAchat,
+            demandesPrix: state.demandesPrix,
+            nomenclaturesProduits: state.produits,
           })
         ) {
           return {
@@ -2960,7 +4210,10 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const frn = state.fournisseurs.find((f) => f.id === id);
         if (!frn) return { ok: false, reason: "Fournisseur introuvable." };
-        if (fournisseurEstReference(id, frn.nom, state.entrees, state.achats)) {
+        if (frn.id === TIERS_DIVERS_MARCHE_ID) {
+          return { ok: false, reason: "Le tiers système « Divers / Marché » ne peut pas être supprimé." };
+        }
+        if (fournisseurEstReference(id, frn.nom, state.entrees, state.achats, state.missionsAchat, state.demandesPrix)) {
           return {
             ok: false,
             reason:
@@ -3107,6 +4360,8 @@ export const useStore = create<Store>()((set, get) => ({
               prev.nom,
               state.entrees,
               state.achats,
+              state.missionsAchat,
+              state.demandesPrix,
             )
           ) {
             return {
@@ -3247,6 +4502,9 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = (state.tiers ?? []).find((t) => t.id === id);
         if (!prev) return { ok: false, reason: "Tiers introuvable." };
+        if (prev.systeme || prev.id === TIERS_DIVERS_MARCHE_ID) {
+          return { ok: false, reason: "Ce tiers système ne peut pas être supprimé." };
+        }
         if (prev.roles.includes("client")) {
           const motif = motifLienClient(id, {
             factures: state.factures,
@@ -3260,7 +4518,7 @@ export const useStore = create<Store>()((set, get) => ({
         }
         if (
           prev.roles.includes("fournisseur") &&
-          fournisseurEstReference(id, prev.nom, state.entrees, state.achats)
+          fournisseurEstReference(id, prev.nom, state.entrees, state.achats, state.missionsAchat, state.demandesPrix)
         ) {
           return {
             ok: false,
@@ -4029,7 +5287,7 @@ export const useStore = create<Store>()((set, get) => ({
             }),
           );
           const merged = pickAppState({ ...data, factures });
-          const sync = syncTiersState({
+          const sync = etatAvecTiersDivers({
             clients: ensureCodesClients(merged.clients),
             fournisseurs: merged.fournisseurs,
             tiers: merged.tiers,

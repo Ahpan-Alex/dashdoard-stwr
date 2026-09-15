@@ -829,6 +829,8 @@ export function fournisseurEstReference(
   nom: string,
   entrees: EntreeStock[],
   achats: { fournisseurId: string }[] = [],
+  missionsAchat: { achatsRealises?: { fournisseurId: string }[] }[] = [],
+  demandesPrix: { fournisseurIds?: string[]; offres?: { fournisseurId: string }[] }[] = [],
 ) {
   const n = nom.trim().toLowerCase();
   if (
@@ -840,7 +842,19 @@ export function fournisseurEstReference(
   ) {
     return true;
   }
-  return achats.some((a) => a.fournisseurId === fournisseurId);
+  if (achats.some((a) => a.fournisseurId === fournisseurId)) return true;
+  if (
+    missionsAchat.some((m) =>
+      (m.achatsRealises ?? []).some((l) => l.fournisseurId === fournisseurId),
+    )
+  ) {
+    return true;
+  }
+  return demandesPrix.some(
+    (d) =>
+      (d.fournisseurIds ?? []).includes(fournisseurId) ||
+      (d.offres ?? []).some((o) => o.fournisseurId === fournisseurId),
+  );
 }
 
 export function motifLienFournisseur(
@@ -848,8 +862,10 @@ export function motifLienFournisseur(
   nom: string,
   entrees: EntreeStock[],
   achats: { fournisseurId: string }[] = [],
+  missionsAchat: { achatsRealises?: { fournisseurId: string }[] }[] = [],
+  demandesPrix: { fournisseurIds?: string[]; offres?: { fournisseurId: string }[] }[] = [],
 ) {
-  if (fournisseurEstReference(fournisseurId, nom, entrees, achats)) {
+  if (fournisseurEstReference(fournisseurId, nom, entrees, achats, missionsAchat, demandesPrix)) {
     return "Fournisseur déjà utilisé sur des achats ou des entrées de stock. Désactivez-le pour préserver l'historique.";
   }
   return null;
@@ -869,6 +885,8 @@ export function motifLienPointDeVente(
     rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
     achats?: { pointDeVenteId: string; lignes?: { repartitions?: { pointDeVenteId: string; quantite: number }[] }[] }[];
     transfertsStock?: { siteSourceId: string; siteDestinataireId: string }[];
+    ordresFabrication?: { atelierId: string; sorties?: { siteSourceId: string }[]; retoursMatieres?: { siteDestinataireId: string }[] }[];
+    missionsAchat?: { siteDestinataireId: string }[];
   },
 ): string | null {
   if (ctx.factures.some((f) => f.pointDeVenteId === pdvId)) {
@@ -917,6 +935,19 @@ export function motifLienPointDeVente(
     )
   ) {
     return "Ce site a des transferts de stock. Suppression impossible.";
+  }
+  if (
+    (ctx.ordresFabrication ?? []).some(
+      (o) =>
+        o.atelierId === pdvId ||
+        (o.sorties ?? []).some((s) => s.siteSourceId === pdvId) ||
+        (o.retoursMatieres ?? []).some((r) => r.siteDestinataireId === pdvId),
+    )
+  ) {
+    return "Ce site a des ordres de fabrication. Suppression impossible.";
+  }
+  if ((ctx.missionsAchat ?? []).some((m) => m.siteDestinataireId === pdvId)) {
+    return "Ce site a des missions d'achat. Suppression impossible.";
   }
   return null;
 }

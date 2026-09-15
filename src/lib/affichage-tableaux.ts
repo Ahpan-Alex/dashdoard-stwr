@@ -19,7 +19,10 @@ export type TableAffichageId =
   | "ca_produits"
   | "ca_objectifs"
   | "marge_objectifs"
-  | "marge_produits";
+  | "marge_produits"
+  | "missions"
+  | "missions_suivi"
+  | "missions_synthese";
 
 export type ColonneAffichage = {
   id: string;
@@ -282,6 +285,47 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("cout", "Coût d'achat", 26),
       col("benefice", "Bénéfice", 26),
       col("part", "Part du bénéfice", 24),
+    ],
+  },
+  {
+    id: "missions",
+    label: "Missions d'achat",
+    colonnes: [
+      col("numero", "N° mission", 24, true),
+      col("acheteur", "Acheteur", 32, true),
+      col("date", "Date", 22),
+      col("site", "Site destinataire", 30),
+      col("avance", "Avance remise", 26, true),
+      col("depense", "Total dépensé", 26),
+      col("solde", "Solde", 24),
+      col("statut", "Statut", 22),
+      col("reglement", "Règlement", 22),
+    ],
+  },
+  {
+    id: "missions_suivi",
+    label: "Suivi des avances — historique",
+    colonnes: [
+      col("numero", "N° mission", 24, true),
+      col("acheteur", "Acheteur", 32, true),
+      col("date", "Date", 22),
+      col("avance", "Avance remise", 26, true),
+      col("depense", "Total dépensé", 26),
+      col("solde", "Solde", 24),
+      col("statut", "Statut mission", 24),
+      col("reglement", "Statut de règlement", 28),
+      col("dateReglement", "Date de règlement", 26),
+    ],
+  },
+  {
+    id: "missions_synthese",
+    label: "Suivi des avances — synthèse",
+    colonnes: [
+      col("acheteur", "Acheteur", 36, true),
+      col("nbEnCours", "Nb missions en cours", 28),
+      col("nbNonReglees", "Nb clôturées non réglées", 32),
+      col("avancesEnCours", "Total des avances en cours", 32, true),
+      col("soldesNonRegles", "Total des soldes non réglés", 32, true),
     ],
   },
 ];

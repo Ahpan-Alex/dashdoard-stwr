@@ -18,6 +18,8 @@ import {
   ScrollText,
   Wallet,
   ArrowLeftRight,
+  Factory,
+  Banknote,
   Briefcase,
   Settings,
   SlidersHorizontal,
@@ -113,12 +115,34 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Exploitation",
     links: [
-      { href: "/achats", label: "Achats", icon: ShoppingCart },
+      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix"],
+        children: [
+          { href: "/achats", label: "Commandes fournisseurs", exact: true },
+          { href: "/demandes-prix", label: "Demandes de prix" },
+        ],
+      },
       { href: "/stocks", label: "Stocks", icon: Boxes },
       {
         href: "/transferts",
         label: "Transferts de stock",
         icon: ArrowLeftRight,
+      },
+      {
+        href: "/fabrication",
+        label: "Fabrication",
+        icon: Factory,
+        matchPrefixes: ["/fabrication"],
+      },
+      {
+        href: "/missions",
+        label: "Missions d'achat",
+        icon: Banknote,
+        anyOf: ["missions.lire", "missions.gerer"],
+        matchPrefixes: ["/missions"],
+        children: [
+          { href: "/missions", label: "Missions", exact: true },
+          { href: "/missions/suivi", label: "Suivi des avances" },
+        ],
       },
       {
         href: "/inventaires",
