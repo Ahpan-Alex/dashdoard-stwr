@@ -2,8 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuthStore } from "@/lib/auth-store";
+import type { Permission } from "@/lib/auth/rbac";
 
-export const PARAMETRES_MENUS = [
+export const PARAMETRES_MENUS: {
+  href: string;
+  label: string;
+  permission?: Permission;
+}[] = [
   {
     href: "/parametres/entreprise",
     label: "Entreprise & fiscalité",
@@ -71,16 +77,20 @@ export const PARAMETRES_MENUS = [
   {
     href: "/parametres/utilisateurs",
     label: "Utilisateurs & historiques",
+    permission: "users.gerer",
   },
-] as const;
+];
 
 /** Sous-menu commun à toutes les pages de paramétrage. */
 export function ParametresSubnav() {
   const pathname = usePathname();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   return (
     <nav className="mb-6 flex flex-wrap gap-2">
-      {PARAMETRES_MENUS.map((item) => {
+      {PARAMETRES_MENUS.filter(
+        (item) => !item.permission || hasPermission(item.permission),
+      ).map((item) => {
         const active =
           pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (

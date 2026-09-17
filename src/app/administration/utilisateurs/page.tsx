@@ -5,11 +5,74 @@ import { PasswordInput } from "@/components/password-input";
 import { PageHeader } from "@/components/page-header";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { RequirePermission } from "@/components/require-permission";
-import { ROLE_LABELS, type RoleId } from "@/lib/auth/rbac";
+import {
+  OPERATIONAL_ROLES,
+  ROLE_LABELS,
+  libelleRoles,
+  primaryRole,
+  rolesFromStored,
+  type OperationalRole,
+  type RoleId,
+} from "@/lib/auth/rbac";
 import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
 
-const ROLES = Object.keys(ROLE_LABELS) as RoleId[];
+type ProfilBase =
+  | "admin_entreprise"
+  | "comptable"
+  | "lecture_seule"
+  | "exploitant";
+
+function profilDepuisRoles(roles: RoleId[]): ProfilBase {
+  if (roles.includes("admin_entreprise")) return "admin_entreprise";
+  if (roles.includes("comptable")) return "comptable";
+  if (
+    roles.includes("lecture_seule") &&
+    !OPERATIONAL_ROLES.some((r) => roles.includes(r))
+  ) {
+    return "lecture_seule";
+  }
+  return "exploitant";
+}
+
+function composerRoles(profil: ProfilBase, ops: OperationalRole[]): RoleId[] {
+  if (profil === "admin_entreprise") return ["admin_entreprise"];
+  if (profil === "comptable") return ["comptable"];
+  if (profil === "lecture_seule") return ["lecture_seule"];
+  return ops.length ? [...ops] : ["vendeur"];
+}
+
+function RolesExploitant({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: OperationalRole[];
+  onChange: (next: OperationalRole[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      {OPERATIONAL_ROLES.map((r) => (
+        <label key={r} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            disabled={disabled}
+            checked={value.includes(r)}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? [...value, r]
+                  : value.filter((x) => x !== r),
+              )
+            }
+          />
+          {ROLE_LABELS[r]}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 export default function UtilisateursPage() {
   return (
@@ -40,7 +103,8 @@ function UtilisateursContent() {
 
   const [email, setEmail] = useState("");
   const [nom, setNom] = useState("");
-  const [role, setRole] = useState<RoleId>("commercial");
+  const [profil, setProfil] = useState<ProfilBase>("exploitant");
+  const [ops, setOps] = useState<OperationalRole[]>(["vendeur"]);
   const [password, setPassword] = useState("");
   const [pdvIds, setPdvIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +114,18 @@ function UtilisateursContent() {
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (profil === "exploitant" && ops.length === 0) {
+      setError("Cochez au moins un rôle : acheteur, caissier, facturier ou vendeur.");
+      return;
+    }
     setLoading(true);
     try {
+      const roles = composerRoles(profil, ops);
       const res = await createUser({
         email,
         nom,
-        role,
+        role: primaryRole(roles),
+        roles,
         password,
         pointDeVenteIds: pdvIds,
       });
@@ -67,7 +137,8 @@ function UtilisateursContent() {
       setNom("");
       setPassword("");
       setPdvIds([]);
-      setRole("commercial");
+      setProfil("exploitant");
+      setOps(["vendeur"]);
     } finally {
       setLoading(false);
     }
@@ -77,7 +148,7 @@ function UtilisateursContent() {
     <div>
       <PageHeader
         title="Utilisateurs"
-        description="Comptes de l'entreprise, rôles et activation."
+        description="Comptes, rôles cumulés et génération des mots de passe (administrateur uniquement)."
         showPosSelector={false}
       />
       <AdminSubnav />
@@ -109,21 +180,28 @@ function UtilisateursContent() {
           />
         </label>
         <label className="text-sm font-medium">
-          Rôle
+          Profil
           <select
             className="select mt-1"
-            value={role}
-            onChange={(e) => setRole(e.target.value as RoleId)}
+            value={profil}
+            onChange={(e) => setProfil(e.target.value as ProfilBase)}
           >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r]}
-              </option>
-            ))}
+            <option value="exploitant">Exploitant (rôles à cocher)</option>
+            <option value="admin_entreprise">Administrateur entreprise</option>
+            <option value="comptable">Comptable</option>
+            <option value="lecture_seule">Lecture seule</option>
           </select>
         </label>
+        {profil === "exploitant" && (
+          <div className="sm:col-span-2 lg:col-span-3">
+            <p className="mb-2 text-sm font-medium">
+              Rôles d&apos;exploitation (plusieurs possibles)
+            </p>
+            <RolesExploitant value={ops} onChange={setOps} />
+          </div>
+        )}
         <label className="text-sm font-medium sm:col-span-2">
-          Mot de passe temporaire (min. 12)
+          Mot de passe temporaire (min. 12) — généré par l&apos;administrateur
           <PasswordInput
             className="mt-1"
             autoComplete="new-password"
@@ -174,78 +252,99 @@ function UtilisateursContent() {
           <thead className="border-b border-line bg-sea-50/50 text-xs uppercase tracking-wider text-muted">
             <tr>
               <th className="px-4 py-3">Utilisateur</th>
-              <th className="px-4 py-3">Rôle</th>
+              <th className="px-4 py-3">Rôles</th>
               <th className="px-4 py-3">Sites</th>
               <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">Actions</th>
+              <th className="px-4 py-3">Mot de passe</th>
             </tr>
           </thead>
           <tbody>
-            {tenantUsers.map((u) => (
-              <tr key={u.id} className="border-b border-line last:border-0">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-ink">{u.nom}</p>
-                  <p className="text-xs text-muted">{u.email}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    className="select"
-                    value={u.role}
-                    disabled={u.id === me?.id}
-                    onChange={(e) =>
-                      updateUser(u.id, { role: e.target.value as RoleId })
-                    }
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {ROLE_LABELS[r]}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex max-w-xs flex-col gap-1">
-                    {pointsDeVente.map((p) => (
-                      <label key={p.id} className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={u.pointDeVenteIds.includes(p.id)}
-                          onChange={(e) => {
-                            const next = e.target.checked
-                              ? [...u.pointDeVenteIds, p.id]
-                              : u.pointDeVenteIds.filter((id) => id !== p.id);
-                            void updateUser(u.id, { pointDeVenteIds: next });
-                          }}
-                        />
-                        {p.nom}
-                      </label>
-                    ))}
-                    {u.pointDeVenteIds.length === 0 && (
-                      <span className="text-[11px] text-muted">
-                        Tous les sites (sans vue consolidée)
-                      </span>
+            {tenantUsers.map((u) => {
+              const roles = rolesFromStored(u.role, u.roles);
+              const profil = profilDepuisRoles(roles);
+              const opsUser = OPERATIONAL_ROLES.filter((r) => roles.includes(r));
+              const self = u.id === me?.id;
+              return (
+                <tr key={u.id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-ink">{u.nom}</p>
+                    <p className="text-xs text-muted">{u.email}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="select mb-2"
+                      value={profil}
+                      disabled={self}
+                      onChange={(e) => {
+                        const next = e.target.value as ProfilBase;
+                        const composed = composerRoles(next, opsUser);
+                        void updateUser(u.id, {
+                          role: primaryRole(composed),
+                          roles: composed,
+                        });
+                      }}
+                    >
+                      <option value="exploitant">Exploitant</option>
+                      <option value="admin_entreprise">Administrateur</option>
+                      <option value="comptable">Comptable</option>
+                      <option value="lecture_seule">Lecture seule</option>
+                    </select>
+                    {profil === "exploitant" ? (
+                      <RolesExploitant
+                        value={opsUser}
+                        disabled={self}
+                        onChange={(next) => {
+                          if (next.length === 0) return;
+                          void updateUser(u.id, {
+                            role: primaryRole(next),
+                            roles: next,
+                          });
+                        }}
+                      />
+                    ) : (
+                      <p className="text-xs text-muted">{libelleRoles(roles)}</p>
                     )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`badge ${u.actif ? "badge-success" : "badge-danger"}`}
-                  >
-                    {u.actif ? "Actif" : "Désactivé"}
-                  </span>
-                  {u.lockedUntil &&
-                    new Date(u.lockedUntil) > new Date() && (
-                      <span className="ml-2 text-xs text-warning">
-                        Verrouillé
-                      </span>
-                    )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-2">
-                    {u.id !== me?.id && (
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex max-w-xs flex-col gap-1">
+                      {pointsDeVente.map((p) => (
+                        <label key={p.id} className="flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={u.pointDeVenteIds.includes(p.id)}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...u.pointDeVenteIds, p.id]
+                                : u.pointDeVenteIds.filter((id) => id !== p.id);
+                              void updateUser(u.id, { pointDeVenteIds: next });
+                            }}
+                          />
+                          {p.nom}
+                        </label>
+                      ))}
+                      {u.pointDeVenteIds.length === 0 && (
+                        <span className="text-[11px] text-muted">
+                          Tous les sites (sans vue consolidée)
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`badge ${u.actif ? "badge-success" : "badge-danger"}`}
+                    >
+                      {u.actif ? "Actif" : "Désactivé"}
+                    </span>
+                    {u.lockedUntil &&
+                      new Date(u.lockedUntil) > new Date() && (
+                        <span className="ml-2 text-xs text-warning">
+                          Verrouillé
+                        </span>
+                      )}
+                    {!self && (
                       <button
                         type="button"
-                        className="btn btn-secondary"
+                        className="btn btn-secondary mt-2"
                         onClick={() =>
                           updateUser(u.id, { actif: !u.actif })
                         }
@@ -253,39 +352,45 @@ function UtilisateursContent() {
                         {u.actif ? "Désactiver" : "Réactiver"}
                       </button>
                     )}
-                    <div className="flex gap-2">
-                      <PasswordInput
-                        placeholder="Nouveau MDP"
-                        autoComplete="new-password"
-                        value={resetPwd[u.id] ?? ""}
-                        onChange={(e) =>
-                          setResetPwd((prev) => ({
-                            ...prev,
-                            [u.id]: e.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-ghost shrink-0"
-                        onClick={async () => {
-                          const pwd = resetPwd[u.id];
-                          if (!pwd) return;
-                          const res = await resetPasswordAdmin(u.id, pwd);
-                          if (!res.ok) alert(res.error);
-                          else {
-                            alert("Mot de passe réinitialisé.");
-                            setResetPwd((prev) => ({ ...prev, [u.id]: "" }));
+                  </td>
+                  <td className="px-4 py-3">
+                    {self ? (
+                      <p className="text-xs text-muted">Votre mot de passe se change dans Mon compte.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <PasswordInput
+                          placeholder="Nouveau MDP"
+                          autoComplete="new-password"
+                          value={resetPwd[u.id] ?? ""}
+                          onChange={(e) =>
+                            setResetPwd((prev) => ({
+                              ...prev,
+                              [u.id]: e.target.value,
+                            }))
                           }
-                        }}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost shrink-0"
+                          onClick={async () => {
+                            const pwd = resetPwd[u.id];
+                            if (!pwd) return;
+                            const res = await resetPasswordAdmin(u.id, pwd);
+                            if (!res.ok) alert(res.error);
+                            else {
+                              alert("Mot de passe généré. L'utilisateur devra le changer à la connexion.");
+                              setResetPwd((prev) => ({ ...prev, [u.id]: "" }));
+                            }
+                          }}
+                        >
+                          Générer
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

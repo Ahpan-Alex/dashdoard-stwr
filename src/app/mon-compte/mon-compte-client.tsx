@@ -5,7 +5,7 @@ import { Camera, Trash2, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { PasswordInput } from "@/components/password-input";
 import { PageHeader } from "@/components/page-header";
-import { ROLE_LABELS, type RoleId } from "@/lib/auth/rbac";
+import { libelleRoles, rolesFromStored } from "@/lib/auth/rbac";
 import { useAuthStore } from "@/lib/auth-store";
 import { compressProfilePhoto } from "@/lib/profile-photo";
 
@@ -192,7 +192,7 @@ export default function MonComptePage() {
             Rôle / entreprise
           </p>
           <p className="mt-1 font-medium text-ink">
-            {ROLE_LABELS[user.role as RoleId]}
+            {libelleRoles(rolesFromStored(user.role, user.roles))}
           </p>
           <p className="text-sm text-muted">{tenant?.nom}</p>
         </div>

@@ -11,6 +11,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
+import { primaryRole, rolesFromStored } from "@/lib/auth/rbac";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
@@ -73,7 +74,10 @@ function MissionsContent() {
     const base = missionsVisiblesPour(missionsAchat, {
       userId: user?.id,
       gerer,
-      lectureSeule: user?.role === "lecture_seule",
+      lectureSeule:
+        user
+          ? primaryRole(rolesFromStored(user.role, user.roles)) === "lecture_seule"
+          : false,
     });
     return [...base]
       .filter((m) => {

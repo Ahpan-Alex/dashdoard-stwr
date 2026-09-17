@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { apiFetch, ApiError } from "./api";
 import { setActiviteActor } from "./activity-actor";
-import { roleHasPermission, type Permission, type RoleId } from "./auth/rbac";
+import { rolesFromStored, userHasPermission, type Permission, type RoleId } from "./auth/rbac";
 import type {
   AppUser,
   AuthAuditEntry,
@@ -40,6 +40,7 @@ function toAppUser(u: PublicUser): AppUser {
     email: u.email,
     nom: u.nom,
     role: u.role,
+    roles: u.roles?.length ? u.roles : rolesFromStored(u.role, u.roles),
     pointDeVenteIds: u.pointDeVenteIds ?? [],
     passwordHash: "",
     passwordSalt: "",
@@ -95,7 +96,8 @@ type AuthStore = {
   createUser: (data: {
     email: string;
     nom: string;
-    role: RoleId;
+    role?: RoleId;
+    roles: RoleId[];
     pointDeVenteIds: string[];
     password: string;
     mfaRequired?: boolean;
@@ -103,7 +105,7 @@ type AuthStore = {
   updateUser: (
     id: string,
     data: Partial<
-      Pick<AppUser, "nom" | "role" | "pointDeVenteIds" | "actif" | "mfaRequired">
+      Pick<AppUser, "nom" | "role" | "roles" | "pointDeVenteIds" | "actif" | "mfaRequired">
     >,
   ) => Promise<void>;
   resetPasswordAdmin: (
@@ -235,11 +237,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     const user = get().currentUser();
     if (!user) return false;
     if (get().permissions.includes(p)) return true;
-    const role =
-      (user.role as string) === "admin"
-        ? ("admin_entreprise" as RoleId)
-        : user.role;
-    return roleHasPermission(role, p);
+    return userHasPermission(user, p);
   },
 
   refreshUsers: async () => {
@@ -285,6 +283,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
             email: s.userEmail,
             nom: s.userNom,
             role: "lecture_seule" as RoleId,
+            roles: ["lecture_seule"] as RoleId[],
             pointDeVenteIds: [],
             passwordHash: "",
             passwordSalt: "",

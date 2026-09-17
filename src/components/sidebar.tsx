@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuthStore } from "@/lib/auth-store";
-import { ROLE_LABELS, type Permission } from "@/lib/auth/rbac";
+import { libelleRoles, rolesFromStored, type Permission } from "@/lib/auth/rbac";
 import {
   ACOMPTE_STATUTS,
   BL_STATUTS,
@@ -118,6 +118,7 @@ const sections: { title: string; links: NavLink[] }[] = [
     title: "Exploitation",
     links: [
       { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix"],
+        anyOf: ["achats.lire", "achats.gerer"],
         children: [
           { href: "/achats", label: "Commandes fournisseurs", exact: true },
           { href: "/demandes-prix", label: "Demandes de prix" },
@@ -403,7 +404,7 @@ const sections: { title: string; links: NavLink[] }[] = [
           {
             href: "/parametres/utilisateurs",
             label: "Utilisateurs & historiques",
-            permission: "audit.lire",
+            permission: "users.gerer",
           },
         ],
       },
@@ -568,7 +569,9 @@ export function Sidebar() {
   const currentUser = useAuthStore((s) => s.currentUser);
   const logout = useAuthStore((s) => s.logout);
   const user = currentUser();
-  const roleKey = user?.role ?? "anon";
+  const roleKey = user
+    ? rolesFromStored(user.role, user.roles).join("|")
+    : "anon";
 
   const devis = useStore((s) => s.devis);
   const commandes = useStore((s) => s.commandes);
@@ -863,7 +866,7 @@ export function Sidebar() {
                   {user.nom}
                 </p>
                 <p className="truncate text-[11px] text-sea-300">
-                  {ROLE_LABELS[user.role]}
+                  {libelleRoles(rolesFromStored(user.role, user.roles))}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   <Link

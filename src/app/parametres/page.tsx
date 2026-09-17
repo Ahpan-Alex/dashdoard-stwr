@@ -9,8 +9,10 @@ import {
   ParametresSubnav,
 } from "@/components/parametres-subnav";
 import { useStore } from "@/lib/store";
+import { useAuthStore } from "@/lib/auth-store";
 
 export default function ParametresHubPage() {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
   const { resetBusinessData } = useStore();
   const [resetOpen, setResetOpen] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
@@ -53,7 +55,9 @@ export default function ParametresHubPage() {
       <ParametresSubnav />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {PARAMETRES_MENUS.map((item) => (
+        {PARAMETRES_MENUS.filter(
+          (item) => !item.permission || hasPermission(item.permission),
+        ).map((item) => (
           <Link
             key={item.href}
             href={item.href}

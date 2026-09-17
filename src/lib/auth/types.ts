@@ -14,6 +14,8 @@ export type AppUser = {
   email: string;
   nom: string;
   role: RoleId;
+  /** Rôles cumulés. Absent ou vide = dérivé de `role`. */
+  roles?: RoleId[];
   /** PDV autorisés ; vide = tous */
   pointDeVenteIds: string[];
   passwordHash: string;

@@ -54,7 +54,7 @@ const PURGE_DAYS = 90;
 
 export default function ParametresUtilisateursPage() {
   return (
-    <RequirePermission permission={["audit.lire", "users.gerer", "parametres.lire"]}>
+    <RequirePermission permission="users.gerer">
       <UtilisateursContent />
     </RequirePermission>
   );
