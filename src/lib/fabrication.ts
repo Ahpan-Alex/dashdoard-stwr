@@ -10,6 +10,7 @@ import type {
   Inventaire,
   OfEntreeProduction,
   OfFraisAdditionnel,
+  OfMainOeuvre,
   OfNomenclatureLigne,
   OfRetourMatiere,
   OfSortieMatiere,
@@ -73,12 +74,47 @@ export function copierNomenclatureVersOf(
   };
 }
 
+export function lignesMainOeuvre(of: Pick<OrdreFabrication, "mainOeuvre">) {
+  return of.mainOeuvre ?? [];
+}
+
+/** Taux horaire MOD de l'atelier. Absent / invalide / négatif → 0. */
+export function tauxHoraireModAtelier(
+  atelier?: Pick<PointDeVente, "tauxHoraireMod"> | null,
+) {
+  const t = atelier?.tauxHoraireMod;
+  return typeof t === "number" && Number.isFinite(t) && t > 0 ? t : 0;
+}
+
+export function atelierSansTauxMod(
+  atelier?: Pick<PointDeVente, "tauxHoraireMod"> | null,
+) {
+  return tauxHoraireModAtelier(atelier) <= 0;
+}
+
+export function coutMod(heures: number, taux: number) {
+  const h = Number(heures) || 0;
+  const t = Number(taux) || 0;
+  if (h <= 0 || t <= 0) return 0;
+  return Math.round(h * t);
+}
+
 export function coutsNonAffectes(of: OrdreFabrication) {
   const sorties = of.sorties.filter((s) => !s.affecteEntreeId);
   const frais = of.frais.filter((f) => !f.affecteEntreeId);
+  const mainOeuvre = lignesMainOeuvre(of).filter((m) => !m.affecteEntreeId);
   const totalSorties = sorties.reduce((s, x) => s + x.valeur, 0);
   const totalFrais = frais.reduce((s, x) => s + x.montant, 0);
-  return { sorties, frais, totalSorties, totalFrais, total: totalSorties + totalFrais };
+  const totalMod = mainOeuvre.reduce((s, x) => s + x.montant, 0);
+  return {
+    sorties,
+    frais,
+    mainOeuvre,
+    totalSorties,
+    totalFrais,
+    totalMod,
+    total: totalSorties + totalFrais + totalMod,
+  };
 }
 
 export function quantiteProduite(of: Pick<OrdreFabrication, "entreesProduction">) {
@@ -531,13 +567,20 @@ export function etapeValidation(
 export function affecterPotAEntree(
   of: OrdreFabrication,
   entree: OfEntreeProduction,
-): { sorties: OfSortieMatiere[]; frais: OfFraisAdditionnel[] } {
+): {
+  sorties: OfSortieMatiere[];
+  frais: OfFraisAdditionnel[];
+  mainOeuvre: OfMainOeuvre[];
+} {
   return {
     sorties: of.sorties.map((s) =>
       s.affecteEntreeId ? s : { ...s, affecteEntreeId: entree.id },
     ),
     frais: of.frais.map((f) =>
       f.affecteEntreeId ? f : { ...f, affecteEntreeId: entree.id },
+    ),
+    mainOeuvre: lignesMainOeuvre(of).map((m) =>
+      m.affecteEntreeId ? m : { ...m, affecteEntreeId: entree.id },
     ),
   };
 }

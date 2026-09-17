@@ -6,10 +6,8 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Boxes,
-  Receipt,
   MapPin,
   BookOpen,
-  FileSpreadsheet,
   Landmark,
   Users,
   FileText,
@@ -23,7 +21,6 @@ import {
   Briefcase,
   Archive,
   Settings,
-  SlidersHorizontal,
   Waves,
   ChevronDown,
   Shield,
@@ -47,6 +44,7 @@ import {
 import { useStore } from "@/lib/store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { moduleComptabiliteActif } from "@/lib/comptabilite";
+import { PARAMETRES_SECTIONS, type ParametreItem } from "@/lib/parametres-menus";
 import { AlertesCloche } from "./alertes-cloche";
 import { LogoNegoo, LogoNegooMark } from "./logo-negoo";
 import { useAlertes } from "@/lib/use-alertes";
@@ -56,8 +54,22 @@ type NavChild = {
   label: string;
   exact?: boolean;
   permission?: Permission;
+  anyOf?: Permission[];
   children?: NavChild[];
 };
+
+function parametreItemVersNav(item: ParametreItem): NavChild {
+  return {
+    href: item.href,
+    label: item.label,
+    permission: item.permission,
+    anyOf: item.anyOf,
+    exact: item.exact,
+    children: item.children
+      ?.filter((c) => !c.hidden)
+      .map(parametreItemVersNav),
+  };
+}
 type NavLink = {
   href: string;
   label: string;
@@ -73,45 +85,46 @@ const sections: { title: string; links: NavLink[] }[] = [
     title: "Pilotage",
     links: [
       {
-        href: "/",
-        label: "Tableau de bord",
+        href: "/dashboard",
+        label: "Dashboard",
         icon: LayoutDashboard,
-        matchPrefixes: ["/tableau-de-bord"],
+        matchPrefixes: ["/dashboard", "/tableau-de-bord"],
         children: [
           {
-            href: "/tableau-de-bord/ca-mensuel",
-            label: "Chiffre d'affaires mensuel",
+            href: "/dashboard",
+            label: "Vue d'ensemble",
+            exact: true,
           },
           {
-            href: "/tableau-de-bord/ca-produits",
-            label: "CA produits",
+            href: "/dashboard/production",
+            label: "Production",
+            permission: "produits.lire",
           },
           {
-            href: "/tableau-de-bord/ca-objectifs",
-            label: "CA objectif par point de vente",
+            href: "/dashboard/stock",
+            label: "Stock",
+            permission: "produits.lire",
           },
           {
-            href: "/tableau-de-bord/marge-objectifs",
-            label: "Marge objectif par point de vente",
+            href: "/dashboard/achats",
+            label: "Achats",
+            anyOf: ["achats.lire", "missions.lire"],
+          },
+          {
+            href: "/dashboard/ventes",
+            label: "Ventes & Rentabilité",
             permission: "rentabilite.lire",
-          },
-          {
-            href: "/tableau-de-bord/rentabilite",
-            label: "Rentabilité (2 paliers)",
-            permission: "rentabilite.lire",
-          },
-          {
-            href: "/tableau-de-bord/marge",
-            label: "Marge produits (historique)",
-            permission: "rentabilite.lire",
-          },
-          {
-            href: "/tableau-de-bord/rapport-journalier",
-            label: "Rapport de fin de journée",
           },
         ],
       },
-      { href: "/alertes", label: "Alertes", icon: Bell },
+      { href: "/alertes", label: "Alertes", icon: Bell, matchPrefixes: ["/alertes"],
+        children: [
+          { href: "/alertes", label: "Stock", exact: true },
+          { href: "/alertes/production", label: "Production", permission: "produits.lire" },
+          { href: "/alertes/achats", label: "Achats" },
+          { href: "/alertes/ventes", label: "Ventes", permission: "factures.lire" },
+        ],
+      },
     ],
   },
   {
@@ -153,12 +166,6 @@ const sections: { title: string; links: NavLink[] }[] = [
         label: "Inventaires",
         icon: ClipboardCheck,
         permission: "produits.lire",
-      },
-      {
-        href: "/charges",
-        label: "Charges",
-        icon: Receipt,
-        permission: "charges.lire",
       },
     ],
   },
@@ -205,6 +212,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         children: [
           { href: "/commandes", label: "Nouvelle commande", exact: true },
           { href: "/commandes/liste", label: "Liste des commandes" },
+          { href: "/commandes/bat", label: "Bons à tirer" },
         ],
       },
       {
@@ -278,135 +286,20 @@ const sections: { title: string; links: NavLink[] }[] = [
       },
       { href: "/points-de-vente", label: "Sites", icon: MapPin },
       {
-        href: "/reglages",
-        label: "Réglages",
-        icon: SlidersHorizontal,
-        matchPrefixes: ["/reglages"],
-        children: [
-          { href: "/reglages/affichage", label: "Types d'affichage" },
-          {
-            href: "/reglages/alertes",
-            label: "Alertes",
-            permission: "parametres.gerer",
-          },
-        ],
-      },
-      {
         href: "/parametres",
-        label: "Paramétrage",
+        label: "Paramètres",
         icon: Settings,
         permission: "parametres.lire",
-        children: [
-          {
-            href: "/parametres/entreprise",
-            label: "Entreprise & fiscalité",
-          },
-          {
-            href: "/parametres/identite-menu",
-            label: "Identité du menu",
-            permission: "parametres.lire",
-          },
-          {
-            href: "/parametres/produits",
-            label: "Catalogue articles & produits",
-            permission: "produits.lire",
-          },
-          {
-            href: "/parametres/unites",
-            label: "Unités de mesure",
-            permission: "produits.lire",
-          },
-          {
-            href: "/parametres/types-clients",
-            label: "Types de clients",
-            permission: "clients.lire",
-          },
-          {
-            href: "/parametres/points-de-vente",
-            label: "Sites",
-          },
-          {
-            href: "/parametres/clients",
-            label: "Clients",
-            permission: "clients.lire",
-          },
-          {
-            href: "/parametres/fournisseurs",
-            label: "Fournisseurs",
-          },
-          {
-            href: "/parametres/modeles",
-            label: "Modèles documents",
-          },
-          {
-            href: "/parametres/configuration",
-            label: "Configuration générale",
-            children: [
-              {
-                href: "/parametres/configuration/exercices",
-                label: "Exercices comptables",
-                exact: true,
-              },
-              {
-                href: "/parametres/configuration/numerotation",
-                label: "Gestion n° des pièces",
-                children: [
-                  {
-                    href: "/parametres/configuration/numerotation/initiale",
-                    label: "Numérotation initiale",
-                  },
-                  {
-                    href: "/parametres/configuration/numerotation/devis",
-                    label: "Devis",
-                  },
-                  {
-                    href: "/parametres/configuration/numerotation/commande",
-                    label: "Commande",
-                  },
-                  {
-                    href: "/parametres/configuration/numerotation/livraison",
-                    label: "Livraison",
-                  },
-                  {
-                    href: "/parametres/configuration/numerotation/facture-client",
-                    label: "Facture client",
-                  },
-                  {
-                    href: "/parametres/configuration/numerotation/facture-fournisseur",
-                    label: "Facture fournisseur",
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            href: "/parametres/objectifs-revenu",
-            label: "Objectifs de revenu",
-          },
-          {
-            href: "/parametres/objectifs-marge",
-            label: "Objectifs de marge",
-            permission: "rentabilite.lire",
-          },
-          {
-            href: "/parametres/rentabilite",
-            label: "Seuils de rentabilité",
-            permission: "rentabilite.lire",
-          },
-          {
-            href: "/parametres/stock-initial",
-            label: "Stock initial",
-          },
-          {
-            href: "/parametres/bilan-initial",
-            label: "Bilan initial",
-          },
-          {
-            href: "/parametres/utilisateurs",
-            label: "Utilisateurs & historiques",
-            permission: "users.gerer",
-          },
-        ],
+        matchPrefixes: ["/parametres", "/reglages"],
+        children: PARAMETRES_SECTIONS.map((section) => ({
+          href: section.href,
+          label: section.label,
+          permission: section.permission,
+          anyOf: section.anyOf,
+          children: section.items
+            .filter((item) => !item.hidden)
+            .map(parametreItemVersNav),
+        })),
       },
     ],
   },
@@ -634,9 +527,20 @@ export function Sidebar() {
             ...link,
             children: link.children
               ?.filter((c) => canSee(hasPermission, c))
+              .filter(
+                (c) =>
+                  moduleCompta || c.href !== "/parametres/comptabilite",
+              )
               .map((c) => ({
                 ...c,
-                children: c.children?.filter((n) => canSee(hasPermission, n)),
+                children: c.children
+                  ?.filter((n) => canSee(hasPermission, n))
+                  .map((n) => ({
+                    ...n,
+                    children: n.children?.filter((d) =>
+                      canSee(hasPermission, d),
+                    ),
+                  })),
               })),
           })),
       }))
@@ -760,18 +664,21 @@ export function Sidebar() {
                       {isOpen && (
                         <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
                           {children.map((child) => {
-                            const childActive = child.exact
+                            const childExact = child.exact
                               ? pathname === child.href
                               : isActive(pathname, child.href);
+                            const childActive = childIsActive(pathname, child);
                             const nested = child.children ?? [];
                             return (
                               <div key={`${child.href}-${child.label}`}>
                                 <Link
                                   href={child.href}
                                   className={`block rounded-lg px-3 py-1.5 text-[13px] font-medium leading-snug transition-colors ${
-                                    childActive
+                                    childExact
                                       ? "bg-sea-700 text-white"
-                                      : "text-sea-300 hover:bg-white/5 hover:text-white"
+                                      : childActive
+                                        ? "text-white"
+                                        : "text-sea-300 hover:bg-white/5 hover:text-white"
                                   }`}
                                 >
                                   {child.label}
@@ -779,21 +686,51 @@ export function Sidebar() {
                                 {nested.length > 0 && childActive && (
                                   <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
                                     {nested.map((n) => {
-                                      const nestedActive = n.exact
+                                      const nestedExact = n.exact
                                         ? pathname === n.href
                                         : isActive(pathname, n.href);
+                                      const nestedActive = childIsActive(
+                                        pathname,
+                                        n,
+                                      );
+                                      const deep = n.children ?? [];
                                       return (
-                                        <Link
-                                          key={`${n.href}-${n.label}`}
-                                          href={n.href}
-                                          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
-                                            nestedActive
-                                              ? "bg-sea-700 text-white"
-                                              : "text-sea-400 hover:bg-white/5 hover:text-white"
-                                          }`}
-                                        >
-                                          {n.label}
-                                        </Link>
+                                        <div key={`${n.href}-${n.label}`}>
+                                          <Link
+                                            href={n.href}
+                                            className={`block rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
+                                              nestedExact
+                                                ? "bg-sea-700 text-white"
+                                                : nestedActive
+                                                  ? "text-white"
+                                                  : "text-sea-400 hover:bg-white/5 hover:text-white"
+                                            }`}
+                                          >
+                                            {n.label}
+                                          </Link>
+                                          {deep.length > 0 && nestedActive && (
+                                            <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                                              {deep.map((d) => {
+                                                const deepActive = d.exact
+                                                  ? pathname === d.href
+                                                  : isActive(pathname, d.href);
+                                                return (
+                                                  <Link
+                                                    key={`${d.href}-${d.label}`}
+                                                    href={d.href}
+                                                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
+                                                      deepActive
+                                                        ? "bg-sea-700 text-white"
+                                                        : "text-sea-400 hover:bg-white/5 hover:text-white"
+                                                    }`}
+                                                  >
+                                                    {d.label}
+                                                  </Link>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
                                       );
                                     })}
                                   </div>

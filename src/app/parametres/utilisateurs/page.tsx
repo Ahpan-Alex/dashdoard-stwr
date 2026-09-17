@@ -189,7 +189,7 @@ function UtilisateursContent() {
   return (
     <div>
       <PageHeader
-        title="Utilisateurs & historiques"
+        title="Historique"
         description="Historique de connexions, actions d'accès et journal métier — export CSV et purge au-delà de 90 jours."
         showPosSelector={false}
       />

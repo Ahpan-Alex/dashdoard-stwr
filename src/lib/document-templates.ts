@@ -209,6 +209,27 @@ export type ModeleZones = {
   };
 };
 
+export type PiedDePageAlignement = "gauche" | "centre" | "droite";
+export type PiedDePageLigne = "aucune" | "pleine" | "centree";
+
+export function piedDePageAlignementDuModele(
+  modele: ModeleDocument | undefined,
+): PiedDePageAlignement {
+  return modele?.piedDePageAlignement ?? "centre";
+}
+
+export function piedDePageLigneDuModele(
+  modele: ModeleDocument | undefined,
+): PiedDePageLigne {
+  return modele?.piedDePageLigne ?? "aucune";
+}
+
+export function afficherMentionTvaImmatriculation(
+  modele: ModeleDocument | undefined,
+) {
+  return modele?.afficherMentionTvaImmatriculation !== false;
+}
+
 export type ModeleDocument = {
   id: string;
   nom: string;
@@ -216,6 +237,15 @@ export type ModeleDocument = {
   rubriques: DocumentRubriqueId[];
   mentionsLegales: string;
   piedDePage: string;
+  /** Alignement du texte de pied de page. Défaut : centré. */
+  piedDePageAlignement?: PiedDePageAlignement;
+  /** Ligne de séparation au-dessus du pied. Défaut : aucune. */
+  piedDePageLigne?: PiedDePageLigne;
+  /**
+   * Mention TVA + NIF/STAT fournisseur au-dessus du pied.
+   * Absent = affichée (rétrocompatibilité).
+   */
+  afficherMentionTvaImmatriculation?: boolean;
   actif: boolean;
   /** Origine du modèle : « éditeur » (fourni) ou « personnalisé ». */
   createur?: string;
@@ -249,7 +279,7 @@ export const COLONNES_ARTICLE_CATALOGUE: {
   { id: "tva_pct", label: "TVA en %" },
   { id: "tva_montant", label: "TVA ou taxe" },
   { id: "total_ttc", label: "Total TTC" },
-  { id: "mesure", label: "Mesure" },
+  { id: "mesure", label: "Mesure / dimensions" },
 ];
 
 /** Nombre maximal de colonnes affichables simultanément dans le tableau. */
@@ -583,6 +613,9 @@ export function createDefaultModeles(): ModeleDocument[] {
     rubriques: [...DEFAULT_RUBRIQUES[type]],
     mentionsLegales: MENTIONS_DEFAUT,
     piedDePage: "Merci de votre confiance — STWR Poissonnerie",
+    piedDePageAlignement: "centre",
+    piedDePageLigne: "aucune",
+    afficherMentionTvaImmatriculation: true,
     actif: true,
     createur: "éditeur",
     zones: zonesParDefaut(type),

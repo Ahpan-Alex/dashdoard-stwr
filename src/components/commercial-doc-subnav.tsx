@@ -13,6 +13,7 @@ export const DEVIS_MENUS: MenuItem[] = [
 export const COMMANDES_MENUS: MenuItem[] = [
   { href: "/commandes", label: "Nouvelle commande", exact: true },
   { href: "/commandes/liste", label: "Liste des commandes" },
+  { href: "/commandes/bat", label: "Bons à tirer" },
 ];
 
 export const BL_MENUS: MenuItem[] = [

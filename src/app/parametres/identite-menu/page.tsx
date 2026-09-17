@@ -83,7 +83,7 @@ function IdentiteMenuContent() {
       <div className="mb-4 rounded-[var(--radius)] border border-line bg-card px-4 py-3 text-sm text-muted">
         Cette identité n&apos;est pas reprise sur les factures, devis ou autres
         documents. Le nom légal et le logo des documents se règlent dans{" "}
-        <strong>Entreprise &amp; fiscalité</strong>. Chaque tenant a sa propre
+        <strong>Infos Entreprise / Fiscalité</strong>. Chaque tenant a sa propre
         configuration ; rien n&apos;est partagé entre comptes.
       </div>
 

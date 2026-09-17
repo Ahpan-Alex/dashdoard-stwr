@@ -1,9 +1,9 @@
 import { jetonNumeroExercice, type OptsNumeroDocument } from "./exercices";
+import { facteurSurfaceLigne } from "./surface-vente";
 import type {
   Acompte,
   AcompteDocumentLigne,
   BonDeLivraison,
-  Charge,
   Client,
   Commande,
   Devis,
@@ -40,7 +40,15 @@ export type TotauxDocument = {
 
 type ChampsRemiseLigne = Pick<
   LigneDocument,
-  "type" | "quantite" | "prixUnitaire" | "remiseMode" | "remisePercent" | "remiseMontant"
+  | "type"
+  | "quantite"
+  | "prixUnitaire"
+  | "remiseMode"
+  | "remisePercent"
+  | "remiseMontant"
+  | "venduAuM2"
+  | "largeurM"
+  | "hauteurM"
 >;
 
 export function modeRemiseLigne(l: Pick<LigneDocument, "remiseMode">): ModeRemise {
@@ -127,9 +135,14 @@ export function isLigneProduit(l: Pick<LigneDocument, "type"> | { type?: TypeLig
   return (l.type ?? "produit") === "produit";
 }
 
-export function montantLigneBrutHT(l: Pick<LigneDocument, "type" | "quantite" | "prixUnitaire">) {
+export function montantLigneBrutHT(
+  l: Pick<
+    LigneDocument,
+    "type" | "quantite" | "prixUnitaire" | "venduAuM2" | "largeurM" | "hauteurM"
+  >,
+) {
   if (!isLigneProduit(l)) return 0;
-  return l.quantite * l.prixUnitaire;
+  return l.quantite * facteurSurfaceLigne(l) * l.prixUnitaire;
 }
 
 export function montantRemiseLigne(l: ChampsRemiseLigne) {
@@ -154,8 +167,9 @@ export function montantLigneHT(l: ChampsRemiseLigne) {
 
 /** PU HT après remise de ligne — le PU d’origine (`prixUnitaire`) n’est pas modifié. */
 export function prixUnitaireNetHT(l: ChampsRemiseLigne & Pick<LigneDocument, "prixUnitaire">) {
-  if (!isLigneProduit(l) || !(l.quantite > 0)) return l.prixUnitaire;
-  return montantLigneHT(l) / l.quantite;
+  const denom = (l.quantite || 0) * facteurSurfaceLigne(l);
+  if (!isLigneProduit(l) || !(denom > 0)) return l.prixUnitaire;
+  return montantLigneHT(l) / denom;
 }
 
 /**
@@ -884,7 +898,6 @@ export function motifLienPointDeVente(
     bonsDeLivraison: BonDeLivraison[];
     entrees: EntreeStock[];
     ventes: Vente[];
-    charges: Pick<Charge, "pointDeVenteId">[];
     immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
     rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
     achats?: { pointDeVenteId: string; lignes?: { repartitions?: { pointDeVenteId: string; quantite: number }[] }[] }[];
@@ -910,9 +923,6 @@ export function motifLienPointDeVente(
   }
   if (ctx.ventes.some((v) => v.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des ventes. Suppression impossible.";
-  }
-  if (ctx.charges.some((c) => c.pointDeVenteId === pdvId)) {
-    return "Ce point de vente a des charges. Suppression impossible.";
   }
   if (ctx.immobilisations.some((i) => i.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des immobilisations. Suppression impossible.";

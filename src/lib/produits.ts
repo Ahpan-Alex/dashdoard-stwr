@@ -223,7 +223,7 @@ export function filtrerCatalogue(
     );
 }
 
-/** Résolution prix HT : tarif client → gros → détail */
+/** Résolution prix HT : tarif client → gros → détail (ou PU/m² si vendu à la surface). */
 export function resolvePrixVenteHT(
   produit: Produit,
   opts: {
@@ -233,6 +233,11 @@ export function resolvePrixVenteHT(
   } = {},
 ) {
   const { clientId, quantite = 0, tarifsClients = [] } = opts;
+  const baseCatalogue = produit.venduAuM2
+    ? (Number(produit.prixVenteM2HT) >= 0 && produit.prixVenteM2HT != null
+        ? produit.prixVenteM2HT
+        : produit.prixVenteHT)
+    : produit.prixVenteHT;
   if (clientId) {
     const tarif = tarifsClients.find(
       (t) =>
@@ -242,13 +247,13 @@ export function resolvePrixVenteHT(
     );
     if (tarif) {
       if (tarif.typeTarif === "remise_pct") {
-        const base = produit.prixVenteHT;
         const pct = tarif.remisePercent ?? 0;
-        return Math.round(base * (1 - pct / 100));
+        return Math.round(baseCatalogue * (1 - pct / 100));
       }
       return tarif.prixHT;
     }
   }
+  if (produit.venduAuM2) return baseCatalogue;
   const seuil = produit.seuilGros ?? 0;
   if (
     produit.prixVenteGrosHT != null &&

@@ -58,6 +58,8 @@ import {
   RemiseGlobaleSaisie,
   RemiseLigneSaisie,
 } from "@/components/remise-saisie";
+import { LigneDimensionsSaisie, ResumeSurfaceLigne } from "@/components/ligne-dimensions-saisie";
+import { champsSurfaceLigne } from "@/lib/surface-vente";
 import type {
   FactureStatut,
   FactureType,
@@ -261,6 +263,7 @@ export default function FacturesPage() {
     remisePercent: l.remisePercent,
     remiseMontant: l.remiseMontant,
     commentaire: l.commentaire,
+    ...champsSurfaceLigne(l),
   }));
 
   function ajouterProduitSurFacture(produitId: string) {
@@ -305,6 +308,7 @@ export default function FacturesPage() {
           prixUnitaire: prix,
           unite: prod.unite,
           tauxTVA: assujetti ? prod.tauxTVA : 0,
+          venduAuM2: prod.venduAuM2 || undefined,
         },
       ]),
     );
@@ -587,6 +591,7 @@ export default function FacturesPage() {
             remisePercent: remise.remisePercent,
             remiseMontant: remise.remiseMontant,
             commentaire: l.commentaire,
+            ...champsSurfaceLigne(l),
           };
         }),
     };
@@ -1209,6 +1214,10 @@ export default function FacturesPage() {
                                   })
                                 }
                               />
+                              <LigneDimensionsSaisie
+                                ligne={l}
+                                onChange={(patch) => updateLigne(l.key, patch)}
+                              />
                             </td>
                             <td>
                               <input
@@ -1239,6 +1248,7 @@ export default function FacturesPage() {
                             <td>
                               <PrixUnitaireLigneSaisie
                                 ligne={l}
+                                suffixe={l.venduAuM2 ? " / m²" : undefined}
                                 onChange={(prixUnitaire) =>
                                   updateLigne(l.key, { prixUnitaire })
                                 }
@@ -1520,6 +1530,7 @@ export default function FacturesPage() {
                             </td>
                             <td>
                               {formatNumber(l.quantite)} {l.unite}
+                              <ResumeSurfaceLigne ligne={l} />
                             </td>
                             <td>
                               {formatCurrency(l.prixUnitaire)}

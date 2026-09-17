@@ -49,7 +49,7 @@ function toInputDate(d: Date) {
 export default function RentabilitePage() {
   const {
     factures,
-    charges,
+    achats,
     produits,
     entrees,
     inventaires,
@@ -90,7 +90,7 @@ export default function RentabilitePage() {
     () =>
       syntheseRentabiliteDeuxPaliers({
         factures,
-        charges,
+        achats,
         produits,
         entrees,
         inventaires,
@@ -100,7 +100,7 @@ export default function RentabilitePage() {
       }),
     [
       factures,
-      charges,
+      achats,
       produits,
       entrees,
       inventaires,
@@ -114,7 +114,7 @@ export default function RentabilitePage() {
     () =>
       serieRentabiliteMensuelle({
         factures,
-        charges,
+        achats,
         produits,
         entrees,
         inventaires,
@@ -124,7 +124,7 @@ export default function RentabilitePage() {
       }),
     [
       factures,
-      charges,
+      achats,
       produits,
       entrees,
       inventaires,
@@ -137,14 +137,16 @@ export default function RentabilitePage() {
   const waterfall = [
     { name: "CA HT", montant: synthese.caHt },
     { name: "− CMV", montant: -synthese.cmv },
-    { name: "− Var. vente", montant: -synthese.chargesVariables },
-    { name: "Palier 1", montant: synthese.beneficeAvantAutres },
-    { name: "− Structure", montant: -synthese.chargesStructure },
-    { name: "− Financier", montant: -synthese.chargesFinancieres },
-    { name: "− Exceptionnel", montant: -synthese.chargesExceptionnelles },
-    { name: "− Impôts", montant: -synthese.impotsBenefice },
-    { name: "Palier 2", montant: synthese.beneficeApresAutres },
-  ].filter((r) => r.montant !== 0 || r.name.startsWith("Palier") || r.name === "CA HT");
+    { name: "Marge brute", montant: synthese.margeBrute },
+    { name: "− Achats HT", montant: -synthese.achatsHt },
+    { name: "Résultat", montant: synthese.resultat },
+  ].filter(
+    (r) =>
+      r.montant !== 0 ||
+      r.name === "CA HT" ||
+      r.name === "Marge brute" ||
+      r.name === "Résultat",
+  );
 
   const seuil1 = parametres.seuilMargePalier1Percent ?? 25;
   const seuil2 = parametres.seuilMargePalier2Percent ?? 5;
@@ -153,7 +155,7 @@ export default function RentabilitePage() {
     <div>
       <PageHeader
         title="Rentabilité — 2 paliers"
-        description="Palier 1 : bénéfice avant autres charges (CA facturé − CMV − variables). Palier 2 : après structure, financier, exceptionnel et impôts (PCG 2005)."
+        description="Palier 1 : marge brute (CA HT facturé − CMV). Palier 2 : résultat (CA HT facturé − achats validés, tous types)."
         actions={
           <Link href="/parametres/rentabilite" className="btn btn-secondary">
             <Settings className="h-4 w-4" />
@@ -208,8 +210,7 @@ export default function RentabilitePage() {
         <div className="mb-4 space-y-2">
           {synthese.alertePalier2Negatif && (
             <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-              Alerte : bénéfice après autres charges négatif (
-              {formatCurrency(synthese.beneficeApresAutres)}).
+              Alerte : résultat négatif ({formatCurrency(synthese.resultat)}).
             </p>
           )}
           {synthese.alertePalier1 && (
@@ -227,50 +228,60 @@ export default function RentabilitePage() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="CA HT facturé"
           value={formatCurrency(synthese.caHt)}
-          hint="Factures fiscales (hors acompte / proforma)"
+          hint="Factures fiscales validées (hors acompte / proforma)"
         />
         <StatCard
-          label="Bénéfice avant autres charges"
-          value={formatCurrency(synthese.beneficeAvantAutres)}
+          label="Coût des ventes (CMV)"
+          value={formatCurrency(synthese.cmv)}
+          hint="Coût d’achat des produits facturés"
+        />
+        <StatCard
+          label="Marge brute"
+          value={formatCurrency(synthese.margeBrute)}
           hint={`Taux ${formatPercent(synthese.tauxPalier1 / 100)} · Palier 1`}
         />
         <StatCard
-          label="Bénéfice après autres charges"
-          value={formatCurrency(synthese.beneficeApresAutres)}
-          hint={`Taux ${formatPercent(synthese.tauxPalier2 / 100)} · Palier 2`}
+          label="Achats HT (tous types)"
+          value={formatCurrency(synthese.achatsHt)}
+          hint="Achats validés : marchandises, matières, services, immobilisations…"
         />
         <StatCard
-          label="CMV + var. vente"
-          value={formatCurrency(synthese.cmv + synthese.chargesVariables)}
-          hint={`CMV ${formatCurrency(synthese.cmv)}`}
+          label="Résultat"
+          value={formatCurrency(synthese.resultat)}
+          hint={`Taux ${formatPercent(synthese.tauxPalier2 / 100)} · Palier 2`}
         />
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-[var(--radius)] border border-line bg-card p-4">
           <h2 className="mb-1 font-display text-base font-semibold">
-            Cascade CA → Palier 2
+            Cascade CA → Résultat
           </h2>
           <p className="mb-4 text-xs text-muted">
-            Décomposition de la période sélectionnée
+            Factures validées moins achats effectués (tous types)
           </p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={waterfall}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={60} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 10 }}
+                  interval={0}
+                  angle={-25}
+                  textAnchor="end"
+                  height={60}
+                />
                 <YAxis
                   tickFormatter={(v) => formatCompactCurrency(Number(v))}
                   width={70}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip
-                  formatter={(v) => formatCurrency(Number(v ?? 0))}
-                />
+                <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                 <Bar dataKey="montant" name="Montant" fill="#0f766e" />
               </BarChart>
             </ResponsiveContainer>
@@ -282,7 +293,7 @@ export default function RentabilitePage() {
             Évolution mensuelle {range.debut.getFullYear()}
           </h2>
           <p className="mb-4 text-xs text-muted">
-            CA HT, Palier 1 et Palier 2
+            CA HT, marge brute (Palier 1) et résultat (Palier 2)
           </p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -294,9 +305,7 @@ export default function RentabilitePage() {
                   width={70}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip
-                  formatter={(v) => formatCurrency(Number(v ?? 0))}
-                />
+                <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                 <Legend />
                 <Line
                   type="monotone"
@@ -309,7 +318,7 @@ export default function RentabilitePage() {
                 <Line
                   type="monotone"
                   dataKey="palier1"
-                  name="Palier 1"
+                  name="Marge brute"
                   stroke="#0369a1"
                   strokeWidth={2}
                   dot={false}
@@ -317,7 +326,7 @@ export default function RentabilitePage() {
                 <Line
                   type="monotone"
                   dataKey="palier2"
-                  name="Palier 2"
+                  name="Résultat"
                   stroke="#b45309"
                   strokeWidth={2}
                   dot={false}
@@ -331,44 +340,44 @@ export default function RentabilitePage() {
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <div className="table-shell">
           <p className="border-b border-line px-4 py-2 text-xs font-bold uppercase tracking-wider text-sea-700">
-            Détail des autres charges (Palier 2)
+            Synthèse de la période
           </p>
           <table className="data">
             <thead>
               <tr>
-                <th>Nature</th>
+                <th>Indicateur</th>
                 <th className="text-right">Montant</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>Structure / exploitation</td>
+                <td>CA HT facturé</td>
                 <td className="text-right font-semibold">
-                  {formatCurrency(synthese.chargesStructure)}
+                  {formatCurrency(synthese.caHt)}
                 </td>
               </tr>
               <tr>
-                <td>Financier</td>
+                <td>CMV</td>
                 <td className="text-right font-semibold">
-                  {formatCurrency(synthese.chargesFinancieres)}
+                  {formatCurrency(synthese.cmv)}
                 </td>
               </tr>
               <tr>
-                <td>Exceptionnel</td>
+                <td>Marge brute (CA − CMV)</td>
                 <td className="text-right font-semibold">
-                  {formatCurrency(synthese.chargesExceptionnelles)}
+                  {formatCurrency(synthese.margeBrute)}
                 </td>
               </tr>
               <tr>
-                <td>Impôt sur les bénéfices</td>
+                <td>Achats HT (tous types)</td>
                 <td className="text-right font-semibold">
-                  {formatCurrency(synthese.impotsBenefice)}
+                  {formatCurrency(synthese.achatsHt)}
                 </td>
               </tr>
               <tr>
-                <td className="text-muted">Variables de vente (Palier 1)</td>
-                <td className="text-right text-muted">
-                  {formatCurrency(synthese.chargesVariables)}
+                <td>Résultat (CA − achats)</td>
+                <td className="text-right font-semibold">
+                  {formatCurrency(synthese.resultat)}
                 </td>
               </tr>
             </tbody>

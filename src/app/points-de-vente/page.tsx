@@ -17,7 +17,7 @@ export default function PointsDeVentePage() {
     <div>
       <PageHeader
         title="Sites"
-        description="Entrepôts, points de vente et ateliers. Stock et CUMP sont propres à chaque site. La création se fait dans Paramétrage."
+        description="Entrepôts, points de vente et ateliers. Stock et CUMP sont propres à chaque site. La création se fait dans Paramètres → Général → Points de vente."
         showPosSelector={false}
         actions={
           <Link

@@ -178,7 +178,7 @@ export default function CommercialPage() {
 
       <p className="mt-6 text-xs text-muted">
         Mentions obligatoires : NIF, STAT, numérotation, totaux HT/TVA/TTC.
-        Personnalisez les modèles dans Paramétrage → Modèles documents
+        Personnalisez les modèles dans Paramètres → Documents commerciaux
         (`/parametres/modeles`).
       </p>
     </div>

@@ -23,12 +23,11 @@ import {
   subYears,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import { montantAchatsMarchandisesHT } from "./achats";
+import { montantAchatsHT } from "./achats";
 import { libelleProduit, prixVenteCatalogue } from "./produits";
 import { cumpStockRestant, etatCumpProduit, cmvSortiesPeriode, quantiteStockChronologique } from "./cump";
 import type {
   Achat,
-  Charge,
   EntreeStock,
   Immobilisation,
   Inventaire,
@@ -631,7 +630,7 @@ export function totalAchats(
     typeof periodeOrRange === "string"
       ? periodToRange(periodeOrRange, reference)
       : periodeOrRange;
-  const depuisAchats = montantAchatsMarchandisesHT(
+  const depuisAchats = montantAchatsHT(
     achats,
     pointDeVenteId,
     range,
@@ -642,25 +641,6 @@ export function totalAchats(
     .filter((e) => (range ? inDateRange(e.date, range) : true))
     .reduce((s, e) => s + montantAchat(e), 0);
   return depuisAchats + legacy;
-}
-
-export function totalCharges(
-  charges: Charge[],
-  pointDeVenteId: string | "tous",
-  periodeOrRange?: Periode | DateRange,
-  reference = new Date(),
-) {
-  const range =
-    typeof periodeOrRange === "string"
-      ? periodToRange(periodeOrRange, reference)
-      : periodeOrRange;
-  return charges
-    .filter((c) => {
-      if (pointDeVenteId === "tous") return true;
-      return c.pointDeVenteId === pointDeVenteId || c.pointDeVenteId === "tous";
-    })
-    .filter((c) => (range ? inDateRange(c.date, range) : true))
-    .reduce((s, c) => s + c.montant, 0);
 }
 
 /** Valeur nette d'une immobilisation (amortissement linéaire). */
@@ -949,14 +929,11 @@ export type SyntheseBenefices = {
   ca: number;
   coutAchat: number;
   benefice: number;
-  charges: number;
-  beneficeNet: number;
 };
 
 export function syntheseBenefices(
   ventes: Vente[],
   entrees: EntreeStock[],
-  charges: Charge[],
   produits: Produit[],
   pointDeVenteId: string | "tous",
   range: DateRange,
@@ -973,14 +950,11 @@ export function syntheseBenefices(
   const ca = lignes.reduce((s, l) => s + l.ca, 0);
   const coutAchat = lignes.reduce((s, l) => s + l.coutAchat, 0);
   const benefice = ca - coutAchat;
-  const chargesTotal = totalCharges(charges, pointDeVenteId, range);
   return {
     lignes,
     ca,
     coutAchat,
     benefice,
-    charges: chargesTotal,
-    beneficeNet: benefice - chargesTotal,
   };
 }
 
@@ -1058,41 +1032,4 @@ export const CATEGORIE_LABELS: Record<string, string> = {
   crustace: "Crustacé",
   coquillage: "Coquillage",
   autre: "Autre",
-  loyer: "Loyer",
-  salaires: "Salaires",
-  charges_sociales: "Charges sociales",
-  energie: "Électricité / énergie",
-  eau: "Eau",
-  telephone: "Téléphone / internet",
-  emballage: "Emballages",
-  transport: "Transport",
-  entretien: "Entretien",
-  frais: "Frais divers",
-  assurance: "Assurance",
-  amortissement: "Amortissements",
-  interets: "Intérêts / charges financières",
-  exceptionnel: "Charges exceptionnelles",
-  impot_benefice: "Impôt sur les bénéfices",
 };
-
-export const CHARGE_CATEGORIES: {
-  id: import("./types").ChargeCategorie;
-  label: string;
-}[] = [
-  { id: "loyer", label: "Loyer" },
-  { id: "salaires", label: "Salaires" },
-  { id: "charges_sociales", label: "Charges sociales" },
-  { id: "energie", label: "Électricité / énergie" },
-  { id: "eau", label: "Eau" },
-  { id: "telephone", label: "Téléphone / internet" },
-  { id: "emballage", label: "Emballages" },
-  { id: "transport", label: "Transport" },
-  { id: "entretien", label: "Entretien" },
-  { id: "frais", label: "Frais divers" },
-  { id: "assurance", label: "Assurance" },
-  { id: "amortissement", label: "Amortissements" },
-  { id: "interets", label: "Intérêts / financier" },
-  { id: "exceptionnel", label: "Exceptionnel" },
-  { id: "impot_benefice", label: "Impôt sur les bénéfices" },
-  { id: "autre", label: "Autre" },
-];

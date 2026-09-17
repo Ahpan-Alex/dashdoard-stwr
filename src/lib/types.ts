@@ -32,6 +32,16 @@ export type PointDeVente = {
   objectifMargeMensuel: number;
   /** Objectif de marge brute annuelle (CA − CMV) en Ar */
   objectifMargeAnnuel: number;
+  /**
+   * Taux horaire de main d'œuvre directe (Ar / heure), propre à l'atelier.
+   * Absent ou 0 = pas de taux renseigné (saisie MOD autorisée à 0).
+   */
+  tauxHoraireMod?: number;
+  /**
+   * Capacité de l'atelier : nombre maximal d'OF ouverts simultanément.
+   * Absent ou 0 = pas de capacité déclarée (alerte de surcharge inactive pour ce site).
+   */
+  capaciteOfSimultanes?: number;
 };
 
 export type CategorieProduit = {
@@ -63,6 +73,16 @@ export type TypeClient = {
   id: string;
   code: string;
   libelle: string;
+  ordre: number;
+  actif: boolean;
+};
+
+/** Nature de dépense diverse de mission d'achat (liste paramétrable). */
+export type NatureDepenseMission = {
+  id: string;
+  libelle: string;
+  /** Compte de charge (classe 6). Absent = à renseigner (imputation 471 en attendant). */
+  compteChargeId?: string;
   ordre: number;
   actif: boolean;
 };
@@ -179,6 +199,13 @@ export type Produit = {
   criteresClassementFournisseurs?: CritereClassementFournisseur;
   /** Rangs de priorité d'approvisionnement (1 = proposé par défaut à l'achat). */
   fournisseursPriorite?: ProduitFournisseurRang[];
+  /**
+   * Si vrai, le prix de vente se calcule à la surface (largeur × hauteur × qté × PU/m²).
+   * Le prix unitaire classique (`prixVenteHT`) reste indépendant.
+   */
+  venduAuM2?: boolean;
+  /** Prix de vente HT au mètre carré (Ar / m²). Uniquement si `venduAuM2`. */
+  prixVenteM2HT?: number;
 };
 
 export type CritereClassementFournisseur = "prix" | "delai";
@@ -308,45 +335,6 @@ export type Vente = {
   cumpFigee?: number;
 };
 
-export type ChargeCategorie =
-  | "loyer"
-  | "salaires"
-  | "charges_sociales"
-  | "energie"
-  | "eau"
-  | "telephone"
-  | "emballage"
-  | "transport"
-  | "entretien"
-  | "frais"
-  | "assurance"
-  | "amortissement"
-  | "interets"
-  | "exceptionnel"
-  | "impot_benefice"
-  | "autre";
-
-/** Nature économique pour les 2 paliers de rentabilité (PCG / SIG). */
-export type ChargeNatureEconomique =
-  | "variable_vente"
-  | "fixe_structure"
-  | "financiere"
-  | "exceptionnelle"
-  | "impot_benefice";
-
-export type Charge = {
-  id: string;
-  pointDeVenteId: string | "tous";
-  libelle: string;
-  montant: number;
-  categorie: ChargeCategorie;
-  /** Détermine Palier 1 vs Palier 2 (défaut via catégorie si absent) */
-  natureEconomique?: ChargeNatureEconomique;
-  date: string;
-  recurrent: boolean;
-  note?: string;
-};
-
 export type RegimeFiscal = "tva" | "ei" | "ir" | "imp" | "franchise";
 
 export type Parametres = {
@@ -394,6 +382,11 @@ export type Parametres = {
    * Absent = activé (rétrocompatibilité des entreprises déjà paramétrées).
    */
   moduleComptabilite?: boolean;
+  /**
+   * Durée de validité par défaut des demandes de prix et commandes fournisseurs (jours).
+   * Absent = 15.
+   */
+  validiteJoursDefautAchats?: number;
   /** Formats de n° pour devis, commande, BL et facture client. */
   formatsNumeroPieces?: FormatsNumeroPieces;
   /**
@@ -800,6 +793,15 @@ export type LigneDocument = {
   commentaire?: string;
   /** CUMP unitaire figé à la validation fiscale (factures uniquement). */
   cumpFigee?: number;
+  /**
+   * Snapshot : ligne facturée à la surface (m²).
+   * Absent / faux = calcul classique quantité × PU.
+   */
+  venduAuM2?: boolean;
+  /** Largeur en mètres (optionnel, avec hauteur active le calcul surface). */
+  largeurM?: number;
+  /** Hauteur en mètres. */
+  hauteurM?: number;
 };
 
 export type DevisStatut =
@@ -885,6 +887,26 @@ export type Commande = {
   verrouTransformation?: VerrouTransformation | null;
 };
 
+export type BatStatut = "en_attente" | "modifications_demandees" | "valide";
+
+/** Version d'un Bon à Tirer, toujours rattachée à une commande client. */
+export type BonATirer = {
+  id: string;
+  commandeId: string;
+  /** Numéro de version auto-incrémenté (1, 2, 3…). */
+  version: number;
+  fichierNom?: string;
+  fichierMime?: string;
+  /** Data URL (image ou PDF), stockage dans l'état métier. */
+  fichierDataUrl?: string;
+  statut: BatStatut;
+  dateEnvoi: string;
+  dateValidation?: string;
+  /** Contact côté client ayant validé — saisie manuelle, pas de portail. */
+  validateurNom?: string;
+  commentaire?: string;
+};
+
 export type BonDeLivraisonStatut =
   | "brouillon"
   | "prepare"
@@ -967,6 +989,9 @@ export type SnapshotPresentationDocument = {
     rubriques: import("./document-templates").DocumentRubriqueId[];
     mentionsLegales: string;
     piedDePage: string;
+    piedDePageAlignement?: import("./document-templates").PiedDePageAlignement;
+    piedDePageLigne?: import("./document-templates").PiedDePageLigne;
+    afficherMentionTvaImmatriculation?: boolean;
     zones?: import("./document-templates").ModeleZones;
   };
 };
@@ -1139,6 +1164,7 @@ export type ActiviteEntite =
   | "categorie"
   | "unite_mesure"
   | "type_client"
+  | "nature_depense_mission"
   | "exercice_comptable"
   | "fournisseur"
   | "achat"
@@ -1156,6 +1182,7 @@ export type ActiviteEntite =
   | "ordre_fabrication"
   | "mission_achat"
   | "demande_prix"
+  | "bon_a_tirer"
   | "tiers"
   | "parametres"
   | "compte_comptable"
@@ -1210,7 +1237,8 @@ export type SourceEcriture =
   | "facture"
   | "achat"
   | "avoir_achat"
-  | "mission_achat";
+  | "mission_achat"
+  | "mission_achat_depense";
 
 export type LigneEcritureComptable = {
   id: string;
@@ -1283,6 +1311,18 @@ export type OfFraisAdditionnel = {
   affecteEntreeId?: string;
 };
 
+/** Temps de main d'œuvre directe saisi sur un OF, valorisé au taux de l'atelier. */
+export type OfMainOeuvre = {
+  id: string;
+  date: string;
+  atelierId: string;
+  heures: number;
+  /** Taux horaire figé à la saisie (Ar / heure). */
+  tauxHoraire: number;
+  montant: number;
+  affecteEntreeId?: string;
+};
+
 export type OfEntreeProduction = {
   id: string;
   date: string;
@@ -1340,11 +1380,21 @@ export type OrdreFabrication = {
   dateAnnulation?: string;
   sorties: OfSortieMatiere[];
   frais: OfFraisAdditionnel[];
+  /** MOD par atelier. Absent = aucune saisie (OF antérieurs). */
+  mainOeuvre?: OfMainOeuvre[];
   entreesProduction: OfEntreeProduction[];
   retoursMatieres: OfRetourMatiere[];
   ecart?: OfEcartFabrication;
   validations: OfValidationEtape[];
   note?: string;
+  /**
+   * Dérogation manuelle : démarrage / sorties sans BAT validé sur la commande.
+   * Distinct du BAT lui-même — tracée (date, auteur).
+   */
+  derogationBat?: boolean;
+  derogationBatDate?: string;
+  derogationBatUserId?: string;
+  derogationBatUserNom?: string;
 };
 
 export type MissionAchatStatut =
@@ -1396,11 +1446,17 @@ export type MissionAchatRealise = {
 export type MissionDepenseDiverse = {
   id: string;
   nature: string;
+  /** Nature catalogue. Absent = saisie libre (imputation 471). */
+  natureId?: string;
+  /** Fournisseur obligatoire (fiche Tiers ou Divers / Marché). */
+  fournisseurId: string;
   montant: number;
   date?: string;
   numeroJustificatif?: string;
   typeJustificatif?: MissionJustificatifType;
   commentaire?: string;
+  /** Compte de charge après reclassement comptable (prioritaire sur 471). */
+  compteReclasseId?: string;
 };
 
 export type MissionJustificatif = {
@@ -1517,12 +1573,15 @@ export type AppState = {
   achats: Achat[];
   transfertsStock: TransfertStock[];
   ordresFabrication: OrdreFabrication[];
+  /** Bons à tirer versionnés, liés à une commande client. */
+  bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
   demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
+  naturesDepenseMission: NatureDepenseMission[];
   exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];
@@ -1530,7 +1589,6 @@ export type AppState = {
   journalAudit: JournalAudit[];
   entrees: EntreeStock[];
   ventes: Vente[];
-  charges: Charge[];
   rapportsFinJournee: RapportFinJournee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];

@@ -43,6 +43,7 @@ import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeA
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
+import { AideSurfaceProduit } from "@/components/ligne-dimensions-saisie";
 import {
   contraindreUsageParFamille,
   estUsageCommercial,
@@ -86,6 +87,8 @@ type ProduitFormState = {
   natureStock: NatureStock;
   usageCommercial: UsageCommercialProduit;
   nomenclatures: NomenclatureProduit[];
+  venduAuM2: boolean;
+  prixVenteM2HT: string;
 };
 
 function parseSeuilOptionnel(raw: string): number | undefined {
@@ -122,6 +125,8 @@ function formDepuisProduit(
     natureStock: natureStockDuProduit(p),
     usageCommercial: usageCommercialDuProduit(p, categories),
     nomenclatures: nomenclaturesDuProduit(p),
+    venduAuM2: Boolean(p.venduAuM2),
+    prixVenteM2HT: p.prixVenteM2HT != null ? String(p.prixVenteM2HT) : "",
   };
 }
 
@@ -214,6 +219,8 @@ export default function ParametresProduitsPage() {
       natureStock: "matiere_premiere",
       usageCommercial: usageFamille,
       nomenclatures: [],
+      venduAuM2: false,
+      prixVenteM2HT: "",
     };
   }
 
@@ -440,6 +447,12 @@ export default function ParametresProduitsPage() {
       alert("Le prix de vente est obligatoire pour un article vendable.");
       return;
     }
+    const m2Saisi = form.prixVenteM2HT.trim();
+    const prixM2 = m2Saisi === "" ? undefined : Number(m2Saisi);
+    if (form.venduAuM2 && (prixM2 == null || !Number.isFinite(prixM2) || prixM2 < 0)) {
+      alert("Indiquez le prix de vente HT au m² (montant positif ou nul).");
+      return;
+    }
 
     if (!editingId) {
       const doublons = trouverDoublonsPotentiels(libelleLong, produits);
@@ -483,6 +496,8 @@ export default function ParametresProduitsPage() {
       natureStock: form.natureStock,
       usageCommercial: form.usageCommercial,
       nomenclatures: form.nomenclatures,
+      venduAuM2: form.venduAuM2 || undefined,
+      prixVenteM2HT: form.venduAuM2 ? prixM2 : undefined,
       compteChargeId: produitEstAchetable(form, categoriesProduits)
         ? form.compteChargeId || undefined
         : undefined,
@@ -561,7 +576,7 @@ export default function ParametresProduitsPage() {
   return (
     <div>
       <PageHeader
-        title="Catalogue articles & produits"
+        title="Catalogue de produits et articles"
         description="Articles pour l'achat, produits pour la vente. Familles, code unique, tarifs — désactivation pour préserver l'historique."
         showPosSelector={false}
       />
@@ -1121,6 +1136,36 @@ export default function ParametresProduitsPage() {
                 }
               />
             </label>
+            <label className="block text-xs font-semibold text-muted sm:col-span-2">
+              <span className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  className="mr-1"
+                  checked={form.venduAuM2}
+                  onChange={(e) =>
+                    setForm({ ...form, venduAuM2: e.target.checked })
+                  }
+                />
+                Vendu à la surface (m²)
+                <AideSurfaceProduit />
+              </span>
+            </label>
+            {form.venduAuM2 && (
+            <label className="block text-xs font-semibold text-muted">
+              Prix vente HT / m²
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={form.prixVenteM2HT}
+                onChange={(e) =>
+                  setForm({ ...form, prixVenteM2HT: e.target.value })
+                }
+                required
+              />
+            </label>
+            )}
             <label className="block text-xs font-semibold text-muted">
               Prix gros HT
               <input

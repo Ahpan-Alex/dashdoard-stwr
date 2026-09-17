@@ -30,8 +30,8 @@ export function RequirePermission({
           <p className="mt-2 text-sm text-muted">
             Votre rôle ne permet pas d&apos;ouvrir cette page.
           </p>
-          <Link href="/" className="btn btn-primary mt-6">
-            Retour au tableau de bord
+          <Link href="/dashboard" className="btn btn-primary mt-6">
+            Retour au Dashboard
           </Link>
         </div>
       )

@@ -50,12 +50,14 @@ import {
 } from "@/lib/produits";
 import { createId } from "@/lib/id";
 import { useStore } from "@/lib/store";
+import { champsSurfaceLigne } from "@/lib/surface-vente";
 import {
   libelleRemiseLigne,
   PrixUnitaireLigneSaisie,
   RemiseGlobaleSaisie,
   RemiseLigneSaisie,
 } from "@/components/remise-saisie";
+import { LigneDimensionsSaisie, ResumeSurfaceLigne } from "@/components/ligne-dimensions-saisie";
 
 export type DraftLigne = Omit<LigneDocument, "id"> & { key: string };
 export type EtapeDocument = "saisie" | "prevalidation";
@@ -87,6 +89,7 @@ export function draftToLignes(lignes: DraftLigne[]): LigneDocument[] {
       remisePercent: remise.remisePercent,
       remiseMontant: remise.remiseMontant,
       commentaire: l.commentaire,
+      ...champsSurfaceLigne(l),
     };
   });
 }
@@ -310,6 +313,7 @@ export function DocumentSaisieWizard({
           prixUnitaire: prix,
           unite: prod.unite,
           tauxTVA: assujettiTVA ? prod.tauxTVA : 0,
+          venduAuM2: prod.venduAuM2 || undefined,
         },
       ]),
     );
@@ -745,7 +749,7 @@ export function DocumentSaisieWizard({
                   <th className="w-8" />
                   <th>Ligne</th>
                   <th>Qté</th>
-                  <th>P.U. HT (origine)</th>
+                  <th>P.U. HT {lignes.some((x) => x.venduAuM2) ? "(ou / m²)" : "(origine)"}</th>
                   <th>Remise</th>
                   <th>Montant HT</th>
                   <th />
@@ -896,6 +900,10 @@ export function DocumentSaisieWizard({
                               })
                             }
                           />
+                          <LigneDimensionsSaisie
+                            ligne={l}
+                            onChange={(patch) => updateLigne(l.key, patch)}
+                          />
                         </td>
                         <td>
                           <input
@@ -914,6 +922,7 @@ export function DocumentSaisieWizard({
                         <td>
                           <PrixUnitaireLigneSaisie
                             ligne={l}
+                            suffixe={l.venduAuM2 ? " / m²" : undefined}
                             onChange={(prixUnitaire) =>
                               updateLigne(l.key, { prixUnitaire })
                             }
@@ -1120,9 +1129,11 @@ export function DocumentSaisieWizard({
                         </td>
                         <td>
                           {formatNumber(l.quantite)} {l.unite}
+                          <ResumeSurfaceLigne ligne={l} />
                         </td>
                         <td>
                           {formatCurrency(l.prixUnitaire)}
+                          {l.venduAuM2 ? " / m²" : ""}
                           {montantRemiseLigne(l) > 0 ? (
                             <span className="mt-0.5 block text-[10px] text-muted">
                               Après remise :{" "}

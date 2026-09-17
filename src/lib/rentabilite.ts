@@ -7,11 +7,10 @@ import {
   inDateRange,
   type DateRange,
 } from "./calculations";
+import { montantAchatsHT } from "./achats";
 import { cmvSortiesPeriode } from "./cump";
 import type {
-  Charge,
-  ChargeCategorie,
-  ChargeNatureEconomique,
+  Achat,
   EntreeStock,
   Facture,
   Inventaire,
@@ -19,38 +18,6 @@ import type {
   Produit,
   Vente,
 } from "./types";
-
-export const NATURE_ECONOMIQUE_LABELS: Record<ChargeNatureEconomique, string> =
-  {
-    variable_vente: "Variable de vente (Palier 1)",
-    fixe_structure: "Structure / exploitation (Palier 2)",
-    financiere: "Financière (Palier 2)",
-    exceptionnelle: "Exceptionnelle (Palier 2)",
-    impot_benefice: "Impôt sur les bénéfices (Palier 2)",
-  };
-
-/** Mapping catégorie métier → nature par défaut (PCG 2005 analytique). */
-export function natureParDefautCategorie(
-  categorie: ChargeCategorie,
-): ChargeNatureEconomique {
-  switch (categorie) {
-    case "emballage":
-    case "transport":
-      return "variable_vente";
-    case "interets":
-      return "financiere";
-    case "exceptionnel":
-      return "exceptionnelle";
-    case "impot_benefice":
-      return "impot_benefice";
-    default:
-      return "fixe_structure";
-  }
-}
-
-export function natureEffective(c: Charge): ChargeNatureEconomique {
-  return c.natureEconomique ?? natureParDefautCategorie(c.categorie);
-}
 
 function factureCompteDansCA(f: Facture) {
   if (
@@ -148,38 +115,6 @@ export function cmvDepuisFactures(
   return Math.round(Math.max(0, cmv));
 }
 
-function chargesFiltrees(
-  charges: Charge[],
-  pointDeVenteId: string | "tous",
-  range: DateRange,
-) {
-  return charges.filter((c) => {
-    if (pointDeVenteId !== "tous") {
-      if (c.pointDeVenteId !== pointDeVenteId && c.pointDeVenteId !== "tous") {
-        return false;
-      }
-    }
-    return inDateRange(c.date, range);
-  });
-}
-
-export function totalChargesParNature(
-  charges: Charge[],
-  nature: ChargeNatureEconomique,
-  pointDeVenteId: string | "tous",
-  range: DateRange,
-) {
-  return chargesFiltrees(charges, pointDeVenteId, range)
-    .filter((c) => natureEffective(c) === nature)
-    .reduce((s, c) => s + c.montant, 0);
-}
-
-export type LigneChargeNature = {
-  nature: ChargeNatureEconomique;
-  label: string;
-  montant: number;
-};
-
 export type LigneMargeProduitFacture = {
   produitId: string;
   nom: string;
@@ -193,16 +128,11 @@ export type LigneMargeProduitFacture = {
 export type SyntheseRentabilite = {
   caHt: number;
   cmv: number;
-  chargesVariables: number;
-  beneficeAvantAutres: number;
+  achatsHt: number;
+  margeBrute: number;
   tauxPalier1: number;
-  chargesStructure: number;
-  chargesFinancieres: number;
-  chargesExceptionnelles: number;
-  impotsBenefice: number;
-  beneficeApresAutres: number;
+  resultat: number;
   tauxPalier2: number;
-  detailNatures: LigneChargeNature[];
   parProduit: LigneMargeProduitFacture[];
   alertePalier1: boolean;
   alertePalier2: boolean;
@@ -211,7 +141,7 @@ export type SyntheseRentabilite = {
 
 export function syntheseRentabiliteDeuxPaliers(opts: {
   factures: Facture[];
-  charges: Charge[];
+  achats: Achat[];
   produits: Produit[];
   entrees: EntreeStock[];
   inventaires?: Inventaire[];
@@ -221,7 +151,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
 }): SyntheseRentabilite {
   const {
     factures,
-    charges,
+    achats,
     produits,
     entrees,
     inventaires = [],
@@ -244,60 +174,17 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
     range,
     inventaires,
   );
-  const chargesVariables = totalChargesParNature(
-    charges,
-    "variable_vente",
-    pointDeVenteId,
-    range,
+  const achatsHt = Math.round(
+    montantAchatsHT(achats, pointDeVenteId, range),
   );
-  const chargesStructure = totalChargesParNature(
-    charges,
-    "fixe_structure",
-    pointDeVenteId,
-    range,
-  );
-  const chargesFinancieres = totalChargesParNature(
-    charges,
-    "financiere",
-    pointDeVenteId,
-    range,
-  );
-  const chargesExceptionnelles = totalChargesParNature(
-    charges,
-    "exceptionnelle",
-    pointDeVenteId,
-    range,
-  );
-  const impotsBenefice = totalChargesParNature(
-    charges,
-    "impot_benefice",
-    pointDeVenteId,
-    range,
-  );
+  const margeBrute = caHt - cmv;
+  const resultat = caHt - achatsHt;
 
-  const beneficeAvantAutres = caHt - cmv - chargesVariables;
-  const beneficeApresAutres =
-    beneficeAvantAutres -
-    chargesStructure -
-    chargesFinancieres -
-    chargesExceptionnelles -
-    impotsBenefice;
-
-  const tauxPalier1 = caHt > 0 ? (beneficeAvantAutres / caHt) * 100 : 0;
-  const tauxPalier2 = caHt > 0 ? (beneficeApresAutres / caHt) * 100 : 0;
+  const tauxPalier1 = caHt > 0 ? (margeBrute / caHt) * 100 : 0;
+  const tauxPalier2 = caHt > 0 ? (resultat / caHt) * 100 : 0;
 
   const seuil1 = parametres.seuilMargePalier1Percent ?? 25;
   const seuil2 = parametres.seuilMargePalier2Percent ?? 5;
-
-  const detailNatures: LigneChargeNature[] = (
-    Object.keys(NATURE_ECONOMIQUE_LABELS) as ChargeNatureEconomique[]
-  )
-    .map((nature) => ({
-      nature,
-      label: NATURE_ECONOMIQUE_LABELS[nature],
-      montant: totalChargesParNature(charges, nature, pointDeVenteId, range),
-    }))
-    .filter((l) => l.montant > 0);
 
   const parProduit = margeParProduitFactures(
     factures,
@@ -311,20 +198,15 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
   return {
     caHt,
     cmv,
-    chargesVariables,
-    beneficeAvantAutres,
+    achatsHt,
+    margeBrute,
     tauxPalier1,
-    chargesStructure,
-    chargesFinancieres,
-    chargesExceptionnelles,
-    impotsBenefice,
-    beneficeApresAutres,
+    resultat,
     tauxPalier2,
-    detailNatures,
     parProduit,
     alertePalier1: caHt > 0 && tauxPalier1 < seuil1,
     alertePalier2: caHt > 0 && tauxPalier2 < seuil2,
-    alertePalier2Negatif: beneficeApresAutres < 0,
+    alertePalier2Negatif: resultat < 0,
   };
 }
 
@@ -400,7 +282,7 @@ export function margeParProduitFactures(
 
 export function serieRentabiliteMensuelle(opts: {
   factures: Facture[];
-  charges: Charge[];
+  achats: Achat[];
   produits: Produit[];
   entrees: EntreeStock[];
   inventaires?: Inventaire[];
@@ -423,8 +305,8 @@ export function serieRentabiliteMensuelle(opts: {
         month: "short",
       }),
       caHt: s.caHt,
-      palier1: s.beneficeAvantAutres,
-      palier2: s.beneficeApresAutres,
+      palier1: s.margeBrute,
+      palier2: s.resultat,
     });
   }
   return out;

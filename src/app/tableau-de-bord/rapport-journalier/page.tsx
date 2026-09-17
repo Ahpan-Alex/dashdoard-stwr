@@ -35,7 +35,6 @@ function moneyClass(n: number) {
 export default function RapportJournalierPage() {
   const ventes = useStore((s) => s.ventes);
   const entrees = useStore((s) => s.entrees);
-  const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
@@ -90,7 +89,6 @@ export default function RapportJournalierPage() {
       construireRapportsJournaliers({
         ventes,
         entrees,
-        charges,
         produits,
         inventaires,
         pointDeVenteId: pointDeVenteActifId,
@@ -100,7 +98,6 @@ export default function RapportJournalierPage() {
     [
       ventes,
       entrees,
-      charges,
       produits,
       inventaires,
       pointDeVenteActifId,

@@ -10,7 +10,7 @@ import { motifLienPointDeVente } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { PointDeVente, RoleSite } from "@/lib/types";
-import { libelleRolesSite, rolesSiteDuSite } from "@/lib/sites";
+import { libelleRolesSite, rolesSiteDuSite, siteEstAtelier } from "@/lib/sites";
 
 const FORM_VIDE = {
   nom: "",
@@ -21,6 +21,8 @@ const FORM_VIDE = {
   objectifCAAnnuel: "",
   objectifMargeMensuel: "",
   objectifMargeAnnuel: "",
+  tauxHoraireMod: "",
+  capaciteOfSimultanes: "",
   rolesSite: ["point_de_vente"] as RoleSite[],
 };
 
@@ -34,6 +36,14 @@ function pdvVersForm(pdv: PointDeVente) {
     objectifCAAnnuel: String(pdv.objectifCAAnnuel || ""),
     objectifMargeMensuel: String(pdv.objectifMargeMensuel || ""),
     objectifMargeAnnuel: String(pdv.objectifMargeAnnuel || ""),
+    tauxHoraireMod:
+      pdv.tauxHoraireMod && pdv.tauxHoraireMod > 0
+        ? String(pdv.tauxHoraireMod)
+        : "",
+    capaciteOfSimultanes:
+      pdv.capaciteOfSimultanes && pdv.capaciteOfSimultanes > 0
+        ? String(pdv.capaciteOfSimultanes)
+        : "",
     rolesSite: rolesSiteDuSite(pdv),
   };
 }
@@ -47,7 +57,6 @@ export default function ParametresPointsDeVentePage() {
     bonsDeLivraison,
     entrees,
     ventes,
-    charges,
     immobilisations,
     rapportsFinJournee,
     achats,
@@ -75,7 +84,6 @@ export default function ParametresPointsDeVentePage() {
       bonsDeLivraison,
       entrees,
       ventes,
-      charges,
       immobilisations,
       rapportsFinJournee,
       achats,
@@ -125,6 +133,8 @@ export default function ParametresPointsDeVentePage() {
       objectifCAAnnuel: Math.max(0, Number(form.objectifCAAnnuel) || 0),
       objectifMargeMensuel: Math.max(0, Number(form.objectifMargeMensuel) || 0),
       objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
+      tauxHoraireMod: Math.max(0, Number(form.tauxHoraireMod) || 0),
+      capaciteOfSimultanes: Math.max(0, Number(form.capaciteOfSimultanes) || 0),
       rolesSite: form.rolesSite.length ? form.rolesSite : (["point_de_vente"] as RoleSite[]),
     };
     try {
@@ -301,6 +311,39 @@ export default function ParametresPointsDeVentePage() {
                 placeholder="Ex. 60000000"
               />
             </label>
+            {form.rolesSite.includes("atelier") ||
+            form.rolesSite.includes("atelier_final") ? (
+              <>
+              <label className="block text-xs font-semibold text-muted">
+                Taux horaire MOD (Ar / h)
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  className="input mt-1"
+                  value={form.tauxHoraireMod}
+                  onChange={(e) =>
+                    setForm({ ...form, tauxHoraireMod: e.target.value })
+                  }
+                  placeholder="Ex. 15000"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-muted">
+                Capacité atelier (OF simultanés)
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="input mt-1"
+                  value={form.capaciteOfSimultanes}
+                  onChange={(e) =>
+                    setForm({ ...form, capaciteOfSimultanes: e.target.value })
+                  }
+                  placeholder="Ex. 8 — 0 = pas d'alerte"
+                />
+              </label>
+              </>
+            ) : null}
             <div className="space-y-3 sm:col-span-2">
               {error && (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
@@ -439,6 +482,12 @@ export default function ParametresPointsDeVentePage() {
           label="Objectif marge annuelle"
           value={formatCurrency(apercu?.objectifMargeAnnuel ?? 0)}
         />
+        {apercu && siteEstAtelier(apercu) ? (
+          <LigneInfo
+            label="Capacité atelier (OF simultanés)"
+            value={String(apercu.capaciteOfSimultanes ?? 0)}
+          />
+        ) : null}
       </FicheApercuModal>
     </div>
   );

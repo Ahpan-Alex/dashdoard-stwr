@@ -205,8 +205,8 @@ export function achatImpacteCompteResultat(achat: Achat) {
   return achat.statut === "valide";
 }
 
-/** Achats de marchandises HT, nets des avoirs, sur la période (PCG 607). */
-export function montantAchatsMarchandisesHT(
+/** Achats validés HT, tous types (marchandises, MP, services, immos…), nets des avoirs. */
+export function montantAchatsHT(
   achats: Achat[],
   pointDeVenteId: string | "tous",
   range?: PlageDates,
@@ -225,6 +225,15 @@ export function montantAchatsMarchandisesHT(
     }
   }
   return total;
+}
+
+/** @deprecated Utiliser montantAchatsHT (tous types). */
+export function montantAchatsMarchandisesHT(
+  achats: Achat[],
+  pointDeVenteId: string | "tous",
+  range?: PlageDates,
+) {
+  return montantAchatsHT(achats, pointDeVenteId, range);
 }
 
 export function totalPaiementsFournisseurs(

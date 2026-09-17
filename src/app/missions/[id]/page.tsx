@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { DocumentPrintActions } from "@/components/document-print-actions";
 import { MissionRapportDocument } from "@/components/mission-rapport";
 import { PageHeader } from "@/components/page-header";
@@ -43,6 +44,11 @@ import {
   totalDepenseMission,
   totalDepensesDiverses,
 } from "@/lib/missions";
+import {
+  depenseEstNatureLibre,
+  naturesDepenseActives,
+} from "@/lib/natures-depense-mission";
+import { depenseEnAttenteReclassement } from "@/lib/comptabilite";
 import { produitEstAchetable } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
 import { estFournisseur } from "@/lib/tiers";
@@ -95,6 +101,7 @@ function MissionDetail() {
   const produits = useStore((s) => s.produits);
   const categoriesProduits = useStore((s) => s.categoriesProduits);
   const tiers = useStore((s) => s.tiers ?? []);
+  const naturesDepenseMission = useStore((s) => s.naturesDepenseMission ?? []);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const parametres = useStore((s) => s.parametres);
   const journal = useStore((s) =>
@@ -260,7 +267,7 @@ function MissionDetail() {
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">
-          Tableau de bord
+          Synthèse de la mission
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
           <p>
@@ -1185,7 +1192,12 @@ function MissionDetail() {
               onClick={() =>
                 patchDepenses((lignes) => [
                   ...lignes,
-                  { id: createId("misd"), nature: "", montant: 0 },
+                  {
+                    id: createId("misd"),
+                    nature: "",
+                    fournisseurId: TIERS_DIVERS_MARCHE_ID,
+                    montant: 0,
+                  },
                 ])
               }
             >
@@ -1195,8 +1207,9 @@ function MissionDetail() {
           )}
         </div>
         <p className="mb-3 text-xs text-muted">
-          Une dépense sans n° de justificatif est signalée. Total divers :{" "}
-          {formatCurrency(totalDepensesDiverses(mission))}
+          Fournisseur obligatoire (fiche Tiers ou Divers / Marché). Nature
+          catalogue ou saisie libre (imputation automatique au compte 471).
+          Total divers : {formatCurrency(totalDepensesDiverses(mission))}
         </p>
         {mission.depensesDiverses.length === 0 ? (
           <p className="text-sm text-muted">Aucune dépense diverse.</p>
@@ -1204,31 +1217,113 @@ function MissionDetail() {
           <div className="space-y-2">
             {mission.depensesDiverses.map((d) => {
               const ok = depenseEstJustifiee(mission, d);
+              const naturesActives = naturesDepenseActives(naturesDepenseMission);
+              const selectNature = d.natureId
+                ? d.natureId
+                : d.nature.trim()
+                  ? "__libre__"
+                  : "";
+              const attente471 = depenseEnAttenteReclassement(
+                d,
+                naturesDepenseMission,
+              );
+              const libre = depenseEstNatureLibre(d, naturesDepenseMission);
               return (
                 <div
                   key={d.id}
-                  className={`grid gap-2 rounded-[var(--radius)] border p-3 sm:grid-cols-4 ${
+                  className={`grid gap-2 rounded-[var(--radius)] border p-3 sm:grid-cols-2 lg:grid-cols-6 ${
                     d.montant > 0 && !ok ? "border-amber-300 bg-amber-50" : "border-line"
                   }`}
                 >
                   {saisie ? (
                     <>
-                      <input
-                        className="input sm:col-span-2"
-                        placeholder="Nature"
-                        value={d.nature}
-                        onChange={(e) =>
-                          patchDepenses((lignes) =>
-                            lignes.map((x) =>
-                              x.id === d.id ? { ...x, nature: e.target.value } : x,
-                            ),
-                          )
-                        }
-                      />
+                      <label className="text-xs font-semibold text-muted">
+                        Fournisseur
+                        <select
+                          className="select mt-1"
+                          required
+                          value={d.fournisseurId ?? ""}
+                          onChange={(e) =>
+                            patchDepenses((lignes) =>
+                              lignes.map((x) =>
+                                x.id === d.id
+                                  ? { ...x, fournisseurId: e.target.value }
+                                  : x,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="">Choisir…</option>
+                          {fournisseurs.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.id === TIERS_DIVERS_MARCHE_ID
+                                ? TIERS_DIVERS_MARCHE_NOM
+                                : f.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-xs font-semibold text-muted">
+                        Nature
+                        <select
+                          className="select mt-1"
+                          value={selectNature}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            patchDepenses((lignes) =>
+                              lignes.map((x) => {
+                                if (x.id !== d.id) return x;
+                                if (!v) return { ...x, natureId: undefined, nature: "" };
+                                if (v === "__libre__") {
+                                  return { ...x, natureId: undefined, nature: x.nature };
+                                }
+                                const n = naturesActives.find((y) => y.id === v);
+                                return {
+                                  ...x,
+                                  natureId: v,
+                                  nature: n?.libelle ?? x.nature,
+                                };
+                              }),
+                            );
+                          }}
+                        >
+                          <option value="">Choisir…</option>
+                          {naturesActives.map((n) => (
+                            <option key={n.id} value={n.id}>
+                              {n.libelle}
+                              {n.compteChargeId ? "" : " (compte à renseigner)"}
+                            </option>
+                          ))}
+                          <option value="__libre__">
+                            Autre (saisie libre → compte 471)
+                          </option>
+                        </select>
+                      </label>
+                      {selectNature === "__libre__" && (
+                        <input
+                          className="input lg:col-span-2"
+                          placeholder="Nature libre"
+                          value={d.nature}
+                          onChange={(e) =>
+                            patchDepenses((lignes) =>
+                              lignes.map((x) =>
+                                x.id === d.id
+                                  ? {
+                                      ...x,
+                                      natureId: undefined,
+                                      nature: e.target.value,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      )}
                       <input
                         type="number"
                         min={0}
                         className="input"
+                        placeholder="Montant"
                         value={d.montant}
                         onChange={(e) =>
                           patchDepenses((lignes) =>
@@ -1254,21 +1349,45 @@ function MissionDetail() {
                           )
                         }
                       />
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() =>
-                          patchDepenses((lignes) =>
-                            lignes.filter((x) => x.id !== d.id),
-                          )
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {attente471 ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-800">
+                            <PastilleCompteManquant />
+                            471
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() =>
+                            patchDepenses((lignes) =>
+                              lignes.filter((x) => x.id !== d.id),
+                            )
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm sm:col-span-2">{d.nature}</p>
+                      <p className="text-sm">
+                        {nomFrn(d.fournisseurId)}
+                      </p>
+                      <p className="text-sm sm:col-span-2">
+                        {d.nature}
+                        {libre ? (
+                          <span className="ml-2 inline-flex items-center gap-1 text-xs text-amber-800">
+                            <PastilleCompteManquant />
+                            471 — à reclasser
+                          </span>
+                        ) : null}
+                        {d.compteReclasseId ? (
+                          <span className="ml-2 text-xs text-sea-800">
+                            reclassée
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-sm font-semibold">
                         {formatCurrency(d.montant)}
                       </p>

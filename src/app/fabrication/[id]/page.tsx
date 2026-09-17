@@ -4,10 +4,14 @@ import { FormEvent, useState } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { PageHeader } from "@/components/page-header";
 import {
+  atelierSansTauxMod,
+  coutMod,
   coutsNonAffectes,
   depassementNomenclature,
+  lignesMainOeuvre,
   OF_STATUT_LABELS,
   ofEstVerrouille,
   ofPeutMouvementer,
@@ -16,17 +20,30 @@ import {
   quantiteTheoriqueComposantOf,
   reliquatsMatieres,
   stockDisponibleComposant,
+  tauxHoraireModAtelier,
 } from "@/lib/fabrication";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { natureStockDuProduit, produitEstAchetable } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
-import { sitesMagasin } from "@/lib/sites";
+import { siteEstAtelier, sitesMagasin } from "@/lib/sites";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
+import { resoudreDemarrageOf } from "@/lib/of-derogation-bat";
+import {
+  BAT_STATUTS,
+  batCourant,
+  commandeABatValide,
+  motifBatOfManquant,
+} from "@/lib/bat";
 import { fournisseurPrioritaireId } from "@/lib/classement-fournisseurs";
-import type { NatureStock, OfNomenclatureLigne, OrdreFabricationStatut } from "@/lib/types";
+import type {
+  NatureStock,
+  OfNomenclatureLigne,
+  OrdreFabricationStatut,
+  PointDeVente,
+} from "@/lib/types";
 
 function badgeOf(statut: OrdreFabricationStatut) {
   if (statut === "cloture") return "badge-success";
@@ -50,6 +67,7 @@ export default function OrdreFabricationDetailPage() {
   const of = useStore((s) => s.ordresFabrication.find((o) => o.id === id));
   const produits = useStore((s) => s.produits);
   const commandes = useStore((s) => s.commandes);
+  const bats = useStore((s) => s.bonsATirer ?? []);
   const achats = useStore((s) => s.achats.filter((a) => a.ofId === id));
   const fournisseurs = useStore((s) => s.fournisseurs);
   const entrees = useStore((s) => s.entrees);
@@ -62,6 +80,8 @@ export default function OrdreFabricationDetailPage() {
     supprimerSortieOf,
     ajouterFraisOf,
     supprimerFraisOf,
+    ajouterMainOeuvreOf,
+    supprimerMainOeuvreOf,
     enregistrerEntreeProductionOf,
     cloturerOrdreFabrication,
     annulerOrdreFabrication,
@@ -70,6 +90,8 @@ export default function OrdreFabricationDetailPage() {
   const { visibles, rattache } = useSitesVisibles();
   const tousSites = useStore((s) => s.pointsDeVente);
   const magasins = sitesMagasin(tousSites);
+  const ateliers = tousSites.filter((s) => s.actif && siteEstAtelier(s) && rattache(s.id));
+  const lignesMod = of ? lignesMainOeuvre(of) : [];
 
   const [clotureOpen, setClotureOpen] = useState(false);
   const [da, setDa] = useState<{ composantId: string; manquant: number } | null>(null);
@@ -98,8 +120,10 @@ export default function OrdreFabricationDetailPage() {
   const depassements = depassementNomenclature(of);
 
   function lancer() {
-    const res = demarrerOrdreFabrication(of!.id);
-    if (!res.ok) alert(res.reason);
+    const premier = demarrerOrdreFabrication(of!.id);
+    resoudreDemarrageOf(premier, () =>
+      demarrerOrdreFabrication(of!.id, { derogationBat: true }),
+    );
   }
 
   function annuler() {
@@ -132,6 +156,22 @@ export default function OrdreFabricationDetailPage() {
           <Link href="/commandes/liste" className="badge badge-sea">
             Commande {commande.numero}
           </Link>
+        )}
+        {commande && (
+          <Link href="/commandes/bat" className={`badge ${commandeABatValide(bats, commande.id) ? "badge-success" : "badge-sand"}`}>
+            BAT{" "}
+            {commandeABatValide(bats, commande.id)
+              ? "validé"
+              : batCourant(bats, commande.id)
+                ? BAT_STATUTS[batCourant(bats, commande.id)!.statut]
+                : "manquant"}
+          </Link>
+        )}
+        {of.derogationBat && (
+          <span className="badge badge-sand" title={of.derogationBatUserNom}>
+            Dérogation BAT
+            {of.derogationBatUserNom ? ` · ${of.derogationBatUserNom}` : ""}
+          </span>
         )}
         {of.statut === "cloture_annule" && (
           <span className="text-xs text-muted">Contre-mouvement enregistré — rien n&apos;a été supprimé.</span>
@@ -183,6 +223,14 @@ export default function OrdreFabricationDetailPage() {
             {of.dateClotureReelle ? formatDateTime(of.dateClotureReelle) : "—"}
           </p>
         </div>
+        {brouillon && motifBatOfManquant(of, bats) && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {motifBatOfManquant(of, bats)}{" "}
+            <Link href="/commandes/bat" className="underline">
+              Ouvrir les BAT
+            </Link>
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           {brouillon && (
             <button type="button" className="btn btn-primary" onClick={lancer}>
@@ -230,7 +278,8 @@ export default function OrdreFabricationDetailPage() {
           {formatCurrency(pot.total)}
         </p>
         <p className="text-xs text-muted">
-          Matières {formatCurrency(pot.totalSorties)} + frais {formatCurrency(pot.totalFrais)} depuis
+          Matières {formatCurrency(pot.totalSorties)} + frais{" "}
+          {formatCurrency(pot.totalFrais)} + MOD {formatCurrency(pot.totalMod)} depuis
           la dernière entrée de production. Produit : {formatNumber(produite)} /{" "}
           {formatNumber(of.quantitePrevue)}.
         </p>
@@ -260,7 +309,9 @@ export default function OrdreFabricationDetailPage() {
                 natureStockDuProduit(p) !== "fini",
             )}
             sites={tousSites.filter((s) => s.actif && rattache(s.id))}
+            ateliers={ateliers}
             defaultSite={of.atelierId}
+            defaultAtelier={of.atelierId}
             onAjouter={(data) => {
               const res = ajouterSortieOf(of.id, data);
               if (!res.ok) alert(res.reason);
@@ -401,9 +452,64 @@ export default function OrdreFabricationDetailPage() {
       </section>
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+        <h2 className="mb-3 font-display text-lg font-semibold">
+          Main d&apos;œuvre directe (MOD)
+        </h2>
+        <p className="mb-3 text-xs text-muted">
+          Coût = temps passé × taux horaire de l&apos;atelier, figé à la saisie.
+          Un OF multi-ateliers additionne les lignes.
+        </p>
+        {enCours && (
+          <FormMainOeuvre
+            ateliers={ateliers}
+            defaultAtelier={of.atelierId}
+            onAjouter={(data) => {
+              const res = ajouterMainOeuvreOf(of.id, data);
+              if (!res.ok) alert(res.reason);
+            }}
+          />
+        )}
+        <ul className="mt-3 space-y-1 text-sm">
+          {lignesMod.length === 0 && <li className="text-muted">Aucune saisie MOD.</li>}
+          {lignesMod.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center justify-between gap-2 border-b border-line/50 py-1"
+            >
+              <span>
+                {formatDate(m.date)} — {nomSite(m.atelierId)} —{" "}
+                {formatNumber(m.heures, 2)} h × {formatCurrency(m.tauxHoraire)}
+                {" = "}
+                {formatCurrency(m.montant)}
+                {m.tauxHoraire <= 0 ? (
+                  <span className="ml-2 inline-flex items-center gap-1 text-amber-800">
+                    <PastilleCompteManquant />
+                    taux à 0
+                  </span>
+                ) : null}
+                {m.affecteEntreeId ? " · affecté" : ""}
+              </span>
+              {enCours && !m.affecteEntreeId && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    const res = supprimerMainOeuvreOf(of.id, m.id);
+                    if (!res.ok) alert(res.reason);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">Entrées de production</h2>
         <p className="mb-3 text-xs text-muted">
-          Coût unitaire = pot de coûts non affectés ÷ quantité de l&apos;entrée. Une ou plusieurs
+          Coût unitaire = pot de coûts non affectés (matières + frais + MOD) ÷ quantité de l&apos;entrée. Une ou plusieurs
           entrées, sans configuration. Une fois validée, l&apos;entrée est figée et le CUMP de
           l&apos;atelier est recalculé.
         </p>
@@ -664,23 +770,39 @@ function NomenclatureOf({
 function FormSortie({
   composants,
   sites,
+  ateliers,
   defaultSite,
+  defaultAtelier,
   onAjouter,
 }: {
   composants: { id: string; code: string; libelleCourt: string; libelleLong: string }[];
-  sites: { id: string; nom: string }[];
+  sites: PointDeVente[];
+  ateliers: PointDeVente[];
   defaultSite: string;
+  defaultAtelier: string;
   onAjouter: (data: {
     date: string;
     composantId: string;
     siteSourceId: string;
     quantite: number;
+    heures?: number;
+    atelierIdMod?: string;
   }) => void;
 }) {
   const [composantId, setComposantId] = useState(composants[0]?.id ?? "");
   const [siteSourceId, setSiteSourceId] = useState(defaultSite);
   const [quantite, setQuantite] = useState("1");
+  const [heures, setHeures] = useState("");
+  const [atelierId, setAtelierId] = useState(defaultAtelier);
   const [date, setDate] = useState(jourLocalISO());
+
+  const siteSource = sites.find((s) => s.id === siteSourceId);
+  const atelierEffectifId =
+    siteSource && siteEstAtelier(siteSource) ? siteSourceId : atelierId;
+  const atelier = ateliers.find((s) => s.id === atelierEffectifId);
+  const taux = tauxHoraireModAtelier(atelier);
+  const heuresNum = Number(heures) || 0;
+  const manqueTaux = heuresNum > 0 && atelierSansTauxMod(atelier);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -690,6 +812,8 @@ function FormSortie({
       composantId,
       siteSourceId,
       quantite: Number(quantite) || 0,
+      heures: heuresNum > 0 ? heuresNum : undefined,
+      atelierIdMod: heuresNum > 0 ? atelierEffectifId : undefined,
     });
   }
 
@@ -730,11 +854,141 @@ function FormSortie({
           onChange={(e) => setQuantite(e.target.value)}
         />
       </label>
+      <label className="text-xs font-semibold text-muted">
+        Temps atelier (h)
+        <input
+          type="number"
+          min={0}
+          step="0.25"
+          className="input mt-1 w-28"
+          value={heures}
+          onChange={(e) => setHeures(e.target.value)}
+          placeholder="0"
+        />
+      </label>
+      {!(siteSource && siteEstAtelier(siteSource)) && ateliers.length > 1 && (
+        <label className="text-xs font-semibold text-muted">
+          Atelier MOD
+          <select
+            className="select mt-1"
+            value={atelierId}
+            onChange={(e) => setAtelierId(e.target.value)}
+          >
+            {ateliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {heuresNum > 0 && (
+        <p className="text-xs text-muted">
+          MOD {formatCurrency(coutMod(heuresNum, taux))}
+          {manqueTaux ? (
+            <span className="ml-1 inline-flex items-center gap-1 text-amber-800">
+              <PastilleCompteManquant />
+              taux à 0
+            </span>
+          ) : null}
+        </p>
+      )}
+      {manqueTaux && <AvertissementTauxMod />}
       <button type="submit" className="btn btn-secondary">
         <Plus className="h-4 w-4" />
         Sortir
       </button>
     </form>
+  );
+}
+
+function FormMainOeuvre({
+  ateliers,
+  defaultAtelier,
+  onAjouter,
+}: {
+  ateliers: PointDeVente[];
+  defaultAtelier: string;
+  onAjouter: (data: { date: string; atelierId: string; heures: number }) => void;
+}) {
+  const [date, setDate] = useState(jourLocalISO());
+  const [atelierId, setAtelierId] = useState(defaultAtelier || ateliers[0]?.id || "");
+  const [heures, setHeures] = useState("1");
+  const atelier = ateliers.find((s) => s.id === atelierId);
+  const taux = tauxHoraireModAtelier(atelier);
+  const heuresNum = Number(heures) || 0;
+  const manqueTaux = atelierSansTauxMod(atelier);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!atelierId) return;
+    onAjouter({
+      date: isoMidiDepuisJour(date),
+      atelierId,
+      heures: heuresNum,
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-muted">
+          Date
+          <input
+            type="date"
+            className="input mt-1"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Atelier
+          <select
+            className="select mt-1"
+            value={atelierId}
+            onChange={(e) => setAtelierId(e.target.value)}
+          >
+            {ateliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Temps passé (h)
+          <input
+            type="number"
+            min={0}
+            step="0.25"
+            className="input mt-1 w-28"
+            value={heures}
+            onChange={(e) => setHeures(e.target.value)}
+          />
+        </label>
+        <p className="text-xs text-muted">
+          Taux {formatCurrency(taux)} / h → {formatCurrency(coutMod(heuresNum, taux))}
+        </p>
+        <button type="submit" className="btn btn-secondary">
+          <Plus className="h-4 w-4" />
+          Ajouter
+        </button>
+      </div>
+      {manqueTaux && <AvertissementTauxMod />}
+    </form>
+  );
+}
+
+function AvertissementTauxMod() {
+  return (
+    <p className="flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:col-span-2">
+      <PastilleCompteManquant className="mt-0.5" />
+      <span>
+        Taux horaire MOD non renseigné pour cet atelier : le coût sera à 0.
+        Renseignez-le dans Paramètres → Fabrication. La saisie n&apos;est pas
+        bloquée.
+      </span>
+    </p>
   );
 }
 

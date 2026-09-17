@@ -135,6 +135,7 @@ export function RemiseLigneSaisie({
 export function PrixUnitaireLigneSaisie({
   ligne,
   onChange,
+  suffixe,
 }: {
   ligne: Pick<
     LigneDocument,
@@ -144,8 +145,12 @@ export function PrixUnitaireLigneSaisie({
     | "remiseMode"
     | "remisePercent"
     | "remiseMontant"
+    | "venduAuM2"
+    | "largeurM"
+    | "hauteurM"
   >;
   onChange: (prixUnitaire: number) => void;
+  suffixe?: string;
 }) {
   const remise = montantRemiseLigne(ligne);
   return (
@@ -158,6 +163,9 @@ export function PrixUnitaireLigneSaisie({
         onChange={(e) => onChange(Number(e.target.value) || 0)}
         aria-label="Prix unitaire HT d'origine"
       />
+      {suffixe && (
+        <p className="text-[10px] leading-tight text-muted">{suffixe}</p>
+      )}
       {remise > 0 && (
         <p className="text-[10px] leading-tight text-muted">
           Après remise : {formatCurrency(prixUnitaireNetHT(ligne))}

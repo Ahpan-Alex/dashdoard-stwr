@@ -1,0 +1,200 @@
+"use client";
+
+import { DashboardSubnav } from "@/components/dashboard-subnav";
+import { IndicateurInfo } from "@/components/indicateur-info";
+import { PageHeader } from "@/components/page-header";
+import { RequirePermission } from "@/components/require-permission";
+import { rangeDepuisFiltres, useDashboardFiltres } from "@/lib/dashboard-filtres";
+import {
+  rotationMatieresPremieres,
+  topMatieresRupture,
+  valorisationStockParNatureEtSite,
+} from "@/lib/dashboard-indicateurs";
+import { formatCurrency, formatNumber } from "@/lib/format";
+import { useStore } from "@/lib/store";
+
+export default function DashboardStockPage() {
+  return (
+    <RequirePermission permission="produits.lire">
+      <DashboardStockContent />
+    </RequirePermission>
+  );
+}
+
+function DashboardStockContent() {
+  const debut = useDashboardFiltres((s) => s.debut);
+  const fin = useDashboardFiltres((s) => s.fin);
+  const range = rangeDepuisFiltres(debut, fin);
+  const {
+    produits,
+    entrees,
+    ventes,
+    pointsDeVente,
+    pointDeVenteActifId,
+    inventaires,
+    ordresFabrication,
+    achats,
+  } = useStore();
+
+  const valo = valorisationStockParNatureEtSite(
+    produits,
+    entrees,
+    ventes,
+    pointsDeVente,
+    pointDeVenteActifId,
+    inventaires,
+  );
+  const rotation = rotationMatieresPremieres(
+    produits,
+    ordresFabrication,
+    entrees,
+    ventes,
+    pointsDeVente,
+    pointDeVenteActifId,
+    range,
+    inventaires,
+  ).slice(0, 12);
+  const top = topMatieresRupture(
+    produits,
+    ordresFabrication,
+    achats,
+    entrees,
+    ventes,
+    pointsDeVente,
+    pointDeVenteActifId,
+    inventaires,
+  );
+
+  return (
+    <div>
+      <PageHeader
+        title="Dashboard — Stock"
+        description="Valorisation, rotation des matières premières et matières qui bloquent la production."
+      />
+      <DashboardSubnav />
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+            Valorisation par nature
+            <IndicateurInfo>
+              Stock actuel valorisé au CUMP, regroupé par nature d&apos;article
+              (matière première, semi-fini, fini). Même moteur que le module
+              Stock.
+            </IndicateurInfo>
+          </h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {valo.parNature.length === 0 ? (
+              <li className="text-muted">Stock vide.</li>
+            ) : (
+              valo.parNature.map((l) => (
+                <li key={l.nom} className="flex justify-between">
+                  <span>{l.nom}</span>
+                  <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+        <div className="rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+            Valorisation par site
+            <IndicateurInfo>
+              Même valorisation CUMP, ventilée par site (filtre site en
+              en-tête).
+            </IndicateurInfo>
+          </h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {valo.parSite.length === 0 ? (
+              <li className="text-muted">Stock vide.</li>
+            ) : (
+              valo.parSite.map((l) => (
+                <li key={l.nom} className="flex justify-between">
+                  <span>{l.nom}</span>
+                  <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </div>
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <div className="table-shell">
+          <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+            Rotation matières premières
+            <IndicateurInfo>
+              Sorties OF de la période ÷ stock actuel (proxy : pas d&apos;historique
+              de stock moyen quotidien).
+            </IndicateurInfo>
+          </p>
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Article</th>
+                <th>Sorties</th>
+                <th>Stock</th>
+                <th>Rotation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rotation.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-muted">
+                    Pas de mouvement matière.
+                  </td>
+                </tr>
+              ) : (
+                rotation.map((l) => (
+                  <tr key={l.produitId}>
+                    <td>{l.nom}</td>
+                    <td>{formatNumber(l.sorties)}</td>
+                    <td>{formatNumber(l.stock)}</td>
+                    <td>
+                      {l.rotation == null ? "—" : formatNumber(l.rotation, 2)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-shell">
+          <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+            Top matières en rupture / blocage
+            <IndicateurInfo>
+              Stock ≤ seuil de rupture de la fiche + demandes d&apos;achat
+              générées depuis un OF (composant manquant).
+            </IndicateurInfo>
+          </p>
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Article</th>
+                <th>Ruptures</th>
+                <th>DA depuis OF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {top.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="text-muted">
+                    Aucun signal de rupture.
+                  </td>
+                </tr>
+              ) : (
+                top.map((l) => (
+                  <tr key={l.produitId}>
+                    <td>{l.nom}</td>
+                    <td>{l.ruptures}</td>
+                    <td>{l.daOf}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -19,6 +19,7 @@ import { nomenclatureParType } from "@/lib/nomenclature";
 import { libelleProduit } from "@/lib/produits";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
+import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
 import type { OrdreFabricationStatut, TypeNomenclature } from "@/lib/types";
 
 function badgeOf(statut: OrdreFabricationStatut) {
@@ -30,7 +31,7 @@ function badgeOf(statut: OrdreFabricationStatut) {
 
 export default function FabricationPage() {
   const router = useRouter();
-  const { ordresFabrication, produits, commandes, creerOrdreFabrication } = useStore();
+  const { ordresFabrication, produits, commandes, creerOrdreFabrication, bonsATirer } = useStore();
   const { visibles, rattache, actif } = useSitesVisibles();
   const ateliers = ateliersVisibles(visibles, rattache);
   const [creer, setCreer] = useState(false);
@@ -109,6 +110,7 @@ export default function FabricationPage() {
                 <th>Qté prévue</th>
                 <th>Produite</th>
                 <th>Commande</th>
+                <th>BAT</th>
                 <th>Statut</th>
                 <th>Créé</th>
               </tr>
@@ -128,7 +130,31 @@ export default function FabricationPage() {
                     <td>{p ? `${p.code} — ${libelleProduit(p)}` : "—"}</td>
                     <td>{formatNumber(o.quantitePrevue)}</td>
                     <td>{formatNumber(quantiteProduite(o))}</td>
-                    <td>{cmd?.numero ?? "—"}</td>
+                    <td>
+                      {cmd?.numero ?? "—"}
+                      {o.derogationBat && (
+                        <span className="badge badge-sand ml-1">Dérog. BAT</span>
+                      )}
+                    </td>
+                    <td>
+                      {cmd ? (
+                        <span
+                          className={`badge ${
+                            commandeABatValide(bonsATirer ?? [], cmd.id)
+                              ? "badge-success"
+                              : badgeBat(batCourant(bonsATirer ?? [], cmd.id)?.statut ?? "en_attente")
+                          }`}
+                        >
+                          {commandeABatValide(bonsATirer ?? [], cmd.id)
+                            ? "Validé"
+                            : batCourant(bonsATirer ?? [], cmd.id)
+                              ? BAT_STATUTS[batCourant(bonsATirer ?? [], cmd.id)!.statut]
+                              : "Aucun"}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${badgeOf(o.statut)}`}>
                         {OF_STATUT_LABELS[o.statut]}
@@ -207,7 +233,7 @@ function FormulaireOf({
       {ateliers.length === 0 && (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">
           Aucun atelier rattaché. Créez un site de type Atelier ou Atelier final dans
-          Paramétrage → Sites.
+          Paramètres → Fabrication ou Général → Points de vente.
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">

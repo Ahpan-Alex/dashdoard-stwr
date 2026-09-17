@@ -50,7 +50,6 @@ export default function MargePage() {
   const {
     ventes,
     entrees,
-    charges,
     produits,
     pointDeVenteActifId,
     inventaires,
@@ -91,13 +90,12 @@ export default function MargePage() {
       syntheseBenefices(
         ventes,
         entrees,
-        charges,
         produits,
         pointDeVenteActifId,
         range,
         inventaires,
       ),
-    [ventes, entrees, charges, produits, pointDeVenteActifId, range, inventaires],
+    [ventes, entrees, produits, pointDeVenteActifId, range, inventaires],
   );
 
   const serieMode =
@@ -213,18 +211,13 @@ export default function MargePage() {
           value={formatCurrency(synthese.coutAchat)}
         />
         <StatCard
-          label="Bénéfice"
+          label="Marge brute"
           value={formatCurrency(synthese.benefice)}
           hint={
             synthese.ca > 0
               ? `${formatPercent(tauxBenefice)} du CA`
               : undefined
           }
-        />
-        <StatCard
-          label="Bénéfice net"
-          value={formatCurrency(synthese.beneficeNet)}
-          hint={`Après charges (${formatCurrency(synthese.charges)})`}
         />
       </div>
 
@@ -451,7 +444,7 @@ export default function MargePage() {
                     {formatCurrency(synthese.benefice)}
                   </TdCol>
                   <TdCol id="part" show={visible} className="text-xs font-normal text-muted">
-                    Net : {formatCurrency(synthese.beneficeNet)}
+                    100 %
                   </TdCol>
                 </tr>
               </>

@@ -62,6 +62,7 @@ import {
 import { useStore } from "@/lib/store";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
+import { validiteJoursDefautAchats } from "@/lib/validite-document";
 import type {
   Achat,
   AchatLigne,
@@ -113,6 +114,7 @@ function AchatsListe() {
   } = useStore();
   const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const moduleCompta = moduleComptabiliteActif(parametres);
+  const validiteDefaut = validiteJoursDefautAchats(parametres);
 
   useEffect(() => {
     if (moduleCompta) assurerComptesComptablesDefaut();
@@ -131,7 +133,7 @@ function AchatsListe() {
     pointDeVenteId: "",
     date: AUJOURD_HUI,
     echeance: "",
-    validiteJours: "15",
+    validiteJours: String(validiteDefaut),
     numeroFactureFournisseur: "",
     produitRefId: "",
   });

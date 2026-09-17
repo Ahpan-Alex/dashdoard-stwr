@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { ParametresSubnav } from "@/components/parametres-subnav";
+import { ComptabiliteSubnav } from "@/components/comptabilite-subnav";
 import { useStore } from "@/lib/store";
 
 export default function ParametresBilanInitialPage() {
@@ -70,7 +70,7 @@ export default function ParametresBilanInitialPage() {
           </div>
         }
       />
-      <ParametresSubnav />
+      <ComptabiliteSubnav />
 
       <section className="rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="font-display text-lg font-semibold">

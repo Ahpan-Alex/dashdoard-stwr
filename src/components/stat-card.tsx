@@ -4,6 +4,7 @@ type Props = {
   label: string;
   value: string;
   hint?: string;
+  info?: ReactNode;
   icon?: ReactNode;
   trend?: { value: string; positive?: boolean };
   className?: string;
@@ -13,6 +14,7 @@ export function StatCard({
   label,
   value,
   hint,
+  info,
   icon,
   trend,
   className = "",
@@ -23,8 +25,9 @@ export function StatCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
             {label}
+            {info}
           </p>
           <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-ink">
             {value}

@@ -24,8 +24,6 @@ export type Permission =
   | "commercial.gerer"
   | "achats.lire"
   | "achats.gerer"
-  | "charges.lire"
-  | "charges.gerer"
   | "rentabilite.lire"
   | "parametres.lire"
   | "parametres.gerer"
@@ -35,6 +33,7 @@ export type Permission =
   | "securite.gerer"
   | "sites.vue_globale"
   | "ventes.deroger_credit"
+  | "fabrication.deroger_bat"
   | "comptabilite.lire"
   | "comptabilite.gerer"
   | "missions.lire"
@@ -83,8 +82,6 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "commercial.gerer",
     "achats.lire",
     "achats.gerer",
-    "charges.lire",
-    "charges.gerer",
     "rentabilite.lire",
     "parametres.lire",
     "parametres.gerer",
@@ -94,6 +91,7 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "securite.gerer",
     "sites.vue_globale",
     "ventes.deroger_credit",
+    "fabrication.deroger_bat",
     "comptabilite.lire",
     "comptabilite.gerer",
     "missions.lire",
@@ -113,13 +111,12 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "commercial.lire",
     "achats.lire",
     "achats.gerer",
-    "charges.lire",
-    "charges.gerer",
     "rentabilite.lire",
     "parametres.lire",
     "audit.lire",
     "sites.vue_globale",
     "ventes.deroger_credit",
+    "fabrication.deroger_bat",
     "comptabilite.lire",
     "comptabilite.gerer",
     "missions.lire",
@@ -167,7 +164,6 @@ export const ROLE_PERMISSIONS: Record<RoleId, Permission[]> = {
     "clients.lire",
     "commercial.lire",
     "achats.lire",
-    "charges.lire",
     "rentabilite.lire",
     "parametres.lire",
     "audit.lire",
@@ -191,8 +187,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "commercial.gerer": "Commercial — gestion",
   "achats.lire": "Achats — lecture",
   "achats.gerer": "Achats — gestion",
-  "charges.lire": "Charges — lecture",
-  "charges.gerer": "Charges — gestion",
   "rentabilite.lire": "Rentabilité — lecture",
   "parametres.lire": "Paramètres — lecture",
   "parametres.gerer": "Paramètres — gestion",
@@ -202,6 +196,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "securite.gerer": "Sécurité — gestion",
   "sites.vue_globale": "Sites — vue globale (tous les stocks)",
   "ventes.deroger_credit": "Ventes — dérogation au plafond de crédit",
+  "fabrication.deroger_bat": "Fabrication — dérogation BAT (démarrer sans BAT validé)",
   "comptabilite.lire": "Comptabilité — lecture",
   "comptabilite.gerer": "Comptabilité — plan et écritures",
   "missions.lire": "Missions d'achat — lecture",

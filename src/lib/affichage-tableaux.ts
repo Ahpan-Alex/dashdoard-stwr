@@ -12,7 +12,6 @@ export type TableAffichageId =
   | "clients"
   | "fournisseurs"
   | "stocks"
-  | "charges"
   | "inventaires"
   | "compte_courant"
   | "journal_factures"
@@ -194,19 +193,6 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("restant", "Restant", 22, true),
       col("valeurAchat", "Valeur achat", 26),
       col("valeurVente", "Valeur vente", 26),
-    ],
-  },
-  {
-    id: "charges",
-    label: "Charges",
-    colonnes: [
-      col("date", "Date", 22),
-      col("libelle", "Libellé", 40, true),
-      col("categorie", "Catégorie", 26),
-      col("nature", "Nature", 28),
-      col("pointDeVente", "Point de vente", 30),
-      col("type", "Type", 20),
-      col("montant", "Montant", 26, true),
     ],
   },
   {

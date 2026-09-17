@@ -145,6 +145,9 @@ export default function ParametresModelesPage() {
       mentionsLegales:
         modelesDocuments.find((m) => m.type === nouveauType)?.mentionsLegales ?? "",
       piedDePage: "Merci de votre confiance",
+      piedDePageAlignement: "centre",
+      piedDePageLigne: "aucune",
+      afficherMentionTvaImmatriculation: true,
       actif: false,
       createur: "personnalisé",
       ownerUserId: userId,
@@ -162,6 +165,9 @@ export default function ParametresModelesPage() {
       rubriques: [...m.rubriques],
       mentionsLegales: m.mentionsLegales,
       piedDePage: m.piedDePage,
+      piedDePageAlignement: m.piedDePageAlignement,
+      piedDePageLigne: m.piedDePageLigne,
+      afficherMentionTvaImmatriculation: m.afficherMentionTvaImmatriculation,
       actif: false,
       createur: "personnalisé",
       ownerUserId: userId,
@@ -429,6 +435,9 @@ function ModeleEditor({
       nom: draft.nom,
       mentionsLegales: draft.mentionsLegales,
       piedDePage: draft.piedDePage,
+      piedDePageAlignement: draft.piedDePageAlignement,
+      piedDePageLigne: draft.piedDePageLigne,
+      afficherMentionTvaImmatriculation: draft.afficherMentionTvaImmatriculation,
       nomFichierExport: draft.nomFichierExport,
       zones: ensureZones(draft),
     });
@@ -944,6 +953,16 @@ function ModeleEditor({
                 }
               />
             </Field>
+            <Toggle
+              label="Afficher la mention TVA / immatriculation fournisseur (NIF, STAT)"
+              checked={draft.afficherMentionTvaImmatriculation !== false}
+              onChange={(v) =>
+                setDraft((d) => ({
+                  ...d,
+                  afficherMentionTvaImmatriculation: v,
+                }))
+              }
+            />
             <Field label="Pied de page">
               <input
                 className="input"
@@ -953,6 +972,48 @@ function ModeleEditor({
                 }
               />
             </Field>
+            <Field label="Alignement du pied de page">
+              <select
+                className="select"
+                value={draft.piedDePageAlignement ?? "centre"}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    piedDePageAlignement: e.target.value as
+                      | "gauche"
+                      | "centre"
+                      | "droite",
+                  }))
+                }
+              >
+                <option value="gauche">Gauche</option>
+                <option value="centre">Centré</option>
+                <option value="droite">Droite</option>
+              </select>
+            </Field>
+            <Field label="Ligne de séparation au-dessus du pied">
+              <select
+                className="select"
+                value={draft.piedDePageLigne ?? "aucune"}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    piedDePageLigne: e.target.value as
+                      | "aucune"
+                      | "pleine"
+                      | "centree",
+                  }))
+                }
+              >
+                <option value="aucune">Aucune</option>
+                <option value="pleine">Ligne pleine largeur (bord à bord)</option>
+                <option value="centree">Ligne centrée (largeur partielle)</option>
+              </select>
+            </Field>
+            <p className="text-[11px] text-muted">
+              Le pied de page reste fixé en bas de la dernière page. La signature
+              et la mention TVA se placent au-dessus.
+            </p>
           </Section>
         </div>
 

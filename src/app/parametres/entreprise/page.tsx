@@ -243,7 +243,7 @@ export default function ParametresEntreprisePage() {
   return (
     <div>
       <PageHeader
-        title="Entreprise & fiscalité"
+        title="Infos Entreprise / Fiscalité"
         description="Identité légale et fiscale malagasy de l'entreprise."
         showPosSelector={false}
         actions={

@@ -1,4 +1,5 @@
 import { formatDate } from "./format";
+import type { Parametres } from "./types";
 
 export const VALIDITE_JOURS_DEFAUT = 15;
 
@@ -9,6 +10,15 @@ export function normaliserValiditeJours(
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 1) return defaut;
   return Math.min(3650, Math.floor(n));
+}
+
+export function validiteJoursDefautAchats(
+  parametres?: Pick<Parametres, "validiteJoursDefautAchats"> | null,
+) {
+  return normaliserValiditeJours(
+    parametres?.validiteJoursDefautAchats,
+    VALIDITE_JOURS_DEFAUT,
+  );
 }
 
 export function dateFinValidite(dateIso: string, jours: number) {

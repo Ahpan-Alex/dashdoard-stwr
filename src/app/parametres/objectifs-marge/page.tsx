@@ -18,7 +18,6 @@ export default function ObjectifsMargePage() {
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const ventes = useStore((s) => s.ventes);
   const entrees = useStore((s) => s.entrees);
-  const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
   const updatePointDeVente = useStore((s) => s.updatePointDeVente);
@@ -50,7 +49,7 @@ export default function ObjectifsMargePage() {
   return (
     <div>
       <PageHeader
-        title="Objectifs de marge"
+        title="Objectif de marge"
         description="Définissez les objectifs de marge brute (CA − coût d'achat) mensuels et annuels pour chaque point de vente."
         showPosSelector={false}
         actions={
@@ -105,7 +104,6 @@ export default function ObjectifsMargePage() {
             const margeMois = syntheseBenefices(
               ventes,
               entrees,
-              charges,
               produits,
               pdv.id,
               mois,
@@ -114,7 +112,6 @@ export default function ObjectifsMargePage() {
             const margeAnnee = syntheseBenefices(
               ventes,
               entrees,
-              charges,
               produits,
               pdv.id,
               annee,

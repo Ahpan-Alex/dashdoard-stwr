@@ -15,6 +15,7 @@ import { produitEstAchetable } from "@/lib/nature-stock";
 import { TIERS_DIVERS_MARCHE_ID } from "@/lib/missions";
 import { assurerTiers, estFournisseur } from "@/lib/tiers";
 import { useStore } from "@/lib/store";
+import { validiteJoursDefautAchats, normaliserValiditeJours } from "@/lib/validite-document";
 import type { DemandePrixStatut } from "@/lib/types";
 
 function badgeDp(statut: DemandePrixStatut) {
@@ -203,6 +204,8 @@ function FormulaireDp({
   }) => void;
 }) {
   const produits = useStore((s) => s.produits);
+  const parametres = useStore((s) => s.parametres);
+  const validiteDefaut = validiteJoursDefautAchats(parametres);
   const categoriesProduits = useStore((s) => s.categoriesProduits);
   const articles = useMemo(
     () =>
@@ -212,7 +215,7 @@ function FormulaireDp({
     [produits, categoriesProduits],
   );
   const [date, setDate] = useState(jourLocalISO());
-  const [validiteJours, setValiditeJours] = useState("15");
+  const [validiteJours, setValiditeJours] = useState(String(validiteDefaut));
   const [lignes, setLignes] = useState([{ produitId: "", quantite: "1" }]);
   const [frns, setFrns] = useState<string[]>([]);
   const [rechercheFrn, setRechercheFrn] = useState("");
@@ -239,7 +242,7 @@ function FormulaireDp({
         .filter((l) => l.produitId)
         .map((l) => ({ produitId: l.produitId, quantite: Number(l.quantite) || 0 })),
       fournisseurIds: frns,
-      validiteJours: Number(validiteJours) || 15,
+      validiteJours: normaliserValiditeJours(validiteJours, validiteDefaut),
     });
   }
 

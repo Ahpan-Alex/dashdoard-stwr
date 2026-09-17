@@ -1,4 +1,8 @@
-/** Impression / PDF d'une feuille commerciale à l'identique de l'aperçu écran. */
+import {
+  ancrerPiedDernierePage,
+  HAUTEUR_PAGE_A4_MM,
+  HAUTEUR_PAGE_A4_PAYSAGE_MM,
+} from "./document-mise-en-page";
 
 export type OrientationDocument = "portrait" | "landscape";
 
@@ -128,8 +132,18 @@ ${collectHeadHtml()}
     margin: 0 !important;
     max-width: ${pageW} !important;
     width: ${pageW} !important;
+    min-height: ${pageH} !important;
     box-sizing: border-box !important;
     overflow-x: hidden !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .document-preview-footer {
+    position: absolute !important;
+    left: 12mm !important;
+    right: 12mm !important;
+    bottom: 12mm !important;
   }
   .document-preview-sheet table.data {
     table-layout: fixed !important;
@@ -158,6 +172,13 @@ ${collectHeadHtml()}
 
   try {
     await attendreRessources(idoc);
+    const printed = idoc.querySelector(".document-preview-sheet");
+    if (printed instanceof HTMLElement) {
+      ancrerPiedDernierePage(
+        printed,
+        paysage ? HAUTEUR_PAGE_A4_PAYSAGE_MM : HAUTEUR_PAGE_A4_MM,
+      );
+    }
     await new Promise((r) => window.setTimeout(r, 80));
     iwin.focus();
     iwin.print();

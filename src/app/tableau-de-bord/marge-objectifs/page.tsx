@@ -32,7 +32,6 @@ type Horizon = "mois" | "annee";
 export default function MargeObjectifsPage() {
   const ventes = useStore((s) => s.ventes);
   const entrees = useStore((s) => s.entrees);
-  const charges = useStore((s) => s.charges);
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
@@ -61,7 +60,6 @@ export default function MargeObjectifsPage() {
         const realise = syntheseBenefices(
           ventes,
           entrees,
-          charges,
           produits,
           pdv.id,
           range,
@@ -75,7 +73,7 @@ export default function MargeObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pdvVisibles, ventes, entrees, charges, produits, inventaires, range, horizon],
+    [pdvVisibles, ventes, entrees, produits, inventaires, range, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);

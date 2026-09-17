@@ -46,7 +46,7 @@ export function TableAffichageBarre({ tableId, lignes, fichier, titre }: Props) 
           Exporter
         </button>
         <Link
-          href={`/reglages/affichage?table=${tableId}`}
+          href={`/parametres/affichage?table=${tableId}`}
           className="btn btn-secondary"
         >
           <SlidersHorizontal className="h-4 w-4" />

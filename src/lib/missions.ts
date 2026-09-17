@@ -597,7 +597,20 @@ export function triMissionsSuivi(missions: MissionAchat[]) {
 }
 
 export function depensesValides(lignes: MissionDepenseDiverse[]) {
-  return lignes.filter((d) => d.nature.trim() && d.montant > 0);
+  return lignes.filter(
+    (d) => d.nature.trim() && d.montant > 0 && Boolean(d.fournisseurId?.trim()),
+  );
+}
+
+export function motifDepenseDiverseInvalide(d: MissionDepenseDiverse) {
+  if (!(d.montant > 0) && !d.nature.trim()) return null;
+  if (!d.fournisseurId?.trim()) {
+    return "Chaque dépense diverse doit avoir un fournisseur (fiche Tiers ou Divers / Marché).";
+  }
+  if (d.montant > 0 && !d.nature.trim()) {
+    return "Indiquez la nature de la dépense diverse.";
+  }
+  return null;
 }
 
 export type AnomalieMission = {
@@ -720,6 +733,12 @@ export function motifClotureImpossible(
     !m.clotureExceptionJustificatifs
   ) {
     return "Clôture impossible : des dépenses n'ont pas de justificatif. Un responsable peut autoriser une exception.";
+  }
+  for (const d of m.depensesDiverses) {
+    if (d.montant > 0 || d.nature.trim()) {
+      const motif = motifDepenseDiverseInvalide(d);
+      if (motif) return motif;
+    }
   }
   return null;
 }

@@ -27,7 +27,7 @@ export default function ObjectifsRevenuPage() {
   return (
     <div>
       <PageHeader
-        title="Objectifs de revenu"
+        title="Objectif de revenu"
         description="Définissez les objectifs de chiffre d'affaires mensuel et annuel pour chaque point de vente."
         showPosSelector={false}
         actions={

@@ -69,7 +69,7 @@ export default function ElementsBilanPage() {
     <div>
       <PageHeader
         title="Éléments du bilan"
-        description={`Acquisitions d'immobilisations — ${parametres.nomEntreprise}. Le bilan initial se paramètre dans Paramétrage.`}
+        description={`Acquisitions d'immobilisations — ${parametres.nomEntreprise}. Le bilan initial se paramètre dans Comptabilité.`}
         showPosSelector={false}
         actions={
           <div className="flex gap-2">

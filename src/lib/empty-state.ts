@@ -7,6 +7,10 @@ import { ficheTiersDiversMarche } from "./missions";
 import { seedCategoriesProduits } from "./produits";
 import { fusionnerUnitesMesure, seedUnitesMesure } from "./unites-mesure";
 import { fusionnerTypesClients, seedTypesClients } from "./types-clients";
+import {
+  fusionnerNaturesDepenseMission,
+  seedNaturesDepenseMission,
+} from "./natures-depense-mission";
 import type { AppState } from "./types";
 
 /** État métier vide — plus de données fake côté client. */
@@ -69,12 +73,14 @@ export function emptyAppState(): AppState {
     achats: [],
     transfertsStock: [],
     ordresFabrication: [],
+    bonsATirer: [],
     missionsAchat: [],
     demandesPrix: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
     unitesMesure: seedUnitesMesure(),
     typesClients: seedTypesClients(),
+    naturesDepenseMission: seedNaturesDepenseMission(),
     exercicesComptables: [],
     produits: [],
     tarifsClients: [],
@@ -82,7 +88,6 @@ export function emptyAppState(): AppState {
     journalAudit: [],
     entrees: [],
     ventes: [],
-    charges: [],
     rapportsFinJournee: [],
     inventaires: [],
     journalActivites: [],
@@ -116,6 +121,7 @@ export function pickAppState(state: AppState): AppState {
     achats: state.achats ?? [],
     transfertsStock: state.transfertsStock ?? [],
     ordresFabrication: state.ordresFabrication ?? [],
+    bonsATirer: state.bonsATirer ?? [],
     missionsAchat: state.missionsAchat ?? [],
     demandesPrix: state.demandesPrix ?? [],
     pointsDeVente: state.pointsDeVente,
@@ -128,6 +134,9 @@ export function pickAppState(state: AppState): AppState {
       state.clients ?? [],
       state.tiers ?? [],
     ),
+    naturesDepenseMission: fusionnerNaturesDepenseMission(
+      state.naturesDepenseMission,
+    ),
     exercicesComptables: Array.isArray(state.exercicesComptables)
       ? state.exercicesComptables
       : [],
@@ -137,7 +146,6 @@ export function pickAppState(state: AppState): AppState {
     journalAudit: state.journalAudit,
     entrees: state.entrees,
     ventes: state.ventes,
-    charges: state.charges,
     rapportsFinJournee: state.rapportsFinJournee ?? [],
     inventaires: state.inventaires ?? [],
     journalActivites: state.journalActivites ?? [],

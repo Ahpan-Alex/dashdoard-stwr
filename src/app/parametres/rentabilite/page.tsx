@@ -31,15 +31,15 @@ export default function ParametresRentabilitePage() {
     <div>
       <PageHeader
         title="Seuils de rentabilité"
-        description="Alertes du tableau de bord à 2 paliers (taux de marge minimum)."
+        description="Alertes du Dashboard à 2 paliers (taux de marge minimum)."
         showPosSelector={false}
         actions={
           <Link
-            href="/tableau-de-bord/rentabilite"
+            href="/dashboard/ventes"
             className="btn btn-secondary"
           >
             <TrendingUp className="h-4 w-4" />
-            Voir le tableau de bord
+            Voir le Dashboard
           </Link>
         }
       />
@@ -51,7 +51,7 @@ export default function ParametresRentabilitePage() {
         className="max-w-lg rounded-[var(--radius)] border border-line bg-card p-5"
       >
         <label className="block text-xs font-semibold text-muted">
-          Seuil Palier 1 — marge avant autres charges (%)
+          Seuil Palier 1 — marge brute (%)
           <input
             type="number"
             min={0}
@@ -63,12 +63,12 @@ export default function ParametresRentabilitePage() {
           />
         </label>
         <p className="mt-1 text-xs text-muted">
-          Alerte si (CA − CMV − charges variables) / CA &lt; ce seuil.
+          Alerte si (CA HT facturé − CMV) / CA &lt; ce seuil.
           Défaut : 25 %.
         </p>
 
         <label className="mt-4 block text-xs font-semibold text-muted">
-          Seuil Palier 2 — bénéfice après autres charges (%)
+          Seuil Palier 2 — résultat (CA − achats) (%)
           <input
             type="number"
             min={0}
@@ -80,8 +80,9 @@ export default function ParametresRentabilitePage() {
           />
         </label>
         <p className="mt-1 text-xs text-muted">
-          Alerte si résultat net analytique / CA &lt; ce seuil. Une alerte
-          distincte s&apos;affiche si le Palier 2 est négatif. Défaut : 5 %.
+          Alerte si (CA HT facturé − achats HT tous types) / CA &lt; ce
+          seuil. Une alerte distincte s&apos;affiche si le résultat est
+          négatif. Défaut : 5 %.
         </p>
 
         <div className="mt-5 flex items-center gap-3">

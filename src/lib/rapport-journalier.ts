@@ -11,7 +11,6 @@ import {
   type DateRange,
 } from "@/lib/calculations";
 import type {
-  Charge,
   EntreeStock,
   Inventaire,
   Produit,
@@ -116,7 +115,6 @@ function saisiePourJour(
 export function construireRapportsJournaliers(opts: {
   ventes: Vente[];
   entrees: EntreeStock[];
-  charges: Charge[];
   produits: Produit[];
   inventaires?: Inventaire[];
   pointDeVenteId: string | "tous";
@@ -126,7 +124,6 @@ export function construireRapportsJournaliers(opts: {
   const {
     ventes,
     entrees,
-    charges,
     produits,
     inventaires = [],
     pointDeVenteId,
@@ -149,7 +146,6 @@ export function construireRapportsJournaliers(opts: {
       const syn = syntheseBenefices(
         ventes,
         entrees,
-        charges,
         produits,
         pointDeVenteId,
         bucket,

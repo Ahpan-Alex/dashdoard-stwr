@@ -123,9 +123,11 @@ import {
   affecterPotAEntree,
   allouerReliquatSurSorties,
   copierNomenclatureVersOf,
+  coutMod,
   coutsNonAffectes,
   cumpCourantSite,
   etapeValidation,
+  lignesMainOeuvre,
   listerMouvementsBloquantAnnulationOf,
   messageAnnulationRefusee,
   montantEcartCloture,
@@ -137,7 +139,15 @@ import {
   regenererEntreesOf,
   reliquatsMatieres,
   stockDisponibleComposant,
+  tauxHoraireModAtelier,
 } from "./fabrication";
+import {
+  batAFichier,
+  batCourant,
+  motifBatOfManquant,
+  motifCreationBatImpossible,
+  prochaineVersionBat,
+} from "./bat";
 import {
   depensesValides,
   etapeValidationMission,
@@ -146,6 +156,7 @@ import {
   messageAnnulationMissionRefusee,
   missionEstVerrouillee,
   motifClotureImpossible,
+  motifDepenseDiverseInvalide,
   motifLigneMissionInvalide,
   nextNumeroMission,
   peutModifierDossierMission,
@@ -182,6 +193,10 @@ import {
   normalizeCodeTypeClient,
 } from "./types-clients";
 import {
+  motifNatureDepenseInvalide,
+  nbDepensesParNature,
+} from "./natures-depense-mission";
+import {
   bornesExerciceCalendaire,
   codeExerciceCheval,
   motifExerciceInvalide,
@@ -205,7 +220,6 @@ import type {
   BonDeLivraison,
   BonDeLivraisonStatut,
   CategorieProduit,
-  Charge,
   CibleTransformation,
   Client,
   CompteComptable,
@@ -240,6 +254,7 @@ import type {
   TransfertStockLigne,
   TransformationCommerciale,
   TypeClient,
+  NatureDepenseMission,
   UniteMesure,
   Vente,
   OrdreFabrication,
@@ -256,6 +271,7 @@ import type {
   DemandePrixOffre,
   DemandePrixStatut,
   ExerciceComptable,
+  BonATirer,
 } from "./types";
 
 type Store = {
@@ -277,12 +293,14 @@ type Store = {
   achats: Achat[];
   transfertsStock: TransfertStock[];
   ordresFabrication: OrdreFabrication[];
+  bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
   demandesPrix: DemandePrix[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
+  naturesDepenseMission: NatureDepenseMission[];
   exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];
@@ -290,7 +308,6 @@ type Store = {
   journalAudit: JournalAudit[];
   entrees: EntreeStock[];
   ventes: Vente[];
-  charges: Charge[];
   rapportsFinJournee: RapportFinJournee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
@@ -472,7 +489,10 @@ type Store = {
       >
     >,
   ) => { ok: boolean; reason?: string };
-  demarrerOrdreFabrication: (id: string) => { ok: boolean; reason?: string };
+  demarrerOrdreFabrication: (
+    id: string,
+    opts?: { derogationBat?: boolean },
+  ) => { ok: boolean; reason?: string };
   ajouterSortieOf: (
     ofId: string,
     data: {
@@ -480,6 +500,8 @@ type Store = {
       composantId: string;
       siteSourceId: string;
       quantite: number;
+      heures?: number;
+      atelierIdMod?: string;
     },
   ) => { ok: boolean; reason?: string; id?: string };
   supprimerSortieOf: (ofId: string, sortieId: string) => { ok: boolean; reason?: string };
@@ -488,6 +510,14 @@ type Store = {
     data: { date: string; libelle: string; montant: number },
   ) => { ok: boolean; reason?: string };
   supprimerFraisOf: (ofId: string, fraisId: string) => { ok: boolean; reason?: string };
+  ajouterMainOeuvreOf: (
+    ofId: string,
+    data: { date: string; atelierId: string; heures: number },
+  ) => { ok: boolean; reason?: string };
+  supprimerMainOeuvreOf: (
+    ofId: string,
+    ligneId: string,
+  ) => { ok: boolean; reason?: string };
   enregistrerEntreeProductionOf: (
     ofId: string,
     data: { date: string; quantite: number },
@@ -513,6 +543,27 @@ type Store = {
       pointDeVenteId: string;
     },
   ) => { ok: true; achatId: string } | { ok: false; reason: string };
+
+  creerBonATirer: (data: {
+    commandeId: string;
+    fichierNom?: string;
+    fichierMime?: string;
+    fichierDataUrl?: string;
+    commentaire?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  completerFichierBat: (
+    id: string,
+    fichier: { nom: string; mime: string; dataUrl: string },
+  ) => { ok: boolean; reason?: string };
+  enregistrerRetourBat: (
+    id: string,
+    data: {
+      decision: "valide" | "modifications_demandees";
+      validateurNom?: string;
+      commentaire?: string;
+      fichierSuivant?: { nom: string; mime: string; dataUrl: string };
+    },
+  ) => { ok: boolean; reason?: string };
 
   creerMissionAchat: (data: {
     acheteurUserId: string;
@@ -627,10 +678,6 @@ type Store = {
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
 
-  addCharge: (charge: Omit<Charge, "id">) => void;
-  updateCharge: (id: string, data: Partial<Charge>) => void;
-  deleteCharge: (id: string) => void;
-
   /** Crée ou met à jour la clôture du jour pour un PDV. */
   upsertRapportFinJournee: (
     data: Omit<RapportFinJournee, "id" | "updatedAt"> & { id?: string },
@@ -650,6 +697,25 @@ type Store = {
     data: Partial<Pick<UniteMesure, "symbole" | "libelle" | "actif" | "ordre">>,
   ) => { ok: true } | { ok: false; reason: string };
   deleteUniteMesure: (id: string) => { ok: true } | { ok: false; reason: string };
+
+  addNatureDepenseMission: (data: {
+    libelle: string;
+    compteChargeId?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateNatureDepenseMission: (
+    id: string,
+    data: Partial<
+      Pick<NatureDepenseMission, "libelle" | "compteChargeId" | "actif" | "ordre">
+    >,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteNatureDepenseMission: (
+    id: string,
+  ) => { ok: true } | { ok: false; reason: string };
+  reclasseDepenseMission: (
+    missionId: string,
+    depenseId: string,
+    compteId: string,
+  ) => { ok: true } | { ok: false; reason: string };
 
   addTypeClient: (data: {
     code: string;
@@ -986,6 +1052,7 @@ function journalDepuis(state: {
   fournisseurs: Fournisseur[];
   tiers?: Tiers[];
   missionsAchat?: MissionAchat[];
+  naturesDepenseMission?: NatureDepenseMission[];
   ecrituresComptables?: EcritureComptable[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
@@ -998,6 +1065,7 @@ function journalDepuis(state: {
     fournisseurs: state.fournisseurs,
     tiers: state.tiers,
     missionsAchat: state.missionsAchat,
+    naturesDepenseMission: state.naturesDepenseMission,
     existantes: state.ecrituresComptables,
   });
 }
@@ -1013,6 +1081,7 @@ function avecJournal<T extends Record<string, unknown>>(
     fournisseurs: Fournisseur[];
     tiers?: Tiers[];
     missionsAchat?: MissionAchat[];
+    naturesDepenseMission?: NatureDepenseMission[];
     ecrituresComptables?: EcritureComptable[];
   },
   patch: T,
@@ -1260,6 +1329,10 @@ function entreeActivite(
 
 function actorPeutGererMissions() {
   return useAuthStore.getState().hasPermission("missions.gerer");
+}
+
+function actorPeutGererBat() {
+  return useAuthStore.getState().hasPermission("commercial.gerer");
 }
 
 function actorPeutSaisirMission(m: Pick<MissionAchat, "acheteurUserId" | "statut">) {
@@ -1870,7 +1943,6 @@ export const useStore = create<Store>()((set, get) => ({
           bonsDeLivraison: state.bonsDeLivraison,
           entrees: state.entrees,
           ventes: state.ventes,
-          charges: state.charges,
           immobilisations: state.immobilisations,
           rapportsFinJournee: state.rapportsFinJournee,
           achats: state.achats,
@@ -2713,6 +2785,7 @@ export const useStore = create<Store>()((set, get) => ({
           dateCloturePrevue: data.dateCloturePrevue,
           sorties: [],
           frais: [],
+          mainOeuvre: [],
           entreesProduction: [],
           retoursMatieres: [],
           validations: [],
@@ -2785,7 +2858,7 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
-      demarrerOrdreFabrication: (id) => {
+      demarrerOrdreFabrication: (id, opts) => {
         const state = get();
         const prev = state.ordresFabrication.find((o) => o.id === id);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
@@ -2795,13 +2868,35 @@ export const useStore = create<Store>()((set, get) => ({
         if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
           return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
         }
+        const bats = state.bonsATirer ?? [];
+        const motifBat = motifBatOfManquant(prev, bats);
+        if (motifBat && !opts?.derogationBat) {
+          return { ok: false, reason: motifBat };
+        }
+        if (opts?.derogationBat && !useAuthStore.getState().hasPermission("fabrication.deroger_bat")) {
+          return {
+            ok: false,
+            reason: "Vous n'êtes pas habilité à déroger à l'obligation de BAT validé.",
+          };
+        }
         const actor = getActiviteActor();
+        const derogation = Boolean(opts?.derogationBat && motifBat);
         const next: OrdreFabrication = {
           ...prev,
           statut: "en_cours",
+          derogationBat: derogation || prev.derogationBat,
+          derogationBatDate: derogation ? new Date().toISOString() : prev.derogationBatDate,
+          derogationBatUserId: derogation ? actor.id : prev.derogationBatUserId,
+          derogationBatUserNom: derogation ? actor.nom : prev.derogationBatUserNom,
           validations: [
             ...prev.validations,
-            etapeValidation("demarrer", actor),
+            etapeValidation(
+              "demarrer",
+              actor,
+              derogation
+                ? "Dérogation BAT : démarrage sans BAT validé"
+                : undefined,
+            ),
           ],
         };
         set((s) => ({
@@ -2810,7 +2905,9 @@ export const useStore = create<Store>()((set, get) => ({
             entreeActivite("validation", "ordre_fabrication", {
               entiteId: id,
               libelle: prev.numero,
-              detail: "Démarrage",
+              detail: derogation
+                ? "Démarrage — dérogation BAT"
+                : "Démarrage",
             }),
             ...s.journalActivites,
           ],
@@ -2861,9 +2958,32 @@ export const useStore = create<Store>()((set, get) => ({
           cumpSortie: etat.cump,
           valeur: data.quantite * etat.cump,
         };
+        const heures = Number(data.heures) || 0;
+        const mainOeuvre = [...lignesMainOeuvre(prev)];
+        if (heures > 0) {
+          const siteSource = state.pointsDeVente.find(
+            (s) => s.id === data.siteSourceId,
+          );
+          const atelierId =
+            data.atelierIdMod ||
+            (siteSource && siteEstAtelier(siteSource)
+              ? data.siteSourceId
+              : prev.atelierId);
+          const atelier = state.pointsDeVente.find((s) => s.id === atelierId);
+          const taux = tauxHoraireModAtelier(atelier);
+          mainOeuvre.push({
+            id: uid("ofmo"),
+            date: data.date,
+            atelierId,
+            heures,
+            tauxHoraire: taux,
+            montant: coutMod(heures, taux),
+          });
+        }
         const next: OrdreFabrication = {
           ...prev,
           sorties: [...prev.sorties, sortie],
+          mainOeuvre,
         };
         const entrees = regenererEntreesOf(state.entrees, next, state.produits);
         if (
@@ -2958,6 +3078,69 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
+      ajouterMainOeuvreOf: (ofId, data) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) {
+          return { ok: false, reason: "La MOD n'est possible que sur un OF en cours." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
+        }
+        const heures = Number(data.heures) || 0;
+        if (heures <= 0) return { ok: false, reason: "Indiquez un temps passé (heures)." };
+        const atelier = state.pointsDeVente.find((s) => s.id === data.atelierId);
+        if (!atelier || !siteEstAtelier(atelier)) {
+          return { ok: false, reason: "Choisissez un atelier." };
+        }
+        const taux = tauxHoraireModAtelier(atelier);
+        const ligne = {
+          id: uid("ofmo"),
+          date: data.date,
+          atelierId: data.atelierId,
+          heures,
+          tauxHoraire: taux,
+          montant: coutMod(heures, taux),
+        };
+        const next: OrdreFabrication = {
+          ...prev,
+          mainOeuvre: [...lignesMainOeuvre(prev), ligne],
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) =>
+            o.id === ofId ? next : o,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      supprimerMainOeuvreOf: (ofId, ligneId) => {
+        const state = get();
+        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!ofPeutMouvementer(prev)) return { ok: false, reason: "OF non modifiable." };
+        const ligne = lignesMainOeuvre(prev).find((m) => m.id === ligneId);
+        if (!ligne) return { ok: false, reason: "Ligne MOD introuvable." };
+        if (ligne.affecteEntreeId) {
+          return {
+            ok: false,
+            reason: "Cette MOD a déjà alimenté une entrée de production.",
+          };
+        }
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) =>
+            o.id === ofId
+              ? {
+                  ...o,
+                  mainOeuvre: lignesMainOeuvre(o).filter((m) => m.id !== ligneId),
+                }
+              : o,
+          ),
+        }));
+        return { ok: true };
+      },
+
       enregistrerEntreeProductionOf: (ofId, data) => {
         const state = get();
         const prev = state.ordresFabrication.find((o) => o.id === ofId);
@@ -2984,6 +3167,7 @@ export const useStore = create<Store>()((set, get) => ({
           ...prev,
           sorties: affectes.sorties,
           frais: affectes.frais,
+          mainOeuvre: affectes.mainOeuvre,
           entreesProduction: [...prev.entreesProduction, entree],
         };
         set((s) => ({
@@ -3199,6 +3383,174 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true, achatId };
       },
 
+      creerBonATirer: (data) => {
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "La création d'un BAT est réservée au rôle commercial." };
+        }
+        const state = get();
+        const cmd = state.commandes.find((c) => c.id === data.commandeId);
+        if (!cmd) return { ok: false, reason: "Commande client introuvable." };
+        const bats = state.bonsATirer ?? [];
+        const courant = batCourant(bats, data.commandeId);
+        if (courant?.statut === "en_attente" && !batAFichier(courant) && data.fichierDataUrl) {
+          const res = get().completerFichierBat(courant.id, {
+            nom: data.fichierNom ?? "bat",
+            mime: data.fichierMime ?? "application/octet-stream",
+            dataUrl: data.fichierDataUrl,
+          });
+          if (!res.ok) return { ok: false, reason: res.reason ?? "Impossible de joindre le fichier." };
+          return { ok: true, id: courant.id };
+        }
+        const motif = motifCreationBatImpossible(bats, data.commandeId);
+        if (motif) return { ok: false, reason: motif };
+        if (!data.fichierDataUrl) {
+          return { ok: false, reason: "Joignez le fichier du BAT (image ou PDF)." };
+        }
+        const id = uid("bat");
+        const nouveau: BonATirer = {
+          id,
+          commandeId: data.commandeId,
+          version: prochaineVersionBat(bats, data.commandeId),
+          fichierNom: data.fichierNom,
+          fichierMime: data.fichierMime,
+          fichierDataUrl: data.fichierDataUrl,
+          statut: "en_attente",
+          dateEnvoi: new Date().toISOString(),
+          commentaire: data.commentaire?.trim() || undefined,
+        };
+        set((s) => ({
+          bonsATirer: [nouveau, ...(s.bonsATirer ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "bon_a_tirer", {
+              entiteId: id,
+              libelle: `${cmd.numero} V${nouveau.version}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id };
+      },
+
+      completerFichierBat: (id, fichier) => {
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "Seul le rôle commercial peut joindre un fichier BAT." };
+        }
+        const state = get();
+        const prev = (state.bonsATirer ?? []).find((b) => b.id === id);
+        if (!prev) return { ok: false, reason: "BAT introuvable." };
+        if (prev.statut !== "en_attente") {
+          return { ok: false, reason: "Cette version est en lecture seule." };
+        }
+        if (batAFichier(prev)) {
+          return { ok: false, reason: "Un fichier est déjà joint à cette version." };
+        }
+        const cmd = state.commandes.find((c) => c.id === prev.commandeId);
+        set((s) => ({
+          bonsATirer: (s.bonsATirer ?? []).map((b) =>
+            b.id === id
+              ? {
+                  ...b,
+                  fichierNom: fichier.nom,
+                  fichierMime: fichier.mime,
+                  fichierDataUrl: fichier.dataUrl,
+                  dateEnvoi: new Date().toISOString(),
+                }
+              : b,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "bon_a_tirer", {
+              entiteId: id,
+              libelle: `${cmd?.numero ?? ""} V${prev.version}`,
+              detail: "Fichier joint",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      enregistrerRetourBat: (id, data) => {
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "Seul le rôle commercial peut enregistrer le retour BAT." };
+        }
+        const state = get();
+        const prev = (state.bonsATirer ?? []).find((b) => b.id === id);
+        if (!prev) return { ok: false, reason: "BAT introuvable." };
+        if (prev.statut !== "en_attente") {
+          return { ok: false, reason: "Cette version est déjà clôturée (lecture seule)." };
+        }
+        if (!batAFichier(prev)) {
+          return { ok: false, reason: "Joignez le fichier avant d'enregistrer le retour client." };
+        }
+        const cmd = state.commandes.find((c) => c.id === prev.commandeId);
+        if (data.decision === "valide") {
+          const nom = data.validateurNom?.trim();
+          if (!nom) {
+            return {
+              ok: false,
+              reason: "Indiquez le contact côté client qui a validé le BAT.",
+            };
+          }
+          const now = new Date().toISOString();
+          set((s) => ({
+            bonsATirer: (s.bonsATirer ?? []).map((b) =>
+              b.id === id
+                ? {
+                    ...b,
+                    statut: "valide" as const,
+                    dateValidation: now,
+                    validateurNom: nom,
+                    commentaire: data.commentaire?.trim() || b.commentaire,
+                  }
+                : b,
+            ),
+            journalActivites: [
+              entreeActivite("validation", "bon_a_tirer", {
+                entiteId: id,
+                libelle: `${cmd?.numero ?? ""} V${prev.version}`,
+                detail: `Validé par ${nom}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }));
+          return { ok: true };
+        }
+        const now = new Date().toISOString();
+        const suivant: BonATirer = {
+          id: uid("bat"),
+          commandeId: prev.commandeId,
+          version: prev.version + 1,
+          fichierNom: data.fichierSuivant?.nom,
+          fichierMime: data.fichierSuivant?.mime,
+          fichierDataUrl: data.fichierSuivant?.dataUrl,
+          statut: "en_attente",
+          dateEnvoi: now,
+        };
+        set((s) => ({
+          bonsATirer: [
+            suivant,
+            ...(s.bonsATirer ?? []).map((b) =>
+              b.id === id
+                ? {
+                    ...b,
+                    statut: "modifications_demandees" as const,
+                    commentaire: data.commentaire?.trim() || b.commentaire,
+                  }
+                : b,
+            ),
+          ],
+          journalActivites: [
+            entreeActivite("modification", "bon_a_tirer", {
+              entiteId: id,
+              libelle: `${cmd?.numero ?? ""} V${prev.version}`,
+              detail: `Modifications demandées → V${suivant.version}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
       creerMissionAchat: (data) => {
         if (!actorPeutGererMissions()) {
           return { ok: false, reason: "La création d'une mission est réservée au responsable achats." };
@@ -3406,8 +3758,13 @@ export const useStore = create<Store>()((set, get) => ({
           depensesDiverses = data.depensesDiverses.map((d) => ({
             ...d,
             nature: d.nature,
+            fournisseurId: d.fournisseurId ?? "",
             montant: Math.max(0, d.montant),
           }));
+          for (const d of depensesDiverses) {
+            const motif = motifDepenseDiverseInvalide(d);
+            if (motif) return { ok: false, reason: motif };
+          }
         }
         if (data.montantAvance != null && data.montantAvance < 0) {
           return { ok: false, reason: "Le montant de l'avance ne peut pas être négatif." };
@@ -4130,51 +4487,6 @@ export const useStore = create<Store>()((set, get) => ({
           ventes: state.ventes.filter((v) => v.id !== id),
         })),
 
-      addCharge: (charge) =>
-        set((state) => {
-          const nouvelle = { ...charge, id: uid("ch") };
-          return {
-            charges: [nouvelle, ...state.charges],
-            journalActivites: [
-              entreeActivite("creation", "charge", {
-                entiteId: nouvelle.id,
-                libelle: nouvelle.libelle,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      updateCharge: (id, data) =>
-        set((state) => {
-          const prev = state.charges.find((c) => c.id === id);
-          return {
-            charges: state.charges.map((c) =>
-              c.id === id ? { ...c, ...data } : c,
-            ),
-            journalActivites: [
-              entreeActivite("modification", "charge", {
-                entiteId: id,
-                libelle: prev?.libelle,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      deleteCharge: (id) =>
-        set((state) => {
-          const prev = state.charges.find((c) => c.id === id);
-          return {
-            charges: state.charges.filter((c) => c.id !== id),
-            journalActivites: [
-              entreeActivite("suppression", "charge", {
-                entiteId: id,
-                libelle: prev?.libelle,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-
       upsertRapportFinJournee: (data) =>
         set((state) => {
           const updatedAt = new Date().toISOString();
@@ -4768,6 +5080,149 @@ export const useStore = create<Store>()((set, get) => ({
             ...s.journalActivites,
           ],
         }));
+        return { ok: true as const };
+      },
+
+      addNatureDepenseMission: (data) => {
+        const state = get();
+        const libelle = data.libelle.trim();
+        const motif = motifNatureDepenseInvalide(
+          libelle,
+          state.naturesDepenseMission ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("ndm");
+        const ordre =
+          (state.naturesDepenseMission ?? []).reduce(
+            (m, n) => Math.max(m, n.ordre),
+            0,
+          ) + 1;
+        set((s) => ({
+          naturesDepenseMission: [
+            ...(s.naturesDepenseMission ?? []),
+            {
+              id,
+              libelle,
+              compteChargeId: data.compteChargeId,
+              ordre,
+              actif: true,
+            },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "nature_depense_mission", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateNatureDepenseMission: (id, data) => {
+        const state = get();
+        const prev = (state.naturesDepenseMission ?? []).find((n) => n.id === id);
+        if (!prev) return { ok: false as const, reason: "Nature introuvable." };
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifNatureDepenseInvalide(
+          libelle,
+          state.naturesDepenseMission ?? [],
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const libelleChange = libelle !== prev.libelle;
+        set((s) => ({
+          naturesDepenseMission: (s.naturesDepenseMission ?? []).map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  libelle,
+                  compteChargeId:
+                    data.compteChargeId !== undefined
+                      ? data.compteChargeId || undefined
+                      : n.compteChargeId,
+                  actif: data.actif ?? n.actif,
+                  ordre: data.ordre ?? n.ordre,
+                }
+              : n,
+          ),
+          missionsAchat: libelleChange
+            ? (s.missionsAchat ?? []).map((m) => ({
+                ...m,
+                depensesDiverses: m.depensesDiverses.map((d) =>
+                  d.natureId === id ? { ...d, nature: libelle } : d,
+                ),
+              }))
+            : s.missionsAchat,
+          journalActivites: [
+            entreeActivite("modification", "nature_depense_mission", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteNatureDepenseMission: (id) => {
+        const state = get();
+        const prev = (state.naturesDepenseMission ?? []).find((n) => n.id === id);
+        if (!prev) return { ok: false as const, reason: "Nature introuvable." };
+        const n = nbDepensesParNature(state.missionsAchat ?? [], id);
+        if (n > 0) {
+          return {
+            ok: false as const,
+            reason: `${n} dépense(s) utilisent « ${prev.libelle} ». Suppression bloquée.`,
+          };
+        }
+        set((s) => ({
+          naturesDepenseMission: (s.naturesDepenseMission ?? []).filter(
+            (x) => x.id !== id,
+          ),
+          journalActivites: [
+            entreeActivite("suppression", "nature_depense_mission", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      reclasseDepenseMission: (missionId, depenseId, compteId) => {
+        if (!useAuthStore.getState().hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Le reclassement est réservé au comptable.",
+          };
+        }
+        const state = get();
+        const mission = (state.missionsAchat ?? []).find((m) => m.id === missionId);
+        if (!mission) return { ok: false as const, reason: "Mission introuvable." };
+        const depense = mission.depensesDiverses.find((d) => d.id === depenseId);
+        if (!depense) return { ok: false as const, reason: "Dépense introuvable." };
+        const compte = state.comptesComptables.find((c) => c.id === compteId);
+        if (!compte) return { ok: false as const, reason: "Compte introuvable." };
+        const next: MissionAchat = {
+          ...mission,
+          depensesDiverses: mission.depensesDiverses.map((d) =>
+            d.id === depenseId ? { ...d, compteReclasseId: compteId } : d,
+          ),
+        };
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) =>
+              m.id === missionId ? next : m,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "mission_achat", {
+                entiteId: missionId,
+                libelle: mission.numero,
+                detail: `Reclassement dépense ${depense.nature} → ${compte.numero}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true as const };
       },
 
@@ -5674,6 +6129,7 @@ export const useStore = create<Store>()((set, get) => ({
           const prev = state.commandes.find((c) => c.id === id);
           return {
             commandes: state.commandes.filter((c) => c.id !== id),
+            bonsATirer: (state.bonsATirer ?? []).filter((b) => b.commandeId !== id),
             journalActivites: [
               entreeActivite("suppression", "commande", {
                 entiteId: id,

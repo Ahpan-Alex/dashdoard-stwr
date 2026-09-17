@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { BookOpen, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { LongueurNumeroCompteForm } from "@/components/longueur-numero-compte-form";
 import { ComptabiliteSubnav } from "@/components/comptabilite-subnav";
 import { EmptyState } from "@/components/empty-state";
 import { IconButton } from "@/components/icon-button";
@@ -14,7 +15,6 @@ import {
   compteUtiliseEnEcriture,
   comptesTvaManquants,
   ecrireCsvPlanModele,
-  LONGUEUR_COMPTE_MAX,
   LONGUEUR_COMPTE_MIN,
   longueurNumeroCompteEffective,
   MSG_COMPTE_VERROUILLE,
@@ -36,7 +36,6 @@ function PlanComptableContent() {
     parametres,
     comptesComptables,
     ecrituresComptables,
-    definirLongueurNumeroCompte,
     addCompteComptable,
     updateCompteComptable,
     deleteCompteComptable,
@@ -51,9 +50,6 @@ function PlanComptableContent() {
     [comptesComptables, parametres],
   );
 
-  const [longueurSaisie, setLongueurSaisie] = useState(
-    String(longueur ?? LONGUEUR_COMPTE_MIN),
-  );
   const [form, setForm] = useState({
     numero: "",
     libelle: "",
@@ -71,12 +67,6 @@ function PlanComptableContent() {
     editingId ?? undefined,
     ecrituresComptables,
   );
-
-  function onFixerLongueur(e: FormEvent) {
-    e.preventDefault();
-    const res = definirLongueurNumeroCompte(Number(longueurSaisie));
-    setMessage(res.ok ? "Longueur enregistrée." : res.reason);
-  }
 
   function onSubmitCompte(e: FormEvent) {
     e.preventDefault();
@@ -142,55 +132,7 @@ function PlanComptableContent() {
       />
       <ComptabiliteSubnav />
 
-      <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
-        <h2 className="font-display text-lg font-semibold">
-          Longueur des numéros de compte
-        </h2>
-        <p className="mt-2 text-sm text-muted">
-          Paramètre unique pour toute l&apos;entreprise (de{" "}
-          {LONGUEUR_COMPTE_MIN} à {LONGUEUR_COMPTE_MAX} chiffres). Une fois
-          fixé, vous pouvez uniquement l&apos;augmenter, jamais le diminuer. En
-          cas d&apos;augmentation, les comptes existants sont complétés
-          automatiquement par des zéros à droite.
-        </p>
-        <form
-          onSubmit={onFixerLongueur}
-          className="mt-4 flex flex-wrap items-end gap-3"
-        >
-          <label className="text-xs font-semibold text-muted">
-            Nombre de chiffres
-            <select
-              className="select mt-1"
-              value={longueurSaisie}
-              disabled={!peutGerer}
-              onChange={(e) => setLongueurSaisie(e.target.value)}
-            >
-              {Array.from(
-                { length: LONGUEUR_COMPTE_MAX - LONGUEUR_COMPTE_MIN + 1 },
-                (_, i) => LONGUEUR_COMPTE_MIN + i,
-              ).map((n) => (
-                <option
-                  key={n}
-                  value={n}
-                  disabled={longueur != null && n < longueur}
-                >
-                  {n} chiffres
-                </option>
-              ))}
-            </select>
-          </label>
-          {peutGerer && (
-            <button type="submit" className="btn btn-primary">
-              {longueur == null ? "Fixer la longueur" : "Augmenter"}
-            </button>
-          )}
-          {longueur != null && (
-            <p className="text-xs text-muted">
-              Longueur actuelle : {longueur} chiffres.
-            </p>
-          )}
-        </form>
-      </section>
+      <LongueurNumeroCompteForm />
 
       {assujetti && manquantsTva.length > 0 && (
         <p className="mb-4 rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">

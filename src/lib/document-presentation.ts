@@ -51,6 +51,10 @@ export function creerSnapshotPresentation(
           rubriques: [...modele.rubriques],
           mentionsLegales: modele.mentionsLegales,
           piedDePage: modele.piedDePage,
+          piedDePageAlignement: modele.piedDePageAlignement,
+          piedDePageLigne: modele.piedDePageLigne,
+          afficherMentionTvaImmatriculation:
+            modele.afficherMentionTvaImmatriculation,
           zones: modele.zones,
         }
       : undefined,
@@ -111,6 +115,10 @@ export function presentationPourFacture(
         rubriques: snap.modele.rubriques,
         mentionsLegales: snap.modele.mentionsLegales,
         piedDePage: snap.modele.piedDePage,
+        piedDePageAlignement: snap.modele.piedDePageAlignement,
+        piedDePageLigne: snap.modele.piedDePageLigne,
+        afficherMentionTvaImmatriculation:
+          snap.modele.afficherMentionTvaImmatriculation,
         zones: snap.modele.zones ?? modeleLive?.zones,
       }
     : modeleLive;

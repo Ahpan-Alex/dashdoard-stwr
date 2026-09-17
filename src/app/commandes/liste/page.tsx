@@ -24,6 +24,8 @@ import {
   DocumentFiliation,
   OfLiesCommande,
 } from "@/components/document-filiation";
+import { BatCommandePanel } from "@/components/bat-commande";
+import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
@@ -98,6 +100,7 @@ export default function ListeCommandesPage() {
     categoriesProduits,
     entrees,
     ventes,
+    bonsATirer,
     updateAcompte,
     encaisserAcompte,
     verrouillerTransformation,
@@ -672,7 +675,23 @@ export default function ListeCommandesPage() {
             ) : (
               lignes.map(({ c, t, client }) => (
                 <tr key={c.id}>
-                  <TdCol id="numero" show={visible} className="font-medium">{c.numero}</TdCol>
+                  <TdCol id="numero" show={visible} className="font-medium">
+                    {c.numero}
+                    {(() => {
+                      const courant = batCourant(bonsATirer ?? [], c.id);
+                      if (commandeABatValide(bonsATirer ?? [], c.id)) {
+                        return <span className="badge badge-success ml-1">BAT</span>;
+                      }
+                      if (courant) {
+                        return (
+                          <span className={`badge ml-1 ${badgeBat(courant.statut)}`}>
+                            BAT {BAT_STATUTS[courant.statut]}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </TdCol>
                   <TdCol id="date" show={visible}>{formatDate(c.date)}</TdCol>
                   <TdCol id="client" show={visible}>{client?.nom ?? "—"}</TdCol>
                   <TdCol id="totalTTC" show={visible} className="font-semibold">
@@ -821,6 +840,7 @@ export default function ListeCommandesPage() {
             />
             <DocumentFiliation documentId={preview.id} />
             <OfLiesCommande commandeId={preview.id} />
+            <BatCommandePanel commandeId={preview.id} />
           </div>
         </div>
       )}

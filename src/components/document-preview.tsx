@@ -1,13 +1,17 @@
 "use client";
 
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
+  afficherMentionTvaImmatriculation,
   montantEnLettres,
   paletteParId,
+  piedDePageAlignementDuModele,
+  piedDePageLigneDuModele,
   zonesDuModele,
   type ColonneArticleId,
   type ModeleDocument,
 } from "@/lib/document-templates";
+import { ancrerPiedDernierePage, HAUTEUR_PAGE_A4_MM } from "@/lib/document-mise-en-page";
 import {
   classeDensiteTableau,
   estColonneNumeriqueArticle,
@@ -27,12 +31,18 @@ import {
 import { mentionRegimeFiscal } from "@/lib/facturation-mg";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { libelleValiditeDocument } from "@/lib/validite-document";
+import { libelleDimensionsLigne, ligneEstSurface } from "@/lib/surface-vente";
 import type {
   Client,
   LigneDocument,
   Parametres,
   PointDeVente,
 } from "@/lib/types";
+
+function libelleMesureLigne(l: LigneDocument) {
+  if (ligneEstSurface(l)) return libelleDimensionsLigne(l);
+  return l.unite || "—";
+}
 
 type Props = {
   type: "devis" | "commande" | "bon_de_livraison" | "facture";
@@ -71,6 +81,9 @@ type Props = {
 
 export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   function DocumentPreview(props, ref) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => sheetRef.current as HTMLDivElement);
+
   const {
     type,
     titre,
@@ -107,6 +120,30 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
   const labelStyle = { color: palette.accent };
   const softStyle = { backgroundColor: palette.soft };
   const tvaActive = appliqueTVA(parametres);
+  const alignementPied = piedDePageAlignementDuModele(modele);
+  const lignePied = piedDePageLigneDuModele(modele);
+  const mentionTva = afficherMentionTvaImmatriculation(modele);
+  const hasPied =
+    Boolean(modele?.piedDePage?.trim()) || lignePied !== "aucune";
+  const alignPiedClass =
+    alignementPied === "gauche"
+      ? "text-left"
+      : alignementPied === "droite"
+        ? "text-right"
+        : "text-center";
+
+  useLayoutEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const run = () => ancrerPiedDernierePage(el, HAUTEUR_PAGE_A4_MM);
+    run();
+    const ro = new ResizeObserver(run);
+    const corps = el.querySelector(".document-preview-corps");
+    const bas = el.querySelector(".document-preview-bas");
+    if (corps) ro.observe(corps);
+    if (bas) ro.observe(bas);
+    return () => ro.disconnect();
+  });
 
   const labelType =
     type === "facture"
@@ -158,9 +195,11 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
       case "code":
         return l.codeProduit ?? "—";
       case "designation":
-        return l.designation;
+        return ligneEstSurface(l)
+          ? `${l.designation} — ${libelleDimensionsLigne(l)}`
+          : l.designation;
       case "pu_ht":
-        return formatCurrency(c.pu);
+        return formatCurrency(c.pu) + (l.venduAuM2 ? " / m²" : "");
       case "pu_ttc":
         return formatCurrency(c.puTTC);
       case "remise_pct":
@@ -189,7 +228,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
       case "total_ttc":
         return formatCurrency(c.totalTTC);
       case "mesure":
-        return l.unite || "—";
+        return libelleMesureLigne(l);
       default:
         return "";
     }
@@ -399,9 +438,12 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
 
   return (
     <div
-      ref={ref}
-      className="document-preview-sheet print-area mx-auto box-border w-full max-w-[210mm] overflow-x-hidden rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm"
+      ref={sheetRef}
+      className={`document-preview-sheet print-area mx-auto box-border w-full max-w-[210mm] rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm${
+        hasPied ? " document-preview-sheet--avec-pied" : ""
+      }`}
     >
+      <div className="document-preview-corps">
       {(estProforma || factureType === "proforma") && (
         <p className="mb-3 rounded bg-amber-100 px-3 py-1 text-center text-xs font-bold uppercase tracking-wider text-amber-900">
           Document proforma — sans valeur fiscale / hors série de facturation
@@ -769,27 +811,15 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
 
         {note && <p className="mb-2 text-xs text-muted">Note : {note}</p>}
 
-        {/* Mentions légales */}
-        <div className="mt-4 border-t border-line pt-3 text-[10px] leading-relaxed text-muted">
-          <p className="font-semibold text-ink">
-            {mentionRegimeFiscal(parametres)}
-          </p>
-          <p className="mt-1">
-            NIF : {parametres.nif || "—"} · STAT : {parametres.stat || "—"}
-            {parametres.rcs ? ` · RCS : ${parametres.rcs}` : ""}
-          </p>
-          {modele?.mentionsLegales && (
-            <p className="mt-1">{modele.mentionsLegales}</p>
-          )}
-        </div>
+        {modele?.mentionsLegales ? (
+          <div className="mt-4 pt-3 text-[10px] leading-relaxed text-muted">
+            <p>{modele.mentionsLegales}</p>
+          </div>
+        ) : null}
+      </div>
+      </div>
 
-        {modele?.piedDePage && (
-          <p className="mt-2 text-center text-[11px] text-muted">
-            {modele.piedDePage}
-          </p>
-        )}
-
-        {/* Zone 9 — Signataire */}
+      <div className="document-preview-bas">
         {z.signataire.afficher && (
           <div className="doc-cachet mt-5 flex justify-end">
             <div className="min-w-[12rem] max-w-[16rem] text-center">
@@ -815,7 +845,35 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
             </div>
           </div>
         )}
+
+        {mentionTva && (
+          <div className="mt-4 pt-3 text-[10px] leading-relaxed text-muted">
+            <p className="font-semibold text-ink">
+              {mentionRegimeFiscal(parametres)}
+            </p>
+            <p className="mt-1">
+              NIF : {parametres.nif || "—"} · STAT : {parametres.stat || "—"}
+              {parametres.rcs ? ` · RCS : ${parametres.rcs}` : ""}
+            </p>
+          </div>
+        )}
       </div>
+
+      {hasPied && (
+        <div className="document-preview-footer">
+          {lignePied === "pleine" ? (
+            <div className="document-preview-footer-ligne--pleine" />
+          ) : null}
+          {lignePied === "centree" ? (
+            <div className="document-preview-footer-ligne--centree" />
+          ) : null}
+          {modele?.piedDePage?.trim() ? (
+            <p className={`text-[11px] text-muted ${alignPiedClass}`}>
+              {modele.piedDePage}
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 });
