@@ -346,6 +346,14 @@ export default function TiersDetailPage() {
                 Balance âgée — fournisseur
               </h3>
               <BalanceAgeeTable tranches={ageeF} />
+              <p className="mt-4">
+                <Link
+                  href={`/achats/lots/nouveau?fournisseur=${tiersActif.id}`}
+                  className="btn btn-primary"
+                >
+                  Paiement groupé des factures ouvertes
+                </Link>
+              </p>
             </section>
           )}
         </div>

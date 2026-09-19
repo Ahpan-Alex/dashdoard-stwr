@@ -32,18 +32,27 @@ export function SaisieLignesPaiement({
   onValider,
   disabled,
   submitLabel = "Enregistrer",
+  montantPropose,
 }: {
   siteId?: string;
   onValider: (lignes: SaisieLignePaiement[]) => void;
   disabled?: boolean;
   submitLabel?: string;
+  /** Préremplit la première ligne (paiement groupé). */
+  montantPropose?: number;
 }) {
   const modes = useStore((s) => s.modesPaiement ?? []);
   const comptes = useStore((s) => s.comptesTresorerie ?? []);
   const actifs = modesPaiementActifs(modes);
   const comptesSite = comptesPourSite(comptes, siteId);
   const [date, setDate] = useState(jourLocalISO());
-  const [lignes, setLignes] = useState([LIGNE_VIDE()]);
+  const [lignes, setLignes] = useState(() => [
+    {
+      ...LIGNE_VIDE(),
+      montant:
+        montantPropose && montantPropose > 0 ? String(Math.round(montantPropose)) : "",
+    },
+  ]);
 
   const defautMode = actifs.find((m) => m.id === "virement")?.id ?? actifs[0]?.id ?? "";
   const defautCompte = comptesSite[0]?.id ?? "";

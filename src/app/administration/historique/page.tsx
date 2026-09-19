@@ -35,6 +35,7 @@ const ENTITE_LABELS: Record<ActiviteEntite, string> = {
   nature_depense_mission: "Nature de dépense mission",
   demande_prix: "Demande de prix",
   besoin_achat: "Besoin d'achat",
+  lot_paiement: "Paiement groupé",
   bon_a_tirer: "Bon à tirer",
   tiers: "Tiers",
   parametres: "Paramètres",

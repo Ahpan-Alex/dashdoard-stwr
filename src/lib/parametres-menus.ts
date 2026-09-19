@@ -94,10 +94,10 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
         permission: "users.gerer",
       },
       {
-        href: "/parametres/utilisateurs",
-        label: "Historique",
-        description: "Connexions, actions d'accès et journal métier.",
-        permission: "users.gerer",
+        href: "/parametres/audit",
+        label: "Journal d'audit",
+        description: "Rétention des actions sensibles. Consultation du journal immuable.",
+        permission: "audit.lire",
       },
       {
         href: "/parametres/points-de-vente",

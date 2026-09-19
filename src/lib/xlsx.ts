@@ -147,7 +147,11 @@ function utf8(s: string) {
   return new TextEncoder().encode(s);
 }
 
-export function downloadXlsx(filename: string, rows: (string | number)[][]) {
+export function xlsxBytes(
+  rows: (string | number)[][],
+  sheetName = "Ecritures",
+) {
+  const nomFeuille = xmlEscape(sheetName || "Ecritures").slice(0, 31) || "Ecritures";
   const files = [
     {
       name: "[Content_Types].xml",
@@ -170,7 +174,7 @@ export function downloadXlsx(filename: string, rows: (string | number)[][]) {
       name: "xl/workbook.xml",
       data: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="Ecritures" sheetId="1" r:id="rId1"/></sheets>
+<sheets><sheet name="${nomFeuille}" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`),
     },
     {
@@ -185,7 +189,15 @@ export function downloadXlsx(filename: string, rows: (string | number)[][]) {
       data: utf8(sheetXml(rows)),
     },
   ];
-  const bytes = zipStore(files);
+  return zipStore(files);
+}
+
+export function downloadXlsx(
+  filename: string,
+  rows: (string | number)[][],
+  sheetName = "Ecritures",
+) {
+  const bytes = xlsxBytes(rows, sheetName);
   const blob = new Blob([bytes], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });

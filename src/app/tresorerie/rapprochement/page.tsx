@@ -27,6 +27,7 @@ function Contenu() {
   const factures = useStore((s) => s.factures);
   const acomptes = useStore((s) => s.acomptes);
   const missionsAchat = useStore((s) => s.missionsAchat);
+  const lotsPaiementFournisseur = useStore((s) => s.lotsPaiementFournisseur);
   const modesPaiement = useStore((s) => s.modesPaiement ?? []);
   const importer = useStore((s) => s.importerReleveBancaire);
   const pointer = useStore((s) => s.pointerLigneReleve);
@@ -48,9 +49,10 @@ function Contenu() {
         factures,
         acomptes,
         missions: missionsAchat,
+        lotsPaiement: lotsPaiementFournisseur,
         modes: modesPaiement,
       }),
-    [achats, factures, acomptes, missionsAchat, modesPaiement],
+    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modesPaiement],
   );
 
   const duCompte = lignes.filter((l) =>

@@ -89,6 +89,7 @@ function ComptesSection() {
     factures,
     acomptes,
     missionsAchat,
+    lotsPaiementFournisseur,
     modesPaiement,
     addCompteTresorerie,
     updateCompteTresorerie,
@@ -109,9 +110,10 @@ function ComptesSection() {
         factures,
         acomptes,
         missions: missionsAchat,
+        lotsPaiement: lotsPaiementFournisseur,
         modes: modesPaiement ?? [],
       }),
-    [achats, factures, acomptes, missionsAchat, modesPaiement],
+    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modesPaiement],
   );
 
   function fermer() {

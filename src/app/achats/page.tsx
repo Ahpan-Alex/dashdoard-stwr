@@ -283,6 +283,9 @@ function AchatsListe() {
               <Plus className="h-4 w-4" />
               Nouvel achat
             </button>
+            <Link href="/achats/lots" className="btn btn-secondary">
+              Paiements groupés
+            </Link>
           </div>
         }
       />
@@ -1957,6 +1960,14 @@ function PaiementsPanel({
 
       {solde > 0.5 && (
         <div className="mb-6">
+          <p className="mb-2 text-sm">
+            <Link
+              href={`/achats/lots/nouveau?fournisseur=${achat.fournisseurId}`}
+              className="text-sea-700 underline"
+            >
+              Payer plusieurs factures de ce fournisseur
+            </Link>
+          </p>
           <SaisieLignesPaiement
             siteId={achat.pointDeVenteId}
             onValider={onAjouter}
@@ -1979,7 +1990,7 @@ function PaiementsPanel({
                 <th>Réf.</th>
                 <th>Échéance</th>
                 <th>Montant</th>
-                <th />
+                <th>Lot</th>
               </tr>
             </thead>
             <tbody>
@@ -1999,13 +2010,22 @@ function PaiementsPanel({
                     <td>{p.dateEffet ? formatDate(p.dateEffet) : "—"}</td>
                     <td className="font-semibold">{formatCurrency(p.montant)}</td>
                     <td className="text-right">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => onSupprimer(p.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {p.lotId ? (
+                        <Link
+                          href={`/achats/lots/${p.lotId}`}
+                          className="text-sm text-sea-700 underline"
+                        >
+                          {p.lotNumero || "Lot"}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => onSupprimer(p.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

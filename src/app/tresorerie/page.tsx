@@ -30,6 +30,7 @@ function Contenu() {
     factures,
     acomptes,
     missionsAchat,
+    lotsPaiementFournisseur,
     modesPaiement,
   } = useStore();
   const mouvements = tousMouvementsTresorerie({
@@ -37,6 +38,7 @@ function Contenu() {
     factures,
     acomptes,
     missions: missionsAchat,
+    lotsPaiement: lotsPaiementFournisseur,
     modes: modesPaiement ?? [],
   });
   const liste = comptesTresorerieTries(comptesTresorerie ?? []);

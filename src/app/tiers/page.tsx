@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Plus, Users } from "lucide-react";
+import { Plus, Upload, Users } from "lucide-react";
 import {
   TIERS_FORM_VIDE,
   TiersFicheForm,
@@ -12,6 +12,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
+import { useAuthStore } from "@/lib/auth-store";
 import { formatCurrency } from "@/lib/format";
 import { REGIONS_MADAGASCAR } from "@/lib/madagascar";
 import { codeTypeClientDefaut } from "@/lib/types-clients";
@@ -60,6 +61,7 @@ function TiersListe() {
     typesClients,
     journalActivites,
   } = useStore();
+  const peutGerer = useAuthStore((s) => s.hasPermission("clients.gerer"));
   const liste = useMemo(
     () => assurerTiers({ clients, fournisseurs, tiers }),
     [clients, fournisseurs, tiers],
@@ -151,21 +153,29 @@ function TiersListe() {
         description="Fiche unique : client, fournisseur, ou les deux. Soldes et historique restent distincts par rôle."
         showPosSelector={false}
         actions={
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setEditingId(null);
-              setForm({
-                ...TIERS_FORM_VIDE,
-                type: codeTypeClientDefaut(typesClients),
-              });
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Nouveau tiers
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {peutGerer && (
+              <Link href="/tiers/import" className="btn btn-secondary">
+                <Upload className="h-4 w-4" />
+                Import initial
+              </Link>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setEditingId(null);
+                setForm({
+                  ...TIERS_FORM_VIDE,
+                  type: codeTypeClientDefaut(typesClients),
+                });
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Nouveau tiers
+            </button>
+          </div>
         }
       />
 

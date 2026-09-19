@@ -27,6 +27,7 @@ function Contenu() {
     factures,
     acomptes,
     missionsAchat,
+    lotsPaiementFournisseur,
     modesPaiement,
     comptesTresorerie,
   } = useStore();
@@ -44,9 +45,10 @@ function Contenu() {
         factures,
         acomptes,
         missions: missionsAchat,
+        lotsPaiement: lotsPaiementFournisseur,
         modes,
       }),
-    [achats, factures, acomptes, missionsAchat, modes],
+    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modes],
   );
 
   const filtrés = tous.filter((m) => {

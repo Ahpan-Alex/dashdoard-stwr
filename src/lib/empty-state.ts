@@ -80,6 +80,7 @@ export function emptyAppState(): AppState {
     acomptes: [],
     transformations: [],
     achats: [],
+    lotsPaiementFournisseur: [],
     transfertsStock: [],
     transfertsMatiereOf: [],
     ordresFabrication: [],
@@ -135,6 +136,9 @@ export function pickAppState(state: AppState): AppState {
     acomptes: state.acomptes,
     transformations: state.transformations ?? [],
     achats: state.achats ?? [],
+    lotsPaiementFournisseur: Array.isArray(state.lotsPaiementFournisseur)
+      ? state.lotsPaiementFournisseur
+      : [],
     transfertsStock: state.transfertsStock ?? [],
     transfertsMatiereOf: state.transfertsMatiereOf ?? [],
     ordresFabrication: state.ordresFabrication ?? [],

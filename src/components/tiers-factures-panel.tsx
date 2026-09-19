@@ -149,7 +149,16 @@ export function TiersFacturesPanel({ tiers }: Props) {
       )}
 
       {afficherFournisseur && (
-        <TableAchats
+        <>
+          <div className="mb-3 flex justify-end">
+            <Link
+              href={`/achats/lots/nouveau?fournisseur=${tiers.id}`}
+              className="btn btn-primary"
+            >
+              Paiement groupé
+            </Link>
+          </div>
+          <TableAchats
           lignes={facturesFournisseur}
           tiers={tiers}
           journal={journalActivites}
@@ -162,6 +171,7 @@ export function TiersFacturesPanel({ tiers }: Props) {
             )
           }
         />
+        </>
       )}
 
       {preview && previewPresentation && (

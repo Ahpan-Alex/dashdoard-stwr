@@ -106,6 +106,32 @@ export type LignePaiement = {
   dateEffet?: string;
   statutCheque?: StatutChequeDiffere;
   note?: string;
+  /** Paiement groupé d'origine (traçabilité facture ↔️ lot). */
+  lotId?: string;
+  lotNumero?: string;
+  /** Ligne de mode du lot dont cette ventilation est extraite. */
+  lotLigneId?: string;
+};
+
+export type VentilationLotPaiement = {
+  achatId: string;
+  achatNumero: string;
+  montant: number;
+};
+
+/** Pièce unique de paiement groupé fournisseur — facilité de saisie, pas d'écriture comptable propre. */
+export type LotPaiementFournisseur = {
+  id: string;
+  numero: string;
+  fournisseurId: string;
+  fournisseurNom?: string;
+  date: string;
+  montant: number;
+  lignes: LignePaiement[];
+  ventilations: VentilationLotPaiement[];
+  statut: "actif" | "annule";
+  dateAnnulation?: string;
+  note?: string;
 };
 
 export type SourceMouvementTresorerie =
@@ -113,7 +139,8 @@ export type SourceMouvementTresorerie =
   | "facture"
   | "avoir_achat"
   | "acompte"
-  | "mission";
+  | "mission"
+  | "lot_paiement";
 
 export type MouvementTresorerie = {
   id: string;
@@ -497,6 +524,15 @@ export type Parametres = {
    * Absent = 15.
    */
   fenetreChequesProchesJours?: number;
+  /**
+   * Rétention du journal d'audit (années) pour les catégories non illimitées.
+   * Comptabilité et RBAC : toujours illimité. Vide / null = pas de purge.
+   */
+  auditRetention?: {
+    suppressionsAnnees?: number | null;
+    prixAnnees?: number | null;
+    statutsCritiquesAnnees?: number | null;
+  };
   /**
    * Prochain n° séquentiel (hors préfixes) si l’entreprise démarre en cours
    * d’exercice sans ressaisir l’historique. Absent = 1. Le réel est le max
@@ -1424,6 +1460,7 @@ export type ActiviteEntite =
   | "mission_achat"
   | "demande_prix"
   | "besoin_achat"
+  | "lot_paiement"
   | "bon_a_tirer"
   | "tiers"
   | "parametres"
@@ -1857,6 +1894,8 @@ export type AppState = {
   acomptes: Acompte[];
   transformations: TransformationCommerciale[];
   achats: Achat[];
+  /** Paiements groupés fournisseurs (lots) — isolés par tenant via l'état métier. */
+  lotsPaiementFournisseur: LotPaiementFournisseur[];
   transfertsStock: TransfertStock[];
   transfertsMatiereOf: TransfertMatiereOf[];
   ordresFabrication: OrdreFabrication[];

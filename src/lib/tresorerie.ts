@@ -4,6 +4,7 @@ import type {
   CompteTresorerie,
   Facture,
   LignePaiement,
+  LotPaiementFournisseur,
   ModePaiementParam,
   MouvementTresorerie,
   Parametres,
@@ -283,6 +284,7 @@ export function mouvementsDepuisAchats(
   const out: MouvementTresorerie[] = [];
   for (const a of achats) {
     for (const p of a.paiements ?? []) {
+      if (p.lotId) continue;
       if (!ligneGenereMouvement(p, modes)) continue;
       out.push({
         id: mvId("achat", p.id),
@@ -315,6 +317,33 @@ export function mouvementsDepuisAchats(
           lignePaiementId: p.id,
         });
       }
+    }
+  }
+  return out;
+}
+
+export function mouvementsDepuisLots(
+  lots: LotPaiementFournisseur[] | undefined,
+  modes: ModePaiementParam[],
+): MouvementTresorerie[] {
+  const out: MouvementTresorerie[] = [];
+  for (const lot of lots ?? []) {
+    if (lot.statut !== "actif") continue;
+    for (const p of lot.lignes ?? []) {
+      if (!ligneGenereMouvement(p, modes)) continue;
+      out.push({
+        id: mvId("lot_paiement", p.id),
+        date: dateMouvementLigne(p),
+        compteTresorerieId: p.compteTresorerieId!,
+        montant: -Math.abs(p.montant),
+        sens: "sortie",
+        modePaiementId: p.modePaiement,
+        reference: p.reference || lot.numero,
+        libelle: `Paiement groupé ${lot.numero}`,
+        source: "lot_paiement",
+        sourceId: lot.id,
+        lignePaiementId: p.id,
+      });
     }
   }
   return out;
@@ -440,10 +469,12 @@ export function tousMouvementsTresorerie(opts: {
   factures: Facture[];
   acomptes: Acompte[];
   missions?: MissionFondsTreso[];
+  lotsPaiement?: LotPaiementFournisseur[];
   modes: ModePaiementParam[];
 }): MouvementTresorerie[] {
   return [
     ...mouvementsDepuisAchats(opts.achats, opts.modes),
+    ...mouvementsDepuisLots(opts.lotsPaiement, opts.modes),
     ...mouvementsDepuisFactures(opts.factures, opts.modes),
     ...mouvementsDepuisAcomptes(opts.acomptes, opts.modes),
     ...mouvementsDepuisMissions(opts.missions ?? [], opts.modes),
@@ -461,7 +492,7 @@ export function soldeCompteTresorerie(
 
 export type ChequeEcheancier = {
   ligne: LignePaiement;
-  source: "achat" | "facture" | "avoir_achat";
+  source: "achat" | "facture" | "avoir_achat" | "lot_paiement";
   sourceId: string;
   sourceLibelle: string;
   sens: "entree" | "sortie";
@@ -471,10 +502,12 @@ export function chequesDifferes(opts: {
   achats: Achat[];
   factures: Facture[];
   modes: ModePaiementParam[];
+  lotsPaiement?: LotPaiementFournisseur[];
 }): ChequeEcheancier[] {
   const out: ChequeEcheancier[] = [];
   for (const a of opts.achats) {
     for (const p of a.paiements ?? []) {
+      if (p.lotId) continue;
       if (!modeNecessiteEcheance(opts.modes, p.modePaiement)) continue;
       out.push({
         ligne: p,
@@ -506,6 +539,19 @@ export function chequesDifferes(opts: {
         sourceId: f.id,
         sourceLibelle: f.numero,
         sens: f.type === "avoir" ? "sortie" : "entree",
+      });
+    }
+  }
+  for (const lot of opts.lotsPaiement ?? []) {
+    if (lot.statut !== "actif") continue;
+    for (const p of lot.lignes ?? []) {
+      if (!modeNecessiteEcheance(opts.modes, p.modePaiement)) continue;
+      out.push({
+        ligne: p,
+        source: "lot_paiement",
+        sourceId: lot.id,
+        sourceLibelle: lot.numero,
+        sens: "sortie",
       });
     }
   }

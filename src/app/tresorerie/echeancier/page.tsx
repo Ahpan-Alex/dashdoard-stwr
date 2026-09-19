@@ -27,11 +27,18 @@ function Contenu() {
     achats,
     factures,
     modesPaiement,
+    lotsPaiementFournisseur,
     changerStatutChequeAchat,
     changerStatutChequeFacture,
+    changerStatutChequeLot,
   } = useStore();
   const modes = modesPaiement ?? [];
-  const liste = chequesDifferes({ achats, factures, modes });
+  const liste = chequesDifferes({
+    achats,
+    factures,
+    modes,
+    lotsPaiement: lotsPaiementFournisseur,
+  });
 
   function changer(
     item: (typeof liste)[number],
@@ -39,6 +46,11 @@ function Contenu() {
   ) {
     if (item.source === "facture") {
       const res = changerStatutChequeFacture(item.sourceId, item.ligne.id, statut);
+      if (!res.ok) alert(res.reason);
+      return;
+    }
+    if (item.source === "lot_paiement") {
+      const res = changerStatutChequeLot(item.sourceId, item.ligne.id, statut);
       if (!res.ok) alert(res.reason);
       return;
     }
@@ -86,7 +98,9 @@ function Contenu() {
                       href={
                         item.source === "facture"
                           ? "/factures/liste"
-                          : "/achats"
+                          : item.source === "lot_paiement"
+                            ? `/achats/lots/${item.sourceId}`
+                            : "/achats"
                       }
                       className="text-sea-800 underline"
                     >

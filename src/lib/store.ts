@@ -45,6 +45,11 @@ import {
   statutLivraisonRecord,
 } from "./achats";
 import {
+  motifVentilationInvalide,
+  nextNumeroLotPaiement,
+  repartirModesSurVentilations,
+} from "./lots-paiement";
+import {
   appliqueTVA,
   ensureCodesClients,
   factureImpacteExploitation,
@@ -136,6 +141,15 @@ import {
   type PrefixeCompteTiers,
 } from "./comptabilite";
 import { PLAN_PCG_2005 } from "./pcg-2005";
+import {
+  appliquerFusionTiers,
+  type ChampFusionTiers,
+} from "./import-tiers";
+import {
+  enregistrerJournalAudit,
+  resumeRemisesDocument,
+  type JournalAuditPayload,
+} from "./journal-audit";
 import {
   assurerTiers,
   controlerPlafondCredit,
@@ -287,6 +301,7 @@ import type {
   JournalEcriture,
   LignePaiement,
   LivraisonAchatLigne,
+  LotPaiementFournisseur,
   ModePaiement,
   ModePaiementParam,
   MouvementCompteCourant,
@@ -348,6 +363,7 @@ type Store = {
   acomptes: Acompte[];
   transformations: TransformationCommerciale[];
   achats: Achat[];
+  lotsPaiementFournisseur: LotPaiementFournisseur[];
   transfertsStock: TransfertStock[];
   transfertsMatiereOf: TransfertMatiereOf[];
   ordresFabrication: OrdreFabrication[];
@@ -507,6 +523,22 @@ type Store = {
   supprimerPaiementAchat: (
     achatId: string,
     paiementId: string,
+  ) => { ok: boolean; reason?: string };
+  creerLotPaiementFournisseur: (data: {
+    fournisseurId: string;
+    date?: string;
+    montant: number;
+    lignes: SaisieLignePaiement[];
+    ventilations: { achatId: string; montant: number }[];
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  annulerLotPaiementFournisseur: (
+    id: string,
+  ) => { ok: boolean; reason?: string };
+  changerStatutChequeLot: (
+    lotId: string,
+    ligneId: string,
+    statut: StatutChequeDiffere,
   ) => { ok: boolean; reason?: string };
   changerStatutChequeAchat: (
     achatId: string,
@@ -990,8 +1022,23 @@ type Store = {
   ) => { ok: boolean; reason?: string };
   deleteFournisseur: (id: string) => { ok: boolean; reason?: string };
 
-  addTiers: (data: Omit<Tiers, "id">) => { ok: true; id: string } | { ok: false; reason: string };
-  updateTiers: (id: string, data: Partial<Tiers>) => { ok: boolean; reason?: string };
+  addTiers: (
+    data: Omit<Tiers, "id">,
+    opts?: { exigerComptes?: boolean },
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  updateTiers: (
+    id: string,
+    data: Partial<Tiers>,
+    opts?: { exigerComptes?: boolean },
+  ) => { ok: boolean; reason?: string };
+  importerLigneTiers: (input: {
+    mode: "creer" | "fusionner";
+    payload: Omit<Tiers, "id">;
+    fusionId?: string;
+    champsFusion?: ChampFusionTiers[];
+  }) =>
+    | { ok: true; id: string; compteManquant: boolean }
+    | { ok: false; reason: string };
   deleteTiers: (id: string) => { ok: boolean; reason?: string };
   /** Accessible à tout utilisateur connecté (pas réservé à l'admin). */
   updatePlafondCredit: (id: string, plafondCredit: number) => { ok: boolean; reason?: string };
@@ -1599,6 +1646,57 @@ function entreeActivite(
   };
 }
 
+function libelleCompteAudit(
+  comptes: Array<{ id: string; numero: string; libelle: string }>,
+  id?: string | null,
+) {
+  if (!id) return "—";
+  const c = comptes.find((x) => x.id === id);
+  return c ? `${c.numero} ${c.libelle}` : id;
+}
+
+function tracerAudit(
+  state: { pointsDeVente?: Array<{ id: string; nom: string }> },
+  payload: JournalAuditPayload,
+) {
+  const site = payload.siteId
+    ? (state.pointsDeVente ?? []).find((p) => p.id === payload.siteId)
+    : undefined;
+  enregistrerJournalAudit({
+    ...payload,
+    siteLibelle: payload.siteLibelle ?? site?.nom,
+  });
+}
+
+function tracerRemiseDocument(
+  state: { pointsDeVente?: Array<{ id: string; nom: string }> },
+  opts: {
+    objetType: "devis" | "commande" | "facture" | "bon_de_livraison";
+    objetId: string;
+    objetLibelle?: string;
+    objetHref: string;
+    siteId?: string;
+    avant?: string;
+    apres: string;
+  },
+) {
+  if (!opts.apres && !opts.avant) return;
+  if (opts.avant === opts.apres) return;
+  tracerAudit(state, {
+    categorie: "prix",
+    action: "remise_exceptionnelle",
+    module: "commercial",
+    objetType: opts.objetType,
+    objetId: opts.objetId,
+    objetLibelle: opts.objetLibelle,
+    objetHref: opts.objetHref,
+    champ: "remise",
+    ancienneValeur: opts.avant || "—",
+    nouvelleValeur: opts.apres || "—",
+    siteId: opts.siteId,
+  });
+}
+
 function actorPeutGererMissions() {
   return useAuthStore.getState().hasPermission("missions.gerer");
 }
@@ -1845,9 +1943,9 @@ export const useStore = create<Store>()((set, get) => ({
         if (!libelle) {
           return { ok: false as const, reason: "Le libellé est obligatoire." };
         }
+        const role =
+          data.roleCompte !== undefined ? data.roleCompte : prev.roleCompte;
         set((state) => {
-          const role =
-            data.roleCompte !== undefined ? data.roleCompte : prev.roleCompte;
           const comptes = appliquerRoleUnique(
             state.comptesComptables.map((c) =>
               c.id === id ? { ...c, numero, libelle, roleCompte: role } : c,
@@ -1866,6 +1964,24 @@ export const useStore = create<Store>()((set, get) => ({
             ],
           });
         });
+        if (
+          prev.numero !== numero ||
+          prev.libelle !== libelle ||
+          prev.roleCompte !== role
+        ) {
+          tracerAudit(get(), {
+            categorie: "comptabilite",
+            action: "modification_compte_comptable",
+            module: "comptabilite",
+            objetType: "compte_comptable",
+            objetId: id,
+            objetLibelle: `${numero} ${libelle}`,
+            objetHref: "/comptabilite/plan",
+            champ: "compte",
+            ancienneValeur: `${prev.numero} ${prev.libelle}`,
+            nouvelleValeur: `${numero} ${libelle}`,
+          });
+        }
         return { ok: true as const };
       },
       deleteCompteComptable: (id) => {
@@ -1932,6 +2048,16 @@ export const useStore = create<Store>()((set, get) => ({
               ...state.journalActivites,
             ],
           });
+        });
+        tracerAudit(get(), {
+          categorie: "comptabilite",
+          action: "suppression_compte_comptable",
+          module: "comptabilite",
+          objetType: "compte_comptable",
+          objetId: id,
+          objetLibelle: `${prev.numero} ${prev.libelle}`,
+          objetHref: "/comptabilite/plan",
+          ancienneValeur: `${prev.numero} ${prev.libelle}`,
         });
         return { ok: true as const };
       },
@@ -2692,6 +2818,16 @@ export const useStore = create<Store>()((set, get) => ({
       supprimerPaiementAchat: (achatId, paiementId) => {
         const prev = get().achats.find((a) => a.id === achatId);
         if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const ligne = prev.paiements.find((p) => p.id === paiementId);
+        if (ligne?.lotId) {
+          const lot = (get().lotsPaiementFournisseur ?? []).find(
+            (l) => l.id === ligne.lotId,
+          );
+          return {
+            ok: false,
+            reason: `Ce règlement fait partie du lot ${lot?.numero ?? ligne.lotNumero ?? ""}. Annulez le paiement groupé en une seule action.`,
+          };
+        }
         set((s) => ({
           achats: s.achats.map((a) =>
             a.id === achatId
@@ -2709,11 +2845,218 @@ export const useStore = create<Store>()((set, get) => ({
         }));
         return { ok: true };
       },
+      creerLotPaiementFournisseur: (data) => {
+        const state = get();
+        const fournisseur =
+          state.fournisseurs.find((f) => f.id === data.fournisseurId) ??
+          (state.tiers ?? []).find((t) => t.id === data.fournisseurId);
+        if (!fournisseur) return { ok: false, reason: "Fournisseur introuvable." };
+        const modes = state.modesPaiement ?? [];
+        const comptes = state.comptesTresorerie ?? [];
+        if (!data.lignes.length) {
+          return { ok: false, reason: "Indiquez au moins un mode de paiement." };
+        }
+        let cumulModes = 0;
+        const lotLignes: LignePaiement[] = [];
+        for (const ligne of data.lignes) {
+          const motif = motifSaisieLignePaiement(ligne, modes, comptes);
+          if (motif) return { ok: false, reason: motif };
+          cumulModes += ligne.montant;
+          lotLignes.push(completerLignePaiement(ligne, uid("lpay"), modes));
+        }
+        const montant = Math.round(data.montant);
+        if (Math.abs(cumulModes - montant) > 0.5) {
+          return {
+            ok: false,
+            reason: `Le total des modes (${Math.round(cumulModes)} Ar) doit égaler le montant du lot (${montant} Ar).`,
+          };
+        }
+        const ventilations = data.ventilations.filter((v) => v.montant > 0);
+        const motifVent = motifVentilationInvalide(
+          state.achats,
+          ventilations,
+          montant,
+        );
+        if (motifVent) return { ok: false, reason: motifVent };
+        const ids = new Set(ventilations.map((v) => v.achatId));
+        if (
+          [...ids].some((id) => {
+            const a = state.achats.find((x) => x.id === id);
+            return a && a.fournisseurId !== data.fournisseurId;
+          })
+        ) {
+          return { ok: false, reason: "Les factures doivent appartenir au même fournisseur." };
+        }
+        const id = uid("lotp");
+        const numero = nextNumeroLotPaiement(
+          state.lotsPaiementFournisseur ?? [],
+          optsNum(state, data.date),
+        );
+        const date = data.date || new Date().toISOString();
+        const parts = repartirModesSurVentilations(
+          lotLignes.map((l) => ({ id: l.id, montant: l.montant })),
+          ventilations,
+        );
+        const lot: LotPaiementFournisseur = {
+          id,
+          numero,
+          fournisseurId: data.fournisseurId,
+          fournisseurNom: fournisseur.nom,
+          date,
+          montant,
+          lignes: lotLignes,
+          ventilations: ventilations.map((v) => {
+            const a = state.achats.find((x) => x.id === v.achatId)!;
+            return {
+              achatId: v.achatId,
+              achatNumero: a.numeroFactureFournisseur?.trim() || a.numero,
+              montant: Math.round(v.montant),
+            };
+          }),
+          statut: "actif",
+          note: data.note?.trim() || undefined,
+        };
+        const paiementsParAchat = new Map<string, LignePaiement[]>();
+        for (const part of parts) {
+          const mode = lotLignes.find((l) => l.id === part.modeLigneId);
+          if (!mode || part.montant <= 0) continue;
+          const ligne: LignePaiement = {
+            ...mode,
+            id: uid("pay"),
+            montant: part.montant,
+            lotId: id,
+            lotNumero: numero,
+            lotLigneId: mode.id,
+            note: `Lot ${numero}`,
+          };
+          const liste = paiementsParAchat.get(part.achatId) ?? [];
+          liste.push(ligne);
+          paiementsParAchat.set(part.achatId, liste);
+        }
+        set((s) => ({
+          lotsPaiementFournisseur: [lot, ...(s.lotsPaiementFournisseur ?? [])],
+          achats: s.achats.map((a) => {
+            const extra = paiementsParAchat.get(a.id);
+            if (!extra?.length) return a;
+            return { ...a, paiements: [...extra, ...a.paiements] };
+          }),
+          journalActivites: [
+            entreeActivite("creation", "lot_paiement", {
+              entiteId: id,
+              libelle: numero,
+              detail: `${lot.ventilations.length} facture(s) · ${fournisseur.nom}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        tracerAudit(get(), {
+          categorie: "statut_critique",
+          action: "creation_lot_paiement",
+          module: "tresorerie",
+          objetType: "lot_paiement",
+          objetId: id,
+          objetLibelle: numero,
+          objetHref: `/achats/lots/${id}`,
+          nouvelleValeur: `${montant} Ar · ${lot.ventilations.map((v) => v.achatNumero).join(", ")}`,
+          detail: fournisseur.nom,
+        });
+        return { ok: true, id };
+      },
+      annulerLotPaiementFournisseur: (id) => {
+        const state = get();
+        const prev = (state.lotsPaiementFournisseur ?? []).find((l) => l.id === id);
+        if (!prev) return { ok: false, reason: "Paiement groupé introuvable." };
+        if (prev.statut === "annule") {
+          return { ok: false, reason: "Ce lot est déjà annulé." };
+        }
+        set((s) => ({
+          lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
+            l.id === id
+              ? {
+                  ...l,
+                  statut: "annule" as const,
+                  dateAnnulation: new Date().toISOString(),
+                }
+              : l,
+          ),
+          achats: s.achats.map((a) => ({
+            ...a,
+            paiements: a.paiements.filter((p) => p.lotId !== id),
+          })),
+          journalActivites: [
+            entreeActivite("annulation", "lot_paiement", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Annulation groupée — soldes facture restaurés",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        tracerAudit(get(), {
+          categorie: "statut_critique",
+          action: "annulation_lot_paiement",
+          module: "tresorerie",
+          objetType: "lot_paiement",
+          objetId: id,
+          objetLibelle: prev.numero,
+          objetHref: `/achats/lots/${id}`,
+          ancienneValeur: "actif",
+          nouvelleValeur: "annule",
+          champ: "statut",
+          detail: prev.ventilations.map((v) => v.achatNumero).join(", "),
+        });
+        return { ok: true };
+      },
+      changerStatutChequeLot: (lotId, ligneId, statut) => {
+        const prev = (get().lotsPaiementFournisseur ?? []).find((l) => l.id === lotId);
+        if (!prev) return { ok: false, reason: "Paiement groupé introuvable." };
+        if (prev.statut !== "actif") {
+          return { ok: false, reason: "Ce lot est annulé." };
+        }
+        const ligne = prev.lignes.find((p) => p.id === ligneId);
+        if (!ligne) return { ok: false, reason: "Paiement introuvable." };
+        set((s) => ({
+          lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
+            l.id === lotId
+              ? {
+                  ...l,
+                  lignes: l.lignes.map((p) =>
+                    p.id === ligneId ? { ...p, statutCheque: statut } : p,
+                  ),
+                }
+              : l,
+          ),
+          achats: s.achats.map((a) => ({
+            ...a,
+            paiements: a.paiements.map((p) =>
+              p.lotLigneId === ligneId ? { ...p, statutCheque: statut } : p,
+            ),
+          })),
+        }));
+        if (statut === "rejete" && ligne.statutCheque !== "rejete") {
+          tracerAudit(get(), {
+            categorie: "statut_critique",
+            action: "rejet_cheque_differe",
+            module: "tresorerie",
+            objetType: "lot_paiement",
+            objetId: lotId,
+            objetLibelle: prev.numero,
+            objetHref: `/achats/lots/${lotId}`,
+            champ: "chèque différé",
+            ancienneValeur: ligne.statutCheque ?? "en_attente",
+            nouvelleValeur: "rejete",
+          });
+        }
+        return { ok: true };
+      },
       changerStatutChequeAchat: (achatId, paiementId, statut) => {
         const prev = get().achats.find((a) => a.id === achatId);
         if (!prev) return { ok: false, reason: "Achat introuvable." };
         const ligne = prev.paiements.find((p) => p.id === paiementId);
         if (!ligne) return { ok: false, reason: "Paiement introuvable." };
+        if (ligne.lotId && ligne.lotLigneId) {
+          return get().changerStatutChequeLot(ligne.lotId, ligne.lotLigneId, statut);
+        }
         set((s) => ({
           achats: s.achats.map((a) =>
             a.id === achatId
@@ -2734,6 +3077,21 @@ export const useStore = create<Store>()((set, get) => ({
             ...s.journalActivites,
           ],
         }));
+        if (statut === "rejete" && ligne.statutCheque !== "rejete") {
+          tracerAudit(get(), {
+            categorie: "statut_critique",
+            action: "rejet_cheque_differe",
+            module: "tresorerie",
+            objetType: "achat",
+            objetId: achatId,
+            objetLibelle: prev.numero,
+            objetHref: "/achats",
+            champ: "chèque différé",
+            ancienneValeur: ligne.statutCheque ?? "en_attente",
+            nouvelleValeur: "rejete",
+            siteId: prev.pointDeVenteId,
+          });
+        }
         return { ok: true };
       },
       ajouterRemboursementAvoirAchat: (achatId, avoirId, data) => {
@@ -4347,6 +4705,21 @@ export const useStore = create<Store>()((set, get) => ({
             ...s.journalActivites,
           ],
         }));
+        if (next.statut === "cloture_annule") {
+          tracerAudit(get(), {
+            categorie: "statut_critique",
+            action: "annulation_of_cloture",
+            module: "fabrication",
+            objetType: "ordre_fabrication",
+            objetId: id,
+            objetLibelle: prev.numero,
+            objetHref: "/fabrication",
+            champ: "statut",
+            ancienneValeur: "cloture",
+            nouvelleValeur: "cloture_annule",
+            siteId: prev.atelierId,
+          });
+        }
         return { ok: true };
       },
 
@@ -5992,6 +6365,86 @@ export const useStore = create<Store>()((set, get) => ({
             ],
           }),
         );
+        const nomProduit = next.libelleCourt || next.libelleLong;
+        for (const h of hist) {
+          if (h.champ === "vente_ht" || h.champ === "gros_ht") {
+            tracerAudit(get(), {
+              categorie: "prix",
+              action: "modification_prix_vente",
+              module: "produits",
+              objetType: "produit",
+              objetId: id,
+              objetLibelle: nomProduit,
+              objetHref: "/parametres/produits",
+              champ:
+                h.champ === "gros_ht" ? "prix vente gros HT" : "prix vente HT",
+              ancienneValeur: String(h.ancienMontant),
+              nouvelleValeur: String(h.nouveauMontant),
+              detail: h.motif,
+            });
+          }
+        }
+        if (
+          data.prixVenteM2HT != null &&
+          (prev.prixVenteM2HT ?? 0) !== (next.prixVenteM2HT ?? 0)
+        ) {
+          tracerAudit(get(), {
+            categorie: "prix",
+            action: "modification_prix_vente",
+            module: "produits",
+            objetType: "produit",
+            objetId: id,
+            objetLibelle: nomProduit,
+            objetHref: "/parametres/produits",
+            champ: "prix vente m² HT",
+            ancienneValeur: String(prev.prixVenteM2HT ?? 0),
+            nouvelleValeur: String(next.prixVenteM2HT ?? 0),
+          });
+        }
+        const chargeAvant = libelleCompteAudit(
+          seeded.comptesComptables,
+          prev.compteChargeId ?? chargeEffective?.id,
+        );
+        const chargeApres = libelleCompteAudit(
+          seeded.comptesComptables,
+          next.compteChargeId,
+        );
+        if (chargeAvant !== chargeApres) {
+          tracerAudit(get(), {
+            categorie: "comptabilite",
+            action: "modification_compte_charge",
+            module: "comptabilite",
+            objetType: "produit",
+            objetId: id,
+            objetLibelle: nomProduit,
+            objetHref: "/parametres/produits",
+            champ: "compte de charge",
+            ancienneValeur: chargeAvant,
+            nouvelleValeur: chargeApres,
+          });
+        }
+        const venteAvant = libelleCompteAudit(
+          seeded.comptesComptables,
+          prev.compteVenteId ?? venteEffective?.id,
+        );
+        const venteApres = libelleCompteAudit(
+          seeded.comptesComptables,
+          next.compteVenteId,
+        );
+        if (venteAvant !== venteApres) {
+          tracerAudit(get(), {
+            categorie: "comptabilite",
+            action: "modification_compte_vente",
+            module: "comptabilite",
+            objetType: "produit",
+            objetId: id,
+            objetLibelle: nomProduit,
+            objetHref: "/parametres/produits",
+            champ: "compte de vente",
+            ancienneValeur: venteAvant,
+            nouvelleValeur: venteApres,
+          });
+        }
         return { ok: true };
       },
       desactiverProduit: (id) =>
@@ -6045,9 +6498,18 @@ export const useStore = create<Store>()((set, get) => ({
             ...s.journalActivites,
           ],
         }));
+        tracerAudit(get(), {
+          categorie: "suppression",
+          action: "suppression_produit",
+          module: "produits",
+          objetType: "produit",
+          objetId: id,
+          objetLibelle: prod?.libelleCourt || prod?.libelleLong,
+          objetHref: "/parametres/produits",
+          ancienneValeur: prod?.libelleCourt || prod?.libelleLong,
+        });
         return { ok: true };
       },
-
       addCategorieProduit: (cat) =>
         set((state) => {
           const id = uid("cat");
@@ -6995,7 +7457,7 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
-      addTiers: (data) => {
+      addTiers: (data, opts) => {
         const roles = (data.roles ?? []).filter(
           (r) => r === "client" || r === "fournisseur",
         );
@@ -7005,6 +7467,7 @@ export const useStore = create<Store>()((set, get) => ({
         if (!data.nom.trim()) {
           return { ok: false, reason: "Le nom du tiers est obligatoire." };
         }
+        const exigerComptes = opts?.exigerComptes !== false;
         const state = get();
         let comptes = state.comptesComptables;
         let compteClientId = roles.includes("client")
@@ -7022,9 +7485,13 @@ export const useStore = create<Store>()((set, get) => ({
             parametres: state.parametres,
             tiers: state.tiers ?? [],
           });
-          if (!auto.ok) return auto;
-          comptes = auto.comptes;
-          compteClientId = auto.compteId;
+          if (!auto.ok) {
+            if (exigerComptes) return auto;
+            compteClientId = undefined;
+          } else {
+            comptes = auto.comptes;
+            compteClientId = auto.compteId;
+          }
         }
         if (roles.includes("fournisseur")) {
           const auto = resoudreCompteTiersAuto({
@@ -7035,14 +7502,23 @@ export const useStore = create<Store>()((set, get) => ({
             parametres: state.parametres,
             tiers: state.tiers ?? [],
           });
-          if (!auto.ok) return auto;
-          comptes = auto.comptes;
-          compteFournisseurId = auto.compteId;
+          if (!auto.ok) {
+            if (exigerComptes) return auto;
+            compteFournisseurId = undefined;
+          } else {
+            comptes = auto.comptes;
+            compteFournisseurId = auto.compteId;
+          }
         }
         const motifComptes = motifComptesTiersInvalides(
           { roles, compteClientId, compteFournisseurId },
           comptes,
           state.tiers ?? [],
+          undefined,
+          {
+            exigerClient: exigerComptes && roles.includes("client"),
+            exigerFournisseur: exigerComptes && roles.includes("fournisseur"),
+          },
         );
         if (motifComptes) return { ok: false, reason: motifComptes };
         const id = uid(roles.includes("client") ? "cli" : "frn");
@@ -7080,7 +7556,7 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true, id };
       },
 
-      updateTiers: (id, data) => {
+      updateTiers: (id, data, opts) => {
         const state = get();
         const prev = (state.tiers ?? []).find((t) => t.id === id);
         if (!prev) return { ok: false, reason: "Tiers introuvable." };
@@ -7166,9 +7642,13 @@ export const useStore = create<Store>()((set, get) => ({
             tiers: state.tiers ?? [],
             ignoreId: id,
           });
-          if (!auto.ok) return auto;
-          comptes = auto.comptes;
-          compteClientId = auto.compteId;
+          if (!auto.ok) {
+            if (opts?.exigerComptes !== false) return auto;
+            compteClientId = prev.compteClientId;
+          } else {
+            comptes = auto.comptes;
+            compteClientId = auto.compteId;
+          }
         }
         if (!roles.includes("fournisseur")) {
           if (
@@ -7192,9 +7672,13 @@ export const useStore = create<Store>()((set, get) => ({
             tiers: state.tiers ?? [],
             ignoreId: id,
           });
-          if (!auto.ok) return auto;
-          comptes = auto.comptes;
-          compteFournisseurId = auto.compteId;
+          if (!auto.ok) {
+            if (opts?.exigerComptes !== false) return auto;
+            compteFournisseurId = prev.compteFournisseurId;
+          } else {
+            comptes = auto.comptes;
+            compteFournisseurId = auto.compteId;
+          }
         }
 
         const motifComptes = motifComptesTiersInvalides(
@@ -7204,15 +7688,19 @@ export const useStore = create<Store>()((set, get) => ({
           id,
           {
             exigerClient:
-              roles.includes("client") &&
-              (!prev.roles.includes("client") ||
-                data.compteClientId !== undefined ||
-                Boolean(prev.compteClientId)),
+              opts?.exigerComptes === false
+                ? false
+                : roles.includes("client") &&
+                  (!prev.roles.includes("client") ||
+                    data.compteClientId !== undefined ||
+                    Boolean(prev.compteClientId)),
             exigerFournisseur:
-              roles.includes("fournisseur") &&
-              (!prev.roles.includes("fournisseur") ||
-                data.compteFournisseurId !== undefined ||
-                Boolean(prev.compteFournisseurId)),
+              opts?.exigerComptes === false
+                ? false
+                : roles.includes("fournisseur") &&
+                  (!prev.roles.includes("fournisseur") ||
+                    data.compteFournisseurId !== undefined ||
+                    Boolean(prev.compteFournisseurId)),
           },
         );
         if (motifComptes) return { ok: false, reason: motifComptes };
@@ -7245,6 +7733,76 @@ export const useStore = create<Store>()((set, get) => ({
           }),
         );
         return { ok: true };
+      },
+
+      importerLigneTiers: (input) => {
+        const state = get();
+        const canAuto = longueurNumeroCompteEffective(state.parametres) != null;
+        const roles = (input.payload.roles ?? []).filter(
+          (r) => r === "client" || r === "fournisseur",
+        );
+        if (input.mode === "fusionner") {
+          const fusionId = input.fusionId;
+          if (!fusionId) return { ok: false, reason: "Fiche à fusionner manquante." };
+          const prev = (state.tiers ?? []).find((t) => t.id === fusionId);
+          if (!prev) return { ok: false, reason: "Tiers introuvable." };
+          const patch = appliquerFusionTiers(
+            prev,
+            input.payload,
+            input.champsFusion ?? [],
+          );
+          const nextRoles = patch.roles ?? prev.roles;
+          if (
+            nextRoles.includes("client") &&
+            !prev.compteClientId &&
+            canAuto &&
+            patch.compteClientId === undefined
+          ) {
+            patch.compteClientId = VALEUR_COMPTE_TIERS_AUTO;
+          }
+          if (
+            nextRoles.includes("fournisseur") &&
+            !prev.compteFournisseurId &&
+            canAuto &&
+            patch.compteFournisseurId === undefined
+          ) {
+            patch.compteFournisseurId = VALEUR_COMPTE_TIERS_AUTO;
+          }
+          const res = get().updateTiers(fusionId, patch, { exigerComptes: false });
+          if (!res.ok) {
+            return { ok: false, reason: res.reason ?? "Échec de la fusion." };
+          }
+          const apres = (get().tiers ?? []).find((t) => t.id === fusionId);
+          const compteManquant = Boolean(
+            apres &&
+              ((apres.roles.includes("client") && !apres.compteClientId) ||
+                (apres.roles.includes("fournisseur") && !apres.compteFournisseurId)),
+          );
+          return { ok: true, id: fusionId, compteManquant };
+        }
+        const res = get().addTiers(
+          {
+            ...input.payload,
+            roles,
+            compteClientId:
+              roles.includes("client") && canAuto
+                ? VALEUR_COMPTE_TIERS_AUTO
+                : undefined,
+            compteFournisseurId:
+              roles.includes("fournisseur") && canAuto
+                ? VALEUR_COMPTE_TIERS_AUTO
+                : undefined,
+          },
+          { exigerComptes: false },
+        );
+        if (!res.ok) return res;
+        const apres = (get().tiers ?? []).find((t) => t.id === res.id);
+        const compteManquant = Boolean(
+          apres &&
+            ((apres.roles.includes("client") && !apres.compteClientId) ||
+              (apres.roles.includes("fournisseur") && !apres.compteFournisseurId)),
+        );
+        return { ok: true, id: res.id, compteManquant };
       },
 
       deleteTiers: (id) => {
@@ -7291,6 +7849,16 @@ export const useStore = create<Store>()((set, get) => ({
             ...s.journalActivites,
           ],
         }));
+        tracerAudit(get(), {
+          categorie: "suppression",
+          action: "suppression_tiers",
+          module: "tiers",
+          objetType: "tiers",
+          objetId: id,
+          objetLibelle: prev.nom,
+          objetHref: "/tiers",
+          ancienneValeur: prev.nom,
+        });
         return { ok: true };
       },
 
@@ -7325,12 +7893,21 @@ export const useStore = create<Store>()((set, get) => ({
             ...state.journalActivites,
           ],
         }));
+        tracerRemiseDocument(get(), {
+          objetType: "devis",
+          objetId: id,
+          objetLibelle: devis.numero,
+          objetHref: "/devis/liste",
+          siteId: devis.pointDeVenteId,
+          apres: resumeRemisesDocument(devis),
+        });
         return id;
       },
-      updateDevis: (id, data) =>
+      updateDevis: (id, data) => {
+        const prev = get().devis.find((d) => d.id === id);
         set((state) => {
-          const prev = state.devis.find((d) => d.id === id);
-          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+          const courant = state.devis.find((d) => d.id === id);
+          if (courant && verrouTransformationActif(courant.verrouTransformation)) {
             return state;
           }
           const annulation = data.statut === "refuse" || data.statut === "expire";
@@ -7342,12 +7919,25 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite(
                 annulation ? "annulation" : "modification",
                 "devis",
-                { entiteId: id, libelle: prev?.numero },
+                { entiteId: id, libelle: courant?.numero },
               ),
               ...state.journalActivites,
             ],
           };
-        }),
+        });
+        const next = get().devis.find((d) => d.id === id);
+        if (prev && next && !verrouTransformationActif(prev.verrouTransformation)) {
+          tracerRemiseDocument(get(), {
+            objetType: "devis",
+            objetId: id,
+            objetLibelle: next.numero,
+            objetHref: "/devis/liste",
+            siteId: next.pointDeVenteId,
+            avant: resumeRemisesDocument(prev),
+            apres: resumeRemisesDocument(next),
+          });
+        }
+      },
       deleteDevis: (id) =>
         set((state) => {
           const prev = state.devis.find((d) => d.id === id);
@@ -7375,12 +7965,21 @@ export const useStore = create<Store>()((set, get) => ({
             ...state.journalActivites,
           ],
         }));
+        tracerRemiseDocument(get(), {
+          objetType: "commande",
+          objetId: id,
+          objetLibelle: cmd.numero,
+          objetHref: "/commandes/liste",
+          siteId: cmd.pointDeVenteId,
+          apres: resumeRemisesDocument(cmd),
+        });
         return id;
       },
-      updateCommande: (id, data) =>
+      updateCommande: (id, data) => {
+        const prev = get().commandes.find((c) => c.id === id);
         set((state) => {
-          const prev = state.commandes.find((c) => c.id === id);
-          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+          const courant = state.commandes.find((c) => c.id === id);
+          if (courant && verrouTransformationActif(courant.verrouTransformation)) {
             return state;
           }
           return {
@@ -7391,27 +7990,53 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite(
                 data.statut === "annulee" ? "annulation" : "modification",
                 "commande",
-                { entiteId: id, libelle: prev?.numero },
+                { entiteId: id, libelle: courant?.numero },
               ),
               ...state.journalActivites,
             ],
           };
-        }),
-      deleteCommande: (id) =>
-        set((state) => {
-          const prev = state.commandes.find((c) => c.id === id);
-          return {
-            commandes: state.commandes.filter((c) => c.id !== id),
-            bonsATirer: (state.bonsATirer ?? []).filter((b) => b.commandeId !== id),
-            journalActivites: [
-              entreeActivite("suppression", "commande", {
-                entiteId: id,
-                libelle: prev?.numero,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
+        });
+        const next = get().commandes.find((c) => c.id === id);
+        if (prev && next && !verrouTransformationActif(prev.verrouTransformation)) {
+          tracerRemiseDocument(get(), {
+            objetType: "commande",
+            objetId: id,
+            objetLibelle: next.numero,
+            objetHref: "/commandes/liste",
+            siteId: next.pointDeVenteId,
+            avant: resumeRemisesDocument(prev),
+            apres: resumeRemisesDocument(next),
+          });
+        }
+      },
+      deleteCommande: (id) => {
+        const state = get();
+        const prev = state.commandes.find((c) => c.id === id);
+        set((s) => ({
+          commandes: s.commandes.filter((c) => c.id !== id),
+          bonsATirer: (s.bonsATirer ?? []).filter((b) => b.commandeId !== id),
+          journalActivites: [
+            entreeActivite("suppression", "commande", {
+              entiteId: id,
+              libelle: prev?.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        if (prev) {
+          tracerAudit(get(), {
+            categorie: "suppression",
+            action: "suppression_commande",
+            module: "commercial",
+            objetType: "commande",
+            objetId: id,
+            objetLibelle: prev.numero,
+            objetHref: "/commandes/liste",
+            ancienneValeur: prev.numero,
+            siteId: prev.pointDeVenteId,
+          });
+        }
+      },
 
       addBonDeLivraison: (bl) => {
         const id = uid("bl");
@@ -7636,6 +8261,28 @@ export const useStore = create<Store>()((set, get) => ({
             ],
           });
         });
+        const apresRemise = resumeRemisesDocument(facture);
+        tracerRemiseDocument(get(), {
+          objetType: "facture",
+          objetId: id,
+          objetLibelle: facture.numero,
+          objetHref: "/factures/liste",
+          siteId: facture.pointDeVenteId,
+          apres: apresRemise,
+        });
+        if (facture.derogationCredit) {
+          tracerAudit(get(), {
+            categorie: "statut_critique",
+            action: "deblocage_plafond_credit",
+            module: "commercial",
+            objetType: "facture",
+            objetId: id,
+            objetLibelle: facture.numero,
+            objetHref: "/factures/liste",
+            detail: "Dérogation au plafond de crédit à l'émission",
+            siteId: facture.pointDeVenteId,
+          });
+        }
         return { ok: true, id };
       },
       updateFacture: (id, data, audit) =>
@@ -7731,6 +8378,18 @@ export const useStore = create<Store>()((set, get) => ({
               ? figerCumpSiCloture({ ...f, ...patch }, state)
               : f,
           );
+          const nextFac = factures.find((f) => f.id === id);
+          if (nextFac) {
+            tracerRemiseDocument(state, {
+              objetType: "facture",
+              objetId: id,
+              objetLibelle: nextFac.numero,
+              objetHref: "/factures/liste",
+              siteId: nextFac.pointDeVenteId,
+              avant: resumeRemisesDocument(prev),
+              apres: resumeRemisesDocument(nextFac),
+            });
+          }
           const estAnnulation = data.statut === "annulee";
           return avecJournal(state, {
             factures,
@@ -8124,6 +8783,7 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = state.factures.find((f) => f.id === factureId);
         if (!prev) return { ok: false, reason: "Facture introuvable." };
+        const prevLigne = prev.paiements?.find((p) => p.id === paiementId);
         const paiements = (prev.paiements ?? []).map((p) =>
           p.id === paiementId ? { ...p, statutCheque } : p,
         );
@@ -8138,6 +8798,21 @@ export const useStore = create<Store>()((set, get) => ({
             f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
           ),
         }));
+        if (statutCheque === "rejete" && prevLigne?.statutCheque !== "rejete") {
+          tracerAudit(get(), {
+            categorie: "statut_critique",
+            action: "rejet_cheque_differe",
+            module: "tresorerie",
+            objetType: "facture",
+            objetId: factureId,
+            objetLibelle: prev.numero,
+            objetHref: "/factures/liste",
+            champ: "chèque différé",
+            ancienneValeur: prevLigne?.statutCheque ?? "en_attente",
+            nouvelleValeur: "rejete",
+            siteId: prev.pointDeVenteId,
+          });
+        }
         return { ok: true };
       },
 

@@ -138,6 +138,7 @@ const sections: { title: string; links: NavLink[] }[] = [
           { href: "/demandes-prix", label: "Demandes de prix" },
           { href: "/besoins-achat", label: "Besoins d'achat" },
           { href: "/achats/delais-livraison", label: "Délais de livraison" },
+          { href: "/achats/lots", label: "Paiements groupés" },
           { href: "/documents", label: "Historique documents", exact: true },
         ],
       },
@@ -209,6 +210,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         permission: "clients.lire",
         children: [
           { href: "/tiers", label: "Tous les tiers", exact: true },
+          { href: "/tiers/import", label: "Import initial", permission: "clients.gerer" },
           { href: "/clients", label: "Clients" },
           { href: "/fournisseurs", label: "Fournisseurs" },
         ],
@@ -369,6 +371,11 @@ const sections: { title: string; links: NavLink[] }[] = [
             href: "/administration/sessions",
             label: "Sessions",
             permission: "securite.gerer",
+          },
+          {
+            href: "/administration/journal-audit",
+            label: "Journal d'audit",
+            permission: "audit.lire",
           },
           {
             href: "/administration/audit",

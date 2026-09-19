@@ -26,6 +26,11 @@ const MENUS: {
     permission: "securite.gerer",
   },
   {
+    href: "/administration/journal-audit",
+    label: "Journal d'audit",
+    permission: "audit.lire",
+  },
+  {
     href: "/administration/audit",
     label: "Journal d'audit accès",
     permission: "audit.lire",
