@@ -7,8 +7,10 @@ import type {
   Achat,
   AchatLigne,
   AvoirAchat,
+  DivergenceLivraison,
   EntreeStock,
   LivraisonAchat,
+  LivraisonAchatLigne,
   LivraisonAchatStatut,
   ModePaiement,
   PaiementAchatStatut,
@@ -89,7 +91,9 @@ export function ttcAvoirsValides(achat: Achat) {
 }
 
 export function totalPaye(achat: Achat) {
-  return achat.paiements.reduce((s, p) => s + p.montant, 0);
+  return achat.paiements
+    .filter((p) => p.statutCheque !== "rejete")
+    .reduce((s, p) => s + p.montant, 0);
 }
 
 export function soldeAchat(achat: Achat) {
@@ -151,13 +155,15 @@ export function statutLivraisonAchat(achat: Achat): LivraisonAchatStatut {
   if (stockees.length === 0) {
     return achat.statut === "valide" ? "livree" : "en_attente";
   }
-  const cmd = stockees.reduce((s, l) => s + l.quantite, 0);
-  const liv = stockees.reduce(
-    (s, l) => s + quantiteLivreeProduit(achat, l.produitId ?? ""),
-    0,
-  );
-  if (liv <= 0) return "en_attente";
-  if (liv + 1e-9 < cmd) return "partielle";
+  let aucune = true;
+  let toutesCouvertes = true;
+  for (const l of stockees) {
+    const liv = quantiteLivreeProduit(achat, l.produitId ?? "");
+    if (liv > 1e-9) aucune = false;
+    if (liv + 1e-9 < l.quantite) toutesCouvertes = false;
+  }
+  if (aucune) return "en_attente";
+  if (!toutesCouvertes) return "partielle";
   return "livree";
 }
 
@@ -279,6 +285,75 @@ export function dettesFournisseursAchats(
   return total;
 }
 
+export function coutUnitaireEntreeAchat(ligne: Pick<AchatLigne, "quantite" | "prixAchatUnitaire" | "fraisAnnexe">) {
+  const q = Number(ligne.quantite) || 0;
+  const pu = Number(ligne.prixAchatUnitaire) || 0;
+  const frais = Math.max(0, Number(ligne.fraisAnnexe) || 0);
+  if (q <= 0) return pu;
+  return pu + frais / q;
+}
+
+export function divergenceQuantites(
+  quantiteLivree: number,
+  quantiteCommandee: number,
+): DivergenceLivraison {
+  const d = (Number(quantiteLivree) || 0) - (Number(quantiteCommandee) || 0);
+  if (d > 1e-9) return "surplus";
+  if (d < -1e-9) return "manque";
+  return "aucune";
+}
+
+export const DIVERGENCE_LIVRAISON_LABELS: Record<DivergenceLivraison, string> = {
+  aucune: "Aucune",
+  surplus: "Surplus",
+  manque: "Manque",
+};
+
+export function completerLigneLivraison(
+  ligne: LivraisonAchatLigne,
+  quantiteCommandee: number,
+  opts?: {
+    validerEcarts?: boolean;
+    actor?: { id?: string; nom?: string };
+    /** Quantité déjà réceptionnée sur d'autres livraisons (hors celle-ci). */
+    dejaLivre?: number;
+  },
+): LivraisonAchatLigne {
+  const qLiv = Math.max(0, Number(ligne.quantiteLivree) || 0);
+  const qCmd = Math.max(0, Number(quantiteCommandee) || 0);
+  const cumul = Math.max(0, Number(opts?.dejaLivre) || 0) + qLiv;
+  const divergence = divergenceQuantites(cumul, qCmd);
+  const validation = divergence !== "aucune" && Boolean(opts?.validerEcarts);
+  return {
+    ...ligne,
+    quantiteLivree: qLiv,
+    quantiteCommandee: qCmd,
+    divergence,
+    validationDivergence: validation || undefined,
+    valideeParId: validation ? opts?.actor?.id : undefined,
+    valideeParNom: validation ? opts?.actor?.nom : undefined,
+    valideeAt: validation ? new Date().toISOString() : undefined,
+  };
+}
+
+export function motifEcartLivraisonNonValide(lignes: LivraisonAchatLigne[]) {
+  const ecarts = lignes.filter(
+    (l) => (l.divergence ?? "aucune") !== "aucune" && l.quantiteLivree > 0,
+  );
+  if (ecarts.length === 0) return null;
+  const nonValides = ecarts.filter((l) => !l.validationDivergence);
+  if (nonValides.length === 0) return null;
+  const resume = nonValides
+    .map((l) => {
+      const cmd = l.quantiteCommandee ?? l.quantitePrevue;
+      const delta = (l.quantiteLivree - cmd).toFixed(2);
+      const sens = l.divergence === "surplus" ? "surplus" : "manque";
+      return `${sens} ${delta} (commandé ${cmd}, livré ${l.quantiteLivree})`;
+    })
+    .join(" ; ");
+  return `Écart quantité à valider manuellement : ${resume}.`;
+}
+
 export function entreesDepuisAchat(
   achat: Achat,
   produits: Produit[],
@@ -295,7 +370,7 @@ export function entreesDepuisAchat(
       );
       if (!ligneCmd) continue;
       const prod = produits.find((p) => p.id === l.produitId);
-      const pu = ligneCmd?.prixAchatUnitaire ?? prod?.prixAchat ?? 0;
+      const pu = ligneCmd ? coutUnitaireEntreeAchat(ligneCmd) : (prod?.prixAchat ?? 0);
       const pv = prod?.prixVenteHT ?? 0;
       const parts = ligneCmd
         ? repartirQuantiteLivree(ligneCmd, l.quantiteLivree, achat.pointDeVenteId)
@@ -380,6 +455,10 @@ export const MODES_PAIEMENT_ACHAT: ModePaiement[] = [
   "especes",
   "virement",
   "cheque",
+  "cheque_comptant",
+  "cheque_differe",
+  "prelevement",
+  "carte",
   "mobile_money",
   "autre",
 ];

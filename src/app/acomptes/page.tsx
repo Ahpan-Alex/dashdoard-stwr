@@ -6,10 +6,15 @@ import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
-import { ACOMPTE_STATUTS, MODES_PAIEMENT, filterAcomptesByPos, libelleClient } from "@/lib/commercial";
+import { ACOMPTE_STATUTS, filterAcomptesByPos, libelleClient } from "@/lib/commercial";
 import { filterByPos, pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import {
+  comptesTresorerieActifs,
+  libelleModePaiement,
+  modesPaiementActifs,
+} from "@/lib/tresorerie";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import type { ModePaiement } from "@/lib/types";
 
@@ -42,6 +47,8 @@ export default function AcomptesPage() {
     updateAcompte,
     deleteAcompte,
     encaisserAcompte,
+    modesPaiement,
+    comptesTresorerie,
   } = useStore();
 
   const { visible, colSpan } = useAffichageTable("acomptes");
@@ -59,6 +66,8 @@ export default function AcomptesPage() {
     date: new Date().toISOString().slice(0, 10),
     montantTTC: "",
     modePaiement: "virement" as ModePaiement,
+    compteTresorerieId: "",
+    reference: "",
     devisId: "",
     commandeId: "",
     genererFacture: true,
@@ -96,12 +105,12 @@ export default function AcomptesPage() {
           date: formatDate(a.date),
           client: clients.find((c) => c.id === a.clientId)?.nom ?? "",
           montantTTC: formatCurrency(a.montantTTC),
-          mode: MODES_PAIEMENT[a.modePaiement] ?? a.modePaiement,
+          mode: libelleModePaiement(a.modePaiement, modesPaiement),
           liens: [lien, fac?.numero].filter(Boolean).join(" · "),
           statut: ACOMPTE_STATUTS[a.statut] ?? a.statut,
         };
       }),
-    [acomptesFiltres, factures, commandes, devis, clients],
+    [acomptesFiltres, factures, commandes, devis, clients, modesPaiement],
   );
 
   function onSubmit(e: FormEvent) {
@@ -126,6 +135,8 @@ export default function AcomptesPage() {
       date: new Date(`${form.date}T12:00:00`).toISOString(),
       montantTTC,
       modePaiement: form.modePaiement,
+      compteTresorerieId: form.compteTresorerieId || undefined,
+      reference: form.reference || undefined,
       devisId: form.devisId || undefined,
       commandeId: form.commandeId || undefined,
       refDocument: refDoc,
@@ -223,12 +234,38 @@ export default function AcomptesPage() {
                 })
               }
             >
-              {Object.entries(MODES_PAIEMENT).map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
+              {modesPaiementActifs(modesPaiement ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.libelle}
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block text-xs font-semibold text-muted">
+            Compte de trésorerie (optionnel)
+            <select
+              className="select mt-1"
+              value={form.compteTresorerieId}
+              onChange={(e) =>
+                setForm({ ...form, compteTresorerieId: e.target.value })
+              }
+            >
+              <option value="">Pas de mouvement de trésorerie</option>
+              {comptesTresorerieActifs(comptesTresorerie ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.libelle}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-muted">
+            Référence (facultatif)
+            <input
+              className="input mt-1"
+              value={form.reference}
+              onChange={(e) => setForm({ ...form, reference: e.target.value })}
+              placeholder="N° chèque, id transaction…"
+            />
           </label>
           <label className="block text-xs font-semibold text-muted">
             Lié au devis
@@ -359,7 +396,9 @@ export default function AcomptesPage() {
                     <TdCol id="montantTTC" show={visible} className="font-semibold">
                       {formatCurrency(a.montantTTC)}
                     </TdCol>
-                    <TdCol id="mode" show={visible}>{MODES_PAIEMENT[a.modePaiement]}</TdCol>
+                    <TdCol id="mode" show={visible}>
+                      {libelleModePaiement(a.modePaiement, modesPaiement)}
+                    </TdCol>
                     <TdCol id="liens" show={visible} className="text-xs">
                       {commandes.find((c) => c.id === a.commandeId)?.numero ||
                         devis.find((d) => d.id === a.devisId)?.numero ||

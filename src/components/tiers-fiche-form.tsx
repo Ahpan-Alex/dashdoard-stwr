@@ -171,6 +171,7 @@ export function payloadTiers(
     compteFournisseurId: roles.includes("fournisseur")
       ? form.compteFournisseurId || undefined
       : undefined,
+    dateCreation: base?.dateCreation,
   };
 }
 

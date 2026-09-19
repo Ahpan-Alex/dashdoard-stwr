@@ -68,7 +68,83 @@ export type UniteMesure = {
   actif: boolean;
 };
 
-/** Type de client paramétrable (particulier, hôtel, collectivité…). */
+export type TypeCompteTresorerie = "caisse" | "banque" | "mobile_monnaie";
+
+export type CompteTresorerie = {
+  id: string;
+  libelle: string;
+  type: TypeCompteTresorerie;
+  /** Absent = compte global (tous sites). */
+  siteId?: string;
+  actif: boolean;
+  ordre: number;
+};
+
+export type ModePaiementParam = {
+  id: string;
+  libelle: string;
+  actif: boolean;
+  /** Vrai pour le chèque à paiement différé. */
+  necessiteEcheance: boolean;
+  ordre: number;
+};
+
+export type StatutChequeDiffere = "en_attente" | "encaisse" | "rejete";
+
+/** Identifiant d'un mode (catalogue paramétrable ; anciennes clés conservées). */
+export type ModePaiement = string;
+
+export type LignePaiement = {
+  id: string;
+  date: string;
+  montant: number;
+  modePaiement: ModePaiement;
+  compteTresorerieId?: string;
+  /** Référence de transaction (n° chèque, id mobile…), facultative. */
+  reference?: string;
+  /** Date d'échéance / d'effet (chèque différé). */
+  dateEffet?: string;
+  statutCheque?: StatutChequeDiffere;
+  note?: string;
+};
+
+export type SourceMouvementTresorerie =
+  | "achat"
+  | "facture"
+  | "avoir_achat"
+  | "acompte"
+  | "mission";
+
+export type MouvementTresorerie = {
+  id: string;
+  date: string;
+  compteTresorerieId: string;
+  /** Positif = entrée (vente), négatif = sortie (achat). */
+  montant: number;
+  sens: "entree" | "sortie";
+  modePaiementId: string;
+  reference?: string;
+  libelle: string;
+  source: SourceMouvementTresorerie;
+  sourceId: string;
+  lignePaiementId: string;
+};
+
+/** Ligne importée d'un relevé bancaire CSV, pointée manuellement. */
+export type LigneReleveBancaire = {
+  id: string;
+  compteTresorerieId: string;
+  date: string;
+  libelle: string;
+  /** Signé : positif = crédit (entrée), négatif = débit (sortie). */
+  montant: number;
+  dateImport: string;
+  fichierNom?: string;
+  /** Mouvement de trésorerie pointé (absent = non rapproché). */
+  mouvementId?: string;
+};
+
+/** Type de client paramétrable (particulier, entreprise…). */
 export type TypeClient = {
   id: string;
   code: string;
@@ -131,6 +207,7 @@ export type TypeAchat =
   | "marchandises"
   | "matieres_premieres"
   | "fournitures"
+  | "outillage"
   | "service_produit"
   | "service_general"
   | "immobilisation";
@@ -222,11 +299,29 @@ export type NatureStock = "matiere_premiere" | "semi_fini" | "fini";
 
 export type TypeNomenclature = "automatique" | "alternative";
 
+export type TypeCalculNomenclature =
+  | "fixe"
+  | "surface"
+  | "perimetre"
+  | "ratio_pivot";
+
 export type NomenclatureLigne = {
   id: string;
   composantId: string;
-  /** Quantité de composant pour 1 unité du produit fabriqué. */
+  /** Quantité de composant pour 1 unité du produit (type fixe). */
   quantite: number;
+  /** Défaut : fixe. */
+  typeCalcul?: TypeCalculNomenclature;
+  /**
+   * Consommation par m² de surface de vente (surface)
+   * ou par mètre de périmètre de vente (périmètre).
+   * Absorbe faces, chute, etc. — pas un rendement théorique catalogue.
+   */
+  taux?: number;
+  /** Pourcentage du pivot (ex. 10 = 10 %). */
+  pourcentage?: number;
+  /** Ligne de la même nomenclature (jamais un autre ratio). */
+  lignePivotId?: string;
 };
 
 export type NomenclatureProduit = {
@@ -289,7 +384,8 @@ export type EntreeStock = {
     | "of_retour"
     | "of_annulation"
     | "mission_achat"
-    | "mission_achat_annulation";
+    | "mission_achat_annulation"
+    | "sortie_atelier";
   /** Achat fournisseur d'origine (livraison ou retour). */
   achatId?: string;
   livraisonId?: string;
@@ -300,6 +396,8 @@ export type EntreeStock = {
   ofId?: string;
   /** Mission d'achat (avance de caisse) d'origine. */
   missionAchatId?: string;
+  /** Sortie atelier (consommables / pièces d'usure, hors OF). */
+  sortieAtelierId?: string;
   /** Date limite de consommation du lot (si le produit gère la péremption). */
   datePeremption?: string;
 };
@@ -389,6 +487,16 @@ export type Parametres = {
   validiteJoursDefautAchats?: number;
   /** Formats de n° pour devis, commande, BL et facture client. */
   formatsNumeroPieces?: FormatsNumeroPieces;
+  /**
+   * Rôles habilités à acter la validation finale d'un BAT (débloque l'OF).
+   * L'administrateur entreprise reste toujours habilité.
+   */
+  rolesValiderBat?: string[];
+  /**
+   * Fenêtre (jours) de la vue « chèques différés à échéance proche ».
+   * Absent = 15.
+   */
+  fenetreChequesProchesJours?: number;
   /**
    * Prochain n° séquentiel (hors préfixes) si l’entreprise démarre en cours
    * d’exercice sans ressaisir l’historique. Absent = 1. Le réel est le max
@@ -583,8 +691,10 @@ export type Tiers = {
   compteClientId?: string;
   /** Compte 401 (ou sous-compte) si rôle Fournisseur. Unique parmi les tiers. */
   compteFournisseurId?: string;
-  /** Tiers technique (ex. Divers / Marché) : non supprimable. */
+  /** Tiers technique (ex. Divers / Fournitures) : non supprimable. */
   systeme?: boolean;
+  /** Date de création de la fiche (filtre liste). */
+  dateCreation?: string;
 };
 
 export type AchatStatut = "brouillon" | "valide" | "annule";
@@ -620,12 +730,43 @@ export type AchatLigne = {
    * Absente = toute la quantité va sur `Achat.pointDeVenteId`.
    */
   repartitions?: AchatLigneRepartition[];
+  /**
+   * Répartition de la quantité vers un ou plusieurs OF.
+   * La somme peut être inférieure à la quantité (reliquat = stock libre).
+   */
+  repartitionsOf?: AchatRepartitionOf[];
+  /** Besoin d'achat couvert par cette ligne (fractionnement multi-fournisseurs). */
+  besoinAchatId?: string;
+  /**
+   * Frais annexes hors mission (déplacement, parking…) — majorent le CUMP
+   * d'entrée, répartis sur la quantité commandée.
+   */
+  fraisAnnexe?: number;
 };
+
+/** Quantité d'une ligne d'achat réservée à un ordre de fabrication. */
+export type AchatRepartitionOf = {
+  id: string;
+  ofId: string;
+  quantite: number;
+  /** Site de réservation (défaut : site de l'achat). */
+  pointDeVenteId?: string;
+};
+
+export type DivergenceLivraison = "aucune" | "surplus" | "manque";
 
 export type LivraisonAchatLigne = {
   produitId: string;
   quantitePrevue: number;
   quantiteLivree: number;
+  /** Quantité de la ligne de commande d'origine (contrôle d'écart). */
+  quantiteCommandee?: number;
+  divergence?: DivergenceLivraison;
+  /** Obligatoire si divergence ≠ aucune. */
+  validationDivergence?: boolean;
+  valideeParId?: string;
+  valideeParNom?: string;
+  valideeAt?: string;
 };
 
 export type LivraisonAchat = {
@@ -639,14 +780,7 @@ export type LivraisonAchat = {
   datePeremption?: string;
 };
 
-export type PaiementFournisseur = {
-  id: string;
-  date: string;
-  /** Montant TTC versé (Ar) */
-  montant: number;
-  modePaiement: ModePaiement;
-  note?: string;
-};
+export type PaiementFournisseur = LignePaiement;
 
 export type AvoirAchatLigne = {
   produitId: string;
@@ -662,6 +796,8 @@ export type AvoirAchat = {
   statut: "brouillon" | "valide";
   lignes: AvoirAchatLigne[];
   note?: string;
+  /** Remboursement trésorerie (optionnel, après validation). */
+  paiements?: LignePaiement[];
 };
 
 /** Commande fournisseur : livraisons, paiements et retours rattachés. */
@@ -691,22 +827,58 @@ export type Achat = {
   ofComposantId?: string;
   /** Demande de prix d'origine, si la commande en est issue. */
   demandePrixId?: string;
+  /** Besoin d'achat couvert (en tout ou partie) par cette commande. */
+  besoinAchatId?: string;
+  /** Mode de paiement prévu (Trésorerie) — distinct des règlements déjà saisis. */
+  modePaiement?: ModePaiement;
   /** Durée de validité du bon de commande, en jours. */
   validiteJours?: number;
   /** N° de la facture fournisseur, saisi manuellement. */
   numeroFactureFournisseur?: string;
 };
 
+export type BesoinAchatStatut = "ouvert" | "partiel" | "couvert" | "annule";
+
+/** Besoin matière à couvrir par une ou plusieurs commandes fournisseurs. */
+export type BesoinAchat = {
+  id: string;
+  numero: string;
+  date: string;
+  produitId: string;
+  quantiteNecessaire: number;
+  /** Site de réception par défaut des commandes rattachées. */
+  pointDeVenteId: string;
+  /**
+   * Répartition cible vers un ou plusieurs OF.
+   * Recopiée au prorata sur chaque commande créée depuis le besoin.
+   */
+  repartitionsOf?: AchatRepartitionOf[];
+  note?: string;
+  annule?: boolean;
+};
+
 export type DemandePrixStatut =
   | "brouillon"
   | "en_cours"
   | "cloturee"
+  | "cloturee_sans_suite"
   | "annulee";
+
+/** Statut de la consultation d'un fournisseur (même DP, réponse propre). */
+export type DemandePrixConsultationStatut =
+  | "envoyee"
+  | "en_attente"
+  | "repondue"
+  | "relancee"
+  | "sans_reponse";
 
 export type DemandePrixLigne = {
   id: string;
   produitId: string;
   quantite: number;
+  dateLivraisonSouhaitee?: string;
+  pointDeVenteId?: string;
+  specifications?: string;
 };
 
 export type DemandePrixOffre = {
@@ -716,6 +888,23 @@ export type DemandePrixOffre = {
   /** 0 = pas encore de prix proposé. */
   prixUnitaire: number;
   delaiJours?: number;
+  remisePercent?: number;
+  validiteOffreJours?: number;
+  francoPort?: boolean;
+  conditions?: string;
+};
+
+export type DemandePrixConsultation = {
+  fournisseurId: string;
+  statut: DemandePrixConsultationStatut;
+  dateEnvoi?: string;
+  dateRelance?: string;
+  dateReponse?: string;
+};
+
+export type DemandePrixRetenueLigne = {
+  ligneId: string;
+  fournisseurId: string;
 };
 
 export type DemandePrix = {
@@ -726,13 +915,22 @@ export type DemandePrix = {
   lignes: DemandePrixLigne[];
   fournisseurIds: string[];
   offres: DemandePrixOffre[];
-  /** Fournisseur(s) choisis après comparatif. */
+  consultations?: DemandePrixConsultation[];
+  /** Fournisseur retenu par ligne (répartition possible). */
+  retenuesParLigne?: DemandePrixRetenueLigne[];
+  /** Fournisseur(s) choisis après comparatif (agrégat). */
   fournisseurIdsRetenus?: string[];
   /** Commandes fournisseur générées depuis cette DP. */
   achatIds?: string[];
   note?: string;
+  /** Site destinataire par défaut. */
+  pointDeVenteId?: string;
+  /** Date de livraison souhaitée (entête, défaut des lignes). */
+  dateLivraisonSouhaitee?: string;
   /** Durée de validité de la demande de prix, en jours. */
   validiteJours?: number;
+  origine?: "libre" | "alerte_stock";
+  alerteId?: string;
 };
 
 export type TransfertStockStatut = "demande" | "expedie" | "recu" | "annule";
@@ -757,6 +955,34 @@ export type TransfertStock = {
   lignes: TransfertStockLigne[];
   demandeParUserId?: string;
   demandeParNom?: string;
+  note?: string;
+};
+
+/** Transfert de matière réservée d'un OF vers un autre (même site, 2 validations). */
+export type TransfertMatiereOfStatut =
+  | "demande"
+  | "valide_source"
+  | "effectue"
+  | "annule";
+
+export type TransfertMatiereOf = {
+  id: string;
+  numero: string;
+  date: string;
+  produitId: string;
+  pointDeVenteId: string;
+  ofSourceId: string;
+  ofDestinataireId: string;
+  quantite: number;
+  achatId?: string;
+  achatLigneId?: string;
+  statut: TransfertMatiereOfStatut;
+  dateValidationSource?: string;
+  dateValidationDestinataire?: string;
+  validateurSourceId?: string;
+  validateurSourceNom?: string;
+  validateurDestId?: string;
+  validateurDestNom?: string;
   note?: string;
 };
 
@@ -889,10 +1115,18 @@ export type Commande = {
 
 export type BatStatut = "en_attente" | "modifications_demandees" | "valide";
 
+export type BatMotifRefus = "couleur" | "texte" | "dimension" | "autre";
+
+export type BatOrigine = "scratch" | "duplication" | "gabarit";
+
 /** Version d'un Bon à Tirer, toujours rattachée à une commande client. */
 export type BonATirer = {
   id: string;
   commandeId: string;
+  /** Groupe les versions V1, V2… d'un même BAT (mêmes lignes). Absent = legacy commande entière. */
+  cycleId?: string;
+  /** Lignes de commande couvertes. Vide / absent = toutes les lignes produit. */
+  ligneIds?: string[];
   /** Numéro de version auto-incrémenté (1, 2, 3…). */
   version: number;
   fichierNom?: string;
@@ -902,9 +1136,18 @@ export type BonATirer = {
   statut: BatStatut;
   dateEnvoi: string;
   dateValidation?: string;
-  /** Contact côté client ayant validé — saisie manuelle, pas de portail. */
+  /** Contact côté client ayant validé — saisie historique, plus exigée. */
   validateurNom?: string;
+  /** Utilisateur interne ayant acté la validation. */
+  validateurUserId?: string;
+  validateurUserNom?: string;
   commentaire?: string;
+  /** Motif catégoriel obligatoire si modifications demandées. */
+  motifRefus?: BatMotifRefus;
+  /** Modèle de référence réutilisable pour un autre client (même support). */
+  gabarit?: boolean;
+  origine?: BatOrigine;
+  sourceBatId?: string;
 };
 
 export type BonDeLivraisonStatut =
@@ -1012,6 +1255,8 @@ export type Facture = {
    * N'altère pas le contenu PDF de la facture.
    */
   montantPaye: number;
+  /** Règlements fractionnés (encaissements). Absent = suivi via montantPaye seul. */
+  paiements?: LignePaiement[];
   devisId?: string;
   commandeId?: string;
   bonDeLivraisonId?: string;
@@ -1071,13 +1316,6 @@ export type JournalAudit = {
   detail?: string;
 };
 
-export type ModePaiement =
-  | "especes"
-  | "virement"
-  | "cheque"
-  | "mobile_money"
-  | "autre";
-
 export type AcompteStatut = "enregistre" | "impute" | "annule";
 
 /** Acompte encaissé — génère / lie une facture d'acompte. */
@@ -1090,6 +1328,8 @@ export type Acompte = {
   montantTTC: number;
   tauxTVA: number;
   modePaiement: ModePaiement;
+  compteTresorerieId?: string;
+  reference?: string;
   devisId?: string;
   commandeId?: string;
   factureId?: string;
@@ -1179,14 +1419,20 @@ export type ActiviteEntite =
   | "acompte"
   | "inventaire"
   | "transfert"
+  | "transfert_matiere_of"
   | "ordre_fabrication"
   | "mission_achat"
   | "demande_prix"
+  | "besoin_achat"
   | "bon_a_tirer"
   | "tiers"
   | "parametres"
   | "compte_comptable"
   | "compte_courant"
+  | "compte_tresorerie"
+  | "mode_paiement"
+  | "sortie_atelier"
+  | "motif_sortie_atelier"
   | "autre";
 
 /** Nature de l'action tracée. */
@@ -1238,7 +1484,8 @@ export type SourceEcriture =
   | "achat"
   | "avoir_achat"
   | "mission_achat"
-  | "mission_achat_depense";
+  | "mission_achat_depense"
+  | "sortie_atelier";
 
 export type LigneEcritureComptable = {
   id: string;
@@ -1286,7 +1533,14 @@ export type OrdreFabricationStatut =
 export type OfNomenclatureLigne = {
   id: string;
   composantId: string;
+  /** Quantité de composant pour 1 unité fabriquée (déjà résolue). */
   quantiteUnitaire: number;
+  typeCalcul?: TypeCalculNomenclature;
+  taux?: number;
+  pourcentage?: number;
+  lignePivotId?: string;
+  /** Libellé du calcul figé à la résolution (affichage OF). */
+  formuleLibelle?: string;
 };
 
 export type OfSortieMatiere = {
@@ -1309,6 +1563,32 @@ export type OfFraisAdditionnel = {
   libelle: string;
   montant: number;
   affecteEntreeId?: string;
+};
+
+/** Motif paramétrable d'une sortie atelier (pièces d'usure, entretien). */
+export type MotifSortieAtelier = {
+  id: string;
+  libelle: string;
+  ordre: number;
+  actif: boolean;
+};
+
+/**
+ * Consommation d'article vers un atelier, indépendante d'un OF
+ * (lames, disques, consommables d'entretien, etc.).
+ */
+export type SortieAtelier = {
+  id: string;
+  date: string;
+  atelierId: string;
+  /** Site dont le stock est débité (défaut = atelier). */
+  siteSourceId: string;
+  produitId: string;
+  quantite: number;
+  motifId?: string;
+  motif: string;
+  cumpSortie: number;
+  valeur: number;
 };
 
 /** Temps de main d'œuvre directe saisi sur un OF, valorisé au taux de l'atelier. */
@@ -1373,6 +1653,10 @@ export type OrdreFabrication = {
   nomenclatureLignes: OfNomenclatureLigne[];
   /** Fabrication sur commande (MTO). Vide = réappro stock (MTS). */
   commandeId?: string;
+  /** Largeur (m) de l'unité fabriquée — reprise commande MTO ou saisie MTS. */
+  dimensionLargeur?: number;
+  /** Hauteur (m) de l'unité fabriquée. */
+  dimensionHauteur?: number;
   statut: OrdreFabricationStatut;
   dateCreation: string;
   dateCloturePrevue?: string;
@@ -1448,7 +1732,7 @@ export type MissionDepenseDiverse = {
   nature: string;
   /** Nature catalogue. Absent = saisie libre (imputation 471). */
   natureId?: string;
-  /** Fournisseur obligatoire (fiche Tiers ou Divers / Marché). */
+  /** Fournisseur obligatoire (fiche Tiers ou Divers / Fournitures). */
   fournisseurId: string;
   montant: number;
   date?: string;
@@ -1483,6 +1767,8 @@ export type MissionMouvementFonds = {
   date: string;
   modePaiement?: string;
   compteSource?: string;
+  /** Compte de trésorerie (optionnel — l'existant reste informatif sans ce champ). */
+  compteTresorerieId?: string;
   responsableUserId?: string;
   responsableNom?: string;
   reference?: string;
@@ -1572,16 +1858,24 @@ export type AppState = {
   transformations: TransformationCommerciale[];
   achats: Achat[];
   transfertsStock: TransfertStock[];
+  transfertsMatiereOf: TransfertMatiereOf[];
   ordresFabrication: OrdreFabrication[];
   /** Bons à tirer versionnés, liés à une commande client. */
   bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
   demandesPrix: DemandePrix[];
+  besoinsAchat: BesoinAchat[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
   naturesDepenseMission: NatureDepenseMission[];
+  motifsSortieAtelier: MotifSortieAtelier[];
+  sortiesAtelier: SortieAtelier[];
+  comptesTresorerie: CompteTresorerie[];
+  /** Lignes de relevé bancaire importées (rapprochement manuel). */
+  lignesReleveBancaire: LigneReleveBancaire[];
+  modesPaiement: ModePaiementParam[];
   exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];

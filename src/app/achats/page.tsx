@@ -16,6 +16,8 @@ import {
   Undo2,
 } from "lucide-react";
 import { ApercuBonCommandeFournisseur } from "@/components/apercu-bon-commande-fournisseur";
+import { RepartitionOfLigne } from "@/components/repartition-of-ligne";
+import { SaisieLignesPaiement } from "@/components/saisie-lignes-paiement";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
@@ -24,7 +26,8 @@ import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import {
-  MODES_PAIEMENT_ACHAT,
+  DIVERGENCE_LIVRAISON_LABELS,
+  divergenceQuantites,
   STATUT_ACHAT_LABELS,
   STATUT_LIVRAISON_LABELS,
   STATUT_PAIEMENT_LABELS,
@@ -42,7 +45,6 @@ import {
   totauxAvoir,
   ttcAvoirsValides,
 } from "@/lib/achats";
-import { MODES_PAIEMENT } from "@/lib/commercial";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
@@ -63,6 +65,13 @@ import { useStore } from "@/lib/store";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { validiteJoursDefautAchats } from "@/lib/validite-document";
+import {
+  libelleCompteTresorerie,
+  libelleModePaiement,
+  modesPaiementActifs,
+  STATUT_CHEQUE_LABELS,
+  type SaisieLignePaiement,
+} from "@/lib/tresorerie";
 import type {
   Achat,
   AchatLigne,
@@ -563,7 +572,7 @@ function AchatEditor({
     ajouterLivraisonAchat,
     confirmerLivraisonAchat,
     annulerLivraisonAchat,
-    ajouterPaiementAchat,
+    ajouterPaiementsAchat,
     supprimerPaiementAchat,
     ajouterAvoirAchat,
     validerAvoirAchat,
@@ -575,6 +584,11 @@ function AchatEditor({
   const dpLie = useStore((s) =>
     achat.demandePrixId
       ? (s.demandesPrix ?? []).find((d) => d.id === achat.demandePrixId)
+      : undefined,
+  );
+  const besoinLie = useStore((s) =>
+    achat.besoinAchatId
+      ? (s.besoinsAchat ?? []).find((b) => b.id === achat.besoinAchatId)
       : undefined,
   );
   const [voirBon, setVoirBon] = useState(true);
@@ -592,6 +606,9 @@ function AchatEditor({
   );
   const [numeroFactureFournisseur, setNumeroFactureFournisseur] = useState(
     achat.numeroFactureFournisseur ?? "",
+  );
+  const [modePaiement, setModePaiement] = useState<ModePaiement>(
+    achat.modePaiement ?? "virement",
   );
   const brouillon = achat.statut === "brouillon";
   const tot = totauxAchat({ ...achat, lignes });
@@ -624,6 +641,7 @@ function AchatEditor({
             validiteJours: Number(validiteJours) || 15,
             numeroFactureFournisseur:
               numeroFactureFournisseur.trim() || undefined,
+            modePaiement,
           }
         : {
             note: note.trim() || undefined,
@@ -631,6 +649,7 @@ function AchatEditor({
             validiteJours: Number(validiteJours) || 15,
             numeroFactureFournisseur:
               numeroFactureFournisseur.trim() || undefined,
+            modePaiement,
           },
     );
     if (!res.ok) alert(res.reason);
@@ -643,6 +662,7 @@ function AchatEditor({
       echeance: echeance ? isoMidiDepuisJour(echeance) : undefined,
       validiteJours: Number(validiteJours) || 15,
       numeroFactureFournisseur: numeroFactureFournisseur.trim() || undefined,
+      modePaiement,
     });
     if (!save.ok) {
       alert(save.reason);
@@ -676,11 +696,22 @@ function AchatEditor({
         </p>
       )}
 
+      {besoinLie && (
+        <p className="mb-3 text-sm">
+          Couvre le{" "}
+          <Link href={`/besoins-achat/${besoinLie.id}`} className="font-semibold text-sea-800">
+            besoin {besoinLie.numero}
+          </Link>
+        </p>
+      )}
+
       <PageHeader
         title={achat.numero}
         description={`${nomFrn} — ${nomPdv}${
           ofLie ? ` · OF ${ofLie.numero}` : ""
-        }${dpLie ? ` · DP ${dpLie.numero}` : ""}`}
+        }${dpLie ? ` · DP ${dpLie.numero}` : ""}${
+          besoinLie ? ` · Besoin ${besoinLie.numero}` : ""
+        }`}
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -810,6 +841,8 @@ function AchatEditor({
           setValiditeJours={setValiditeJours}
           numeroFactureFournisseur={numeroFactureFournisseur}
           setNumeroFactureFournisseur={setNumeroFactureFournisseur}
+          modePaiement={modePaiement}
+          setModePaiement={setModePaiement}
           brouillon={brouillon}
           libelleLigne={libelleLigne}
           unite={unite}
@@ -826,8 +859,10 @@ function AchatEditor({
             const res = ajouterLivraisonAchat(achat.id, payload);
             if (!res.ok) alert(res.reason);
           }}
-          onConfirmer={(livId, lignesLiv) => {
-            const res = confirmerLivraisonAchat(achat.id, livId, lignesLiv);
+          onConfirmer={(livId, lignesLiv, validerEcarts) => {
+            const res = confirmerLivraisonAchat(achat.id, livId, lignesLiv, {
+              validerEcarts,
+            });
             if (!res.ok) alert(res.reason);
           }}
           onAnnuler={(livId) => {
@@ -840,8 +875,8 @@ function AchatEditor({
       {onglet === "paiements" && (
         <PaiementsPanel
           achat={achat}
-          onAjouter={(payload) => {
-            const res = ajouterPaiementAchat(achat.id, payload);
+          onAjouter={(lignes) => {
+            const res = ajouterPaiementsAchat(achat.id, lignes);
             if (!res.ok) alert(res.reason);
           }}
           onSupprimer={(pid) => {
@@ -958,6 +993,8 @@ function CommandePanel({
   setValiditeJours,
   numeroFactureFournisseur,
   setNumeroFactureFournisseur,
+  modePaiement,
+  setModePaiement,
   brouillon,
   libelleLigne,
   unite,
@@ -975,6 +1012,8 @@ function CommandePanel({
   setValiditeJours: (v: string) => void;
   numeroFactureFournisseur: string;
   setNumeroFactureFournisseur: (v: string) => void;
+  modePaiement: ModePaiement;
+  setModePaiement: (m: ModePaiement) => void;
   brouillon: boolean;
   libelleLigne: (l: AchatLigne) => string;
   unite: (id: string | undefined) => string;
@@ -987,9 +1026,16 @@ function CommandePanel({
   const demandesPrix = useStore((s) => s.demandesPrix ?? []);
   const fournisseurs = useStore((s) => s.fournisseurs);
   const updateAchat = useStore((s) => s.updateAchat);
+  const majRepartitionsOfAchat = useStore((s) => s.majRepartitionsOfAchat);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const comptesComptables = useStore((s) => s.comptesComptables);
   const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
+  const modesCat = useStore((s) => s.modesPaiement ?? []);
+  const besoinProduitId = useStore((s) =>
+    achat.besoinAchatId
+      ? (s.besoinsAchat ?? []).find((b) => b.id === achat.besoinAchatId)?.produitId
+      : undefined,
+  );
   const [typeNouveau, setTypeNouveau] = useState<TypeAchat>("marchandises");
   const [produitId, setProduitId] = useState(
     () => produits.find((p) => p.actif && produitEstAchetable(p, categoriesProduits))?.id ?? "",
@@ -1059,6 +1105,11 @@ function CommandePanel({
         prixAchatUnitaire:
           dernierChezFrn?.dernierPrix ?? p?.prixAchat ?? 0,
         repartitions: [{ pointDeVenteId: achat.pointDeVenteId, quantite: 1 }],
+        besoinAchatId:
+          achat.besoinAchatId &&
+          (!besoinProduitId || produitId === besoinProduitId)
+            ? achat.besoinAchatId
+            : undefined,
       },
     ]);
     if (
@@ -1173,6 +1224,21 @@ function CommandePanel({
             placeholder="N° figurant sur la facture"
           />
         </label>
+        <label className="block text-xs font-semibold text-muted">
+          Mode de paiement prévu
+          <select
+            className="select mt-1"
+            value={modePaiement}
+            onChange={(e) => setModePaiement(e.target.value)}
+            disabled={achat.statut === "annule"}
+          >
+            {modesPaiementActifs(modesCat).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.libelle}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {brouillon && (
@@ -1211,7 +1277,7 @@ function CommandePanel({
                   placeholder={
                     typeNouveau === "immobilisation"
                       ? "Ex. Ordinateur portable"
-                      : "Ex. Honoraires, loyer…"
+                      : "Ex. EPI, goûter, déjeuner…"
                   }
                 />
               </label>
@@ -1274,8 +1340,13 @@ function CommandePanel({
               <th>Type</th>
               <th>Qté commandée</th>
               <th>PU HT</th>
+              <th title="Déplacement, parking… hors mission d'achat. Majorent le CUMP à l'entrée en stock, sans changer le montant fournisseur.">
+                Frais annexes{" "}
+                <span className="font-normal text-muted">(CUMP)</span>
+              </th>
               <th>Montant HT</th>
               <th>Répartition sites</th>
+              <th>Répartition OF</th>
               <th>Livré</th>
               <th>Reliquat</th>
               {brouillon && <th />}
@@ -1284,7 +1355,7 @@ function CommandePanel({
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-muted">
+                <td colSpan={11} className="text-muted">
                   Aucun article.
                 </td>
               </tr>
@@ -1346,6 +1417,40 @@ function CommandePanel({
                       formatCurrency(l.prixAchatUnitaire)
                     )}
                   </td>
+                  <td>
+                    {ligneAchatStockee(l) ? (
+                      brouillon ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          className="input w-28"
+                          value={l.fraisAnnexe ?? ""}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setLignes(
+                              lignes.map((x) =>
+                                x.id === l.id
+                                  ? {
+                                      ...x,
+                                      fraisAnnexe: e.target.value
+                                        ? Number(e.target.value)
+                                        : undefined,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      ) : l.fraisAnnexe ? (
+                        formatCurrency(l.fraisAnnexe)
+                      ) : (
+                        "—"
+                      )
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
+                  </td>
                   <td>{formatCurrency(l.quantite * l.prixAchatUnitaire)}</td>
                   <td className="min-w-[14rem] align-top">
                     {ligneAchatStockee(l) ? (
@@ -1364,6 +1469,40 @@ function CommandePanel({
                       />
                     ) : (
                       <span className="text-xs text-muted">Sans stock</span>
+                    )}
+                  </td>
+                  <td className="min-w-[16rem] align-top">
+                    {ligneAchatStockee(l) ? (
+                      <RepartitionOfLigne
+                        ligne={l}
+                        siteDefaut={achat.pointDeVenteId}
+                        lectureSeule={achat.statut === "annule"}
+                        onChange={(repartitionsOf) => {
+                          if (brouillon) {
+                            setLignes(
+                              lignes.map((x) =>
+                                x.id === l.id ? { ...x, repartitionsOf } : x,
+                              ),
+                            );
+                          } else {
+                            const res = majRepartitionsOfAchat(
+                              achat.id,
+                              l.id,
+                              repartitionsOf,
+                            );
+                            if (!res.ok) alert(res.reason);
+                            else {
+                              setLignes(
+                                lignes.map((x) =>
+                                  x.id === l.id ? { ...x, repartitionsOf } : x,
+                                ),
+                              );
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
                     )}
                   </td>
                   <td>
@@ -1438,14 +1577,20 @@ function LivraisonsPanel({
     note?: string;
     confirmer?: boolean;
     datePeremption?: string;
+    validerEcarts?: boolean;
   }) => void;
-  onConfirmer: (id: string, lignes: LivraisonAchatLigne[]) => void;
+  onConfirmer: (
+    id: string,
+    lignes: LivraisonAchatLigne[],
+    validerEcarts?: boolean,
+  ) => void;
   onAnnuler: (id: string) => void;
 }) {
   const produits = useStore((s) => s.produits);
   const [date, setDate] = useState(AUJOURD_HUI);
   const [confirmer, setConfirmer] = useState(true);
   const [datePeremption, setDatePeremption] = useState("");
+  const [validerEcarts, setValiderEcarts] = useState(false);
   const lignesStock = achat.lignes.filter(ligneAchatStockee);
   const gerePeremption = lignesStock.some((l) =>
     produits.find((p) => p.id === l.produitId)?.gerePeremption,
@@ -1456,14 +1601,24 @@ function LivraisonsPanel({
     .filter((l): l is AchatLigne & { produitId: string } => Boolean(l.produitId))
     .map((l) => {
       const rel = reliquatProduit(achat, l.produitId);
-      const saisie = Number(qtys[l.produitId] ?? String(rel));
+      const defaut = rel > 0 ? rel : 0;
+      const saisie = Number(qtys[l.produitId] ?? String(defaut));
+      const qLiv = confirmer ? Math.max(0, saisie) : 0;
+      const deja = quantiteLivreeProduit(achat, l.produitId);
+      const divergence = divergenceQuantites(deja + qLiv, l.quantite);
       return {
         produitId: l.produitId,
-        quantitePrevue: rel,
-        quantiteLivree: confirmer ? Math.min(rel, Math.max(0, saisie)) : 0,
+        quantitePrevue: l.quantite,
+        quantiteLivree: qLiv,
+        quantiteCommandee: l.quantite,
+        divergence,
       };
     })
-    .filter((l) => l.quantitePrevue > 0 || Number(qtys[l.produitId] ?? 0) > 0);
+    .filter((l) => l.quantiteLivree > 0 || Number(qtys[l.produitId] ?? 0) > 0);
+
+  const ecartsForm = lignesForm.filter(
+    (l) => l.divergence && l.divergence !== "aucune" && l.quantiteLivree > 0,
+  );
 
   if (achat.statut !== "valide") {
     return (
@@ -1486,9 +1641,13 @@ function LivraisonsPanel({
 
   return (
     <div>
-      {reliquatTotal(achat) > 0 && (
-        <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
+      <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
           <h3 className="mb-3 font-display font-semibold">Nouvelle livraison</h3>
+          <p className="mb-3 text-xs text-muted">
+            Une entrée de stock n&apos;est créée que depuis une commande
+            validée. Un écart (surplus ou manque par rapport à la quantité
+            commandée) est autorisé après validation manuelle.
+          </p>
           <div className="mb-3 grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-semibold text-muted">
               Date
@@ -1525,33 +1684,50 @@ function LivraisonsPanel({
               <thead>
                 <tr>
                   <th>Article</th>
-                  <th>Reliquat</th>
-                  <th>Qté cette livraison</th>
+                  <th>Commandé</th>
+                  <th>Déjà livré</th>
+                  <th>Cette livraison</th>
+                  <th>Écart</th>
                 </tr>
               </thead>
               <tbody>
                 {lignesStock.map((l) => {
                   const produitId = l.produitId;
-                  const rel = reliquatProduit(achat, produitId);
-                  if (rel <= 0 || !produitId) return null;
+                  if (!produitId) return null;
+                  const deja = quantiteLivreeProduit(achat, produitId);
+                  const defaut = reliquatProduit(achat, produitId);
+                  const saisie = Number(qtys[produitId] ?? String(defaut));
+                  const qLiv = confirmer ? Math.max(0, saisie) : 0;
+                  const div = divergenceQuantites(deja + qLiv, l.quantite);
                   return (
                     <tr key={produitId}>
                       <td>{nomProduit(produitId)}</td>
                       <td>
-                        {formatNumber(rel)} {unite(produitId)}
+                        {formatNumber(l.quantite)} {unite(produitId)}
+                      </td>
+                      <td>
+                        {formatNumber(deja)} {unite(produitId)}
                       </td>
                       <td>
                         <input
                           type="number"
                           min="0"
                           step="0.1"
-                          max={rel}
                           className="input w-28"
-                          value={qtys[produitId] ?? String(rel)}
+                          value={qtys[produitId] ?? String(defaut)}
                           onChange={(e) =>
                             setQtys({ ...qtys, [produitId]: e.target.value })
                           }
                         />
+                      </td>
+                      <td>
+                        {qLiv > 0 && div !== "aucune" ? (
+                          <span className="badge badge-sand">
+                            {DIVERGENCE_LIVRAISON_LABELS[div]}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1559,6 +1735,23 @@ function LivraisonsPanel({
               </tbody>
             </table>
           </div>
+          {confirmer && ecartsForm.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <p>
+                Quantité livrée cumulative différente de la commande sur{" "}
+                {ecartsForm.length} ligne(s). Ce n&apos;est pas bloquant, mais
+                une validation manuelle est obligatoire.
+              </p>
+              <label className="mt-2 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={validerEcarts}
+                  onChange={(e) => setValiderEcarts(e.target.checked)}
+                />
+                Je valide malgré l&apos;écart
+              </label>
+            </div>
+          )}
           <button
             type="button"
             className="btn btn-primary mt-3"
@@ -1568,22 +1761,29 @@ function LivraisonsPanel({
                 alert("Saisissez une quantité à réceptionner.");
                 return;
               }
+              if (confirmer && ecartsForm.length > 0 && !validerEcarts) {
+                alert(
+                  "Cochez « Je valide malgré l'écart » pour enregistrer un surplus ou un manque.",
+                );
+                return;
+              }
               onAjouter({
                 date: isoMidiDepuisJour(date),
                 lignes: lignesForm,
                 confirmer,
+                validerEcarts,
                 datePeremption: datePeremption
                   ? isoMidiDepuisJour(datePeremption)
                   : undefined,
               });
               setQtys({});
+              setValiderEcarts(false);
             }}
           >
             <PackagePlus className="h-4 w-4" />
             {confirmer ? "Enregistrer la réception" : "Planifier la livraison"}
           </button>
         </div>
-      )}
 
       {achat.livraisons.length === 0 ? (
         <EmptyState
@@ -1614,10 +1814,38 @@ function LivraisonsPanel({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => onConfirmer(liv.id, liv.lignes.map((l) => ({
-                          ...l,
-                          quantiteLivree: l.quantitePrevue,
-                        })))}
+                        onClick={() => {
+                          const lignes = liv.lignes.map((l) => ({
+                            ...l,
+                            quantiteLivree: l.quantiteLivree || l.quantitePrevue,
+                          }));
+                          const achatHors = {
+                            ...achat,
+                            livraisons: achat.livraisons.filter(
+                              (x) => x.id !== liv.id,
+                            ),
+                          };
+                          const besoin = lignes.some((l) => {
+                            const deja = l.produitId
+                              ? quantiteLivreeProduit(achatHors, l.produitId)
+                              : 0;
+                            return (
+                              divergenceQuantites(
+                                deja + l.quantiteLivree,
+                                l.quantiteCommandee ?? l.quantitePrevue,
+                              ) !== "aucune"
+                            );
+                          });
+                          if (
+                            besoin &&
+                            !confirm(
+                              "Cette confirmation comporte un écart de quantité. Valider malgré l'écart ?",
+                            )
+                          ) {
+                            return;
+                          }
+                          onConfirmer(liv.id, lignes, besoin);
+                        }}
                       >
                         Confirmer
                       </button>
@@ -1637,16 +1865,28 @@ function LivraisonsPanel({
                   <thead>
                     <tr>
                       <th>Article</th>
-                      <th>Prévu</th>
+                      <th>Commandé</th>
                       <th>Livré</th>
+                      <th>Écart</th>
+                      <th>Validation</th>
                     </tr>
                   </thead>
                   <tbody>
                     {liv.lignes.map((l) => (
                       <tr key={l.produitId}>
                         <td>{nomProduit(l.produitId)}</td>
-                        <td>{formatNumber(l.quantitePrevue)}</td>
+                        <td>{formatNumber(l.quantiteCommandee ?? l.quantitePrevue)}</td>
                         <td>{formatNumber(l.quantiteLivree)}</td>
+                        <td>
+                          {l.divergence && l.divergence !== "aucune"
+                            ? DIVERGENCE_LIVRAISON_LABELS[l.divergence]
+                            : "—"}
+                        </td>
+                        <td className="text-xs text-muted">
+                          {l.validationDivergence
+                            ? `Validé${l.valideeParNom ? ` par ${l.valideeParNom}` : ""}`
+                            : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1666,20 +1906,14 @@ function PaiementsPanel({
   onSupprimer,
 }: {
   achat: Achat;
-  onAjouter: (data: {
-    date: string;
-    montant: number;
-    modePaiement: ModePaiement;
-    note?: string;
-  }) => void;
+  onAjouter: (lignes: SaisieLignePaiement[]) => void;
   onSupprimer: (id: string) => void;
 }) {
   const tot = totauxAchat(achat);
   const paye = totalPaye(achat);
   const solde = soldeAchat(achat);
-  const [date, setDate] = useState(AUJOURD_HUI);
-  const [montant, setMontant] = useState("");
-  const [mode, setMode] = useState<ModePaiement>("virement");
+  const modes = useStore((s) => s.modesPaiement ?? []);
+  const comptes = useStore((s) => s.comptesTresorerie ?? []);
 
   if (achat.statut !== "valide") {
     return (
@@ -1722,59 +1956,12 @@ function PaiementsPanel({
       </div>
 
       {solde > 0.5 && (
-        <div className="mb-6 grid gap-3 rounded-[var(--radius)] border border-sea-200 bg-card p-5 sm:grid-cols-4">
-          <label className="text-xs font-semibold text-muted">
-            Date
-            <input
-              type="date"
-              className="input mt-1"
-              max={AUJOURD_HUI}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </label>
-          <label className="text-xs font-semibold text-muted">
-            Montant (Ar TTC)
-            <input
-              type="number"
-              min="0"
-              className="input mt-1"
-              value={montant}
-              onChange={(e) => setMontant(e.target.value)}
-            />
-          </label>
-          <label className="text-xs font-semibold text-muted">
-            Mode
-            <select
-              className="select mt-1"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as ModePaiement)}
-            >
-              {MODES_PAIEMENT_ACHAT.map((m) => (
-                <option key={m} value={m}>
-                  {MODES_PAIEMENT[m]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                const n = Number(montant);
-                if (!(n > 0)) return;
-                onAjouter({
-                  date: isoMidiDepuisJour(date),
-                  montant: n,
-                  modePaiement: mode,
-                });
-                setMontant("");
-              }}
-            >
-              Enregistrer le paiement
-            </button>
-          </div>
+        <div className="mb-6">
+          <SaisieLignesPaiement
+            siteId={achat.pointDeVenteId}
+            onValider={onAjouter}
+            submitLabel="Enregistrer le paiement"
+          />
         </div>
       )}
 
@@ -1788,6 +1975,9 @@ function PaiementsPanel({
               <tr>
                 <th>Date</th>
                 <th>Mode</th>
+                <th>Compte</th>
+                <th>Réf.</th>
+                <th>Échéance</th>
                 <th>Montant</th>
                 <th />
               </tr>
@@ -1798,7 +1988,15 @@ function PaiementsPanel({
                 .map((p) => (
                   <tr key={p.id}>
                     <td>{formatDate(p.date)}</td>
-                    <td>{MODES_PAIEMENT[p.modePaiement] ?? p.modePaiement}</td>
+                    <td>
+                      {libelleModePaiement(p.modePaiement, modes)}
+                      {p.statutCheque
+                        ? ` · ${STATUT_CHEQUE_LABELS[p.statutCheque]}`
+                        : ""}
+                    </td>
+                    <td>{libelleCompteTresorerie(p.compteTresorerieId, comptes)}</td>
+                    <td>{p.reference ?? "—"}</td>
+                    <td>{p.dateEffet ? formatDate(p.dateEffet) : "—"}</td>
                     <td className="font-semibold">{formatCurrency(p.montant)}</td>
                     <td className="text-right">
                       <button
@@ -1984,6 +2182,27 @@ function RetoursPanel({
                     </li>
                   ))}
                 </ul>
+                {av.statut === "valide" && (
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs font-semibold text-muted">
+                      Remboursement trésorerie (optionnel)
+                    </p>
+                    <SaisieLignesPaiement
+                      siteId={achat.pointDeVenteId}
+                      submitLabel="Enregistrer le remboursement"
+                      onValider={(lignes) => {
+                        const fn = useStore.getState().ajouterRemboursementAvoirAchat;
+                        for (const l of lignes) {
+                          const res = fn(achat.id, av.id, l);
+                          if (!res.ok) {
+                            alert(res.reason);
+                            return;
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

@@ -1,18 +1,26 @@
 "use client";
 
-import { MODES_PAIEMENT } from "@/lib/commercial";
 import { formatCurrency } from "@/lib/format";
+import { useStore } from "@/lib/store";
+import {
+  comptesTresorerieActifs,
+  modesPaiementActifs,
+} from "@/lib/tresorerie";
 import type { ModePaiement } from "@/lib/types";
 
 export type SaisieAcompteForm = {
   montant: string;
   modePaiement: ModePaiement;
+  compteTresorerieId: string;
+  reference: string;
   genererFacture: boolean;
 };
 
 export const SAISIE_ACOMPTE_VIDE: SaisieAcompteForm = {
   montant: "",
   modePaiement: "virement",
+  compteTresorerieId: "",
+  reference: "",
   genererFacture: true,
 };
 
@@ -37,10 +45,14 @@ export function AcompteEncaissementFields({
   acomptesExistants = [],
   montantLabel = "Acompte encaissé (Ar TTC)",
 }: Props) {
+  const modesPaiement = useStore((s) => s.modesPaiement ?? []);
+  const comptesTresorerie = useStore((s) => s.comptesTresorerie ?? []);
   const existants = acomptesExistants.reduce((s, a) => s + a.montantTTC, 0);
   const nouveau = Math.max(0, Number(value.montant) || 0);
   const totalAcomptes = existants + nouveau;
   const reste = Math.max(0, totalTTC - totalAcomptes);
+  const modes = modesPaiementActifs(modesPaiement);
+  const comptes = comptesTresorerieActifs(comptesTresorerie);
 
   return (
     <div className="rounded-lg border border-line bg-sea-50/40 p-4">
@@ -78,12 +90,38 @@ export function AcompteEncaissementFields({
               })
             }
           >
-            {Object.entries(MODES_PAIEMENT).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
+            {modes.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.libelle}
               </option>
             ))}
           </select>
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Compte de trésorerie (optionnel)
+          <select
+            className="select mt-1"
+            value={value.compteTresorerieId}
+            onChange={(e) =>
+              onChange({ ...value, compteTresorerieId: e.target.value })
+            }
+          >
+            <option value="">Pas de mouvement de trésorerie</option>
+            {comptes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.libelle}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Référence (facultatif)
+          <input
+            className="input mt-1"
+            value={value.reference}
+            onChange={(e) => onChange({ ...value, reference: e.target.value })}
+            placeholder="N° chèque, id transaction…"
+          />
         </label>
         {totalTTC > 0 && (
           <div className="rounded-lg bg-card px-3 py-2">

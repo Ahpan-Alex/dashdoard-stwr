@@ -25,7 +25,13 @@ import {
   OfLiesCommande,
 } from "@/components/document-filiation";
 import { BatCommandePanel } from "@/components/bat-commande";
-import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
+import {
+  BAT_STATUTS,
+  badgeBat,
+  batCourant,
+  batEnRetardRelance,
+  commandeABatValide,
+} from "@/lib/bat";
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
@@ -101,6 +107,7 @@ export default function ListeCommandesPage() {
     entrees,
     ventes,
     bonsATirer,
+    parametresAlertes,
     updateAcompte,
     encaisserAcompte,
     verrouillerTransformation,
@@ -537,6 +544,8 @@ export default function ListeCommandesPage() {
                   date: new Date(`${meta.date}T12:00:00`).toISOString(),
                   montantTTC: montant,
                   modePaiement: acompte.modePaiement,
+                  compteTresorerieId: acompte.compteTresorerieId || undefined,
+                  reference: acompte.reference || undefined,
                   devisId: meta.devisId || undefined,
                   commandeId: editId,
                   refDocument: editDoc.numero,
@@ -684,9 +693,19 @@ export default function ListeCommandesPage() {
                       }
                       if (courant) {
                         return (
-                          <span className={`badge ml-1 ${badgeBat(courant.statut)}`}>
-                            BAT {BAT_STATUTS[courant.statut]}
-                          </span>
+                          <>
+                            <span className={`badge ml-1 ${badgeBat(courant.statut)}`}>
+                              BAT {BAT_STATUTS[courant.statut]}
+                            </span>
+                            {batEnRetardRelance(
+                              courant,
+                              parametresAlertes.batRelance?.delaiJours ?? 7,
+                            ) && (
+                              <span className="badge badge-danger ml-1">
+                                Relance
+                              </span>
+                            )}
+                          </>
                         );
                       }
                       return null;

@@ -21,7 +21,8 @@ export type TableAffichageId =
   | "marge_produits"
   | "missions"
   | "missions_suivi"
-  | "missions_synthese";
+  | "missions_synthese"
+  | "bats";
 
 export type ColonneAffichage = {
   id: string;
@@ -191,6 +192,8 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
   col("entrees", "Entrées", 20),
       col("vendues", "Vendues", 20),
       col("restant", "Restant", 22, true),
+      col("disponible", "Disponible", 22),
+      col("reserve", "Réservé OF", 22),
       col("valeurAchat", "Valeur achat", 26),
       col("valeurVente", "Valeur vente", 26),
     ],
@@ -312,6 +315,17 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("nbNonReglees", "Nb clôturées non réglées", 32),
       col("avancesEnCours", "Total des avances en cours", 32, true),
       col("soldesNonRegles", "Total des soldes non réglés", 32, true),
+    ],
+  },
+  {
+    id: "bats",
+    label: "Bons à tirer",
+    colonnes: [
+      col("commande", "Commande", 24, true),
+      col("produits", "Ligne(s) / produit(s)", 44, true),
+      col("statut", "Statut", 28, true),
+      col("version", "Version active", 22),
+      col("dateValidation", "Date de validation", 28),
     ],
   },
 ];

@@ -139,9 +139,17 @@ export default function ParametresPointsDeVentePage() {
     };
     try {
       if (editingId) {
-        updatePointDeVente(editingId, payload);
+        const res = updatePointDeVente(editingId, payload);
+        if (!res.ok) {
+          setError(res.reason ?? "Enregistrement impossible.");
+          return;
+        }
       } else {
-        addPointDeVente({ ...payload, actif: true });
+        const res = addPointDeVente({ ...payload, actif: true });
+        if (!res.ok) {
+          setError(res.reason ?? "Enregistrement impossible.");
+          return;
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
@@ -227,6 +235,17 @@ export default function ParametresPointsDeVentePage() {
                   </label>
                 ))}
               </div>
+              {form.rolesSite.includes("point_de_vente") ? (
+                <p className="mt-2 text-[11px] font-normal text-muted">
+                  Un point de vente exige au moins un compte de trésorerie (global
+                  ou rattaché) dans Paramètres → Trésorerie. Un atelier peut
+                  fonctionner sans.
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] font-normal text-muted">
+                  Un atelier peut fonctionner sans compte de trésorerie.
+                </p>
+              )}
             </div>
             <label className="block text-xs font-semibold text-muted">
               Téléphone

@@ -97,7 +97,7 @@ function IdentiteMenuContent() {
             className="input mt-1"
             value={nom}
             onChange={(e) => setNom(e.target.value)}
-            placeholder="Ex. Poissonnerie du Port"
+            placeholder="Ex. Négoo Signalétique"
             maxLength={80}
             disabled={!peutModifier}
           />

@@ -34,7 +34,14 @@ function DashboardStockContent() {
     inventaires,
     ordresFabrication,
     achats,
+    transfertsMatiereOf,
   } = useStore();
+
+  const ctxReservation = {
+    achats,
+    ordresFabrication,
+    transfertsMatiereOf: transfertsMatiereOf ?? [],
+  };
 
   const valo = valorisationStockParNatureEtSite(
     produits,
@@ -43,6 +50,7 @@ function DashboardStockContent() {
     pointsDeVente,
     pointDeVenteActifId,
     inventaires,
+    ctxReservation,
   );
   const rotation = rotationMatieresPremieres(
     produits,
@@ -79,8 +87,8 @@ function DashboardStockContent() {
             Valorisation par nature
             <IndicateurInfo>
               Stock actuel valorisé au CUMP, regroupé par nature d&apos;article
-              (matière première, semi-fini, fini). Même moteur que le module
-              Stock.
+              (matière première, semi-fini, fini). Le disponible exclut les
+              quantités réservées à un OF.
             </IndicateurInfo>
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
@@ -88,9 +96,15 @@ function DashboardStockContent() {
               <li className="text-muted">Stock vide.</li>
             ) : (
               valo.parNature.map((l) => (
-                <li key={l.nom} className="flex justify-between">
-                  <span>{l.nom}</span>
-                  <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                <li key={l.nom} className="space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>{l.nom}</span>
+                    <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                  </div>
+                  <p className="text-xs text-muted">
+                    Disponible {formatCurrency(l.valeurDisponible)} · Réservé{" "}
+                    {formatCurrency(l.valeurReservee)}
+                  </p>
                 </li>
               ))
             )}
@@ -101,7 +115,7 @@ function DashboardStockContent() {
             Valorisation par site
             <IndicateurInfo>
               Même valorisation CUMP, ventilée par site (filtre site en
-              en-tête).
+              en-tête). Disponible = stock non affecté à un OF.
             </IndicateurInfo>
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
@@ -109,9 +123,15 @@ function DashboardStockContent() {
               <li className="text-muted">Stock vide.</li>
             ) : (
               valo.parSite.map((l) => (
-                <li key={l.nom} className="flex justify-between">
-                  <span>{l.nom}</span>
-                  <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                <li key={l.nom} className="space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>{l.nom}</span>
+                    <span className="font-semibold">{formatCurrency(l.valeur)}</span>
+                  </div>
+                  <p className="text-xs text-muted">
+                    Disponible {formatCurrency(l.valeurDisponible)} · Réservé{" "}
+                    {formatCurrency(l.valeurReservee)}
+                  </p>
                 </li>
               ))
             )}

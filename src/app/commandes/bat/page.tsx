@@ -6,11 +6,13 @@ import { Stamp } from "lucide-react";
 import { BatCommandePanel } from "@/components/bat-commande";
 import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import { EmptyState } from "@/components/empty-state";
+import { KpiBatCards } from "@/components/kpi-bat-cards";
 import { PageHeader } from "@/components/page-header";
 import {
   BAT_STATUTS,
   badgeBat,
   batCourant,
+  batEnRetardRelance,
   commandeABatValide,
 } from "@/lib/bat";
 import { libelleClient } from "@/lib/commercial";
@@ -21,6 +23,9 @@ export default function BonsATirerPage() {
   const commandes = useStore((s) => s.commandes);
   const clients = useStore((s) => s.clients);
   const bats = useStore((s) => s.bonsATirer ?? []);
+  const delaiRelance = useStore(
+    (s) => s.parametresAlertes.batRelance?.delaiJours ?? 7,
+  );
   const [ouvert, setOuvert] = useState<string | null>(null);
 
   const lignes = useMemo(() => {
@@ -46,6 +51,12 @@ export default function BonsATirerPage() {
         description="Validation visuelle client avant fabrication. Versions conservées, notifications in-app uniquement — l'envoi se fait hors logiciel."
       />
       <CommandesSubnav />
+
+      <KpiBatCards
+        bats={bats}
+        commandes={commandes}
+        delaiRelanceJours={delaiRelance}
+      />
 
       {lignes.length === 0 ? (
         <EmptyState
@@ -79,9 +90,14 @@ export default function BonsATirerPage() {
                   <td>{versions}</td>
                   <td>
                     {courant ? (
-                      <span className={`badge ${badgeBat(courant.statut)}`}>
-                        V{courant.version} · {BAT_STATUTS[courant.statut]}
-                      </span>
+                      <>
+                        <span className={`badge ${badgeBat(courant.statut)}`}>
+                          V{courant.version} · {BAT_STATUTS[courant.statut]}
+                        </span>
+                        {batEnRetardRelance(courant, delaiRelance) && (
+                          <span className="badge badge-danger ml-1">Relance</span>
+                        )}
+                      </>
                     ) : (
                       <span className="text-muted">—</span>
                     )}

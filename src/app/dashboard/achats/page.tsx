@@ -8,11 +8,12 @@ import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { rangeDepuisFiltres, useDashboardFiltres } from "@/lib/dashboard-filtres";
 import {
+  ecartsMoyensParAcheteur,
   historiquePrixFournisseurArticle,
   indicateursMissionsDashboard,
   performanceFournisseurs,
 } from "@/lib/dashboard-indicateurs";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatPercent } from "@/lib/format";
 import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
 
@@ -37,6 +38,7 @@ function DashboardAchatsContent() {
     missionsAchat,
     naturesDepenseMission,
   } = useStore();
+  const ecartsAcheteurs = ecartsMoyensParAcheteur(missionsAchat ?? []);
 
   const hist = historiquePrixFournisseurArticle(
     achats,
@@ -164,10 +166,8 @@ function DashboardAchatsContent() {
               value={formatCurrency(mis.avancesEnCours)}
               hint="Toutes missions non clôturées"
               info={
-                <IndicateurInfo>
-                  Somme des fonds validés des missions encore ouvertes (hors
-                  clôturées, annulées, rejetées). Le suivi par acheteur reste
-                  dans{" "}
+                <IndicateurInfo indicateur="missions_avances">
+                  Le suivi par acheteur reste dans{" "}
                   <Link href="/missions/suivi" className="underline">
                     Missions → Suivi des avances
                   </Link>
@@ -180,11 +180,7 @@ function DashboardAchatsContent() {
               value={formatCurrency(mis.totalDivers)}
               hint="Période filtrée"
               info={
-                <IndicateurInfo>
-                  Total des dépenses diverses des missions dont la date de
-                  clôture (ou de création) est dans la période. Ventilation par
-                  nature ci-dessous.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="missions_divers" />
               }
             />
             <StatCard
@@ -194,11 +190,7 @@ function DashboardAchatsContent() {
               }
               hint="Fonds validés − dépenses"
               info={
-                <IndicateurInfo>
-                  Moyenne, sur les missions de la période ayant une avance,
-                  de (fonds validés − achats réalisés − dépenses diverses).
-                  Positif = reliquat, négatif = dépassement.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="missions_ecart_moyen" />
               }
             />
           </div>
@@ -260,6 +252,44 @@ function DashboardAchatsContent() {
             Part imputée au compte 471 : {formatCurrency(mis.attente471)} en
             attente de reclassement.
           </p>
+          <div className="mt-6 table-shell">
+            <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+              Écart moyen par acheteur
+              <IndicateurInfo indicateur="missions_ecart_acheteur" />
+            </p>
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Acheteur</th>
+                  <th>Missions</th>
+                  <th>Écart moyen</th>
+                  <th>%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ecartsAcheteurs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-muted">
+                      Aucune mission clôturée avec avance.
+                    </td>
+                  </tr>
+                ) : (
+                  ecartsAcheteurs.map((e) => (
+                    <tr key={e.acheteurUserId}>
+                      <td>{e.acheteurNom}</td>
+                      <td>{e.nbMissions}</td>
+                      <td>{formatCurrency(e.ecartMoyenMontant)}</td>
+                      <td>
+                        {e.ecartMoyenPercent == null
+                          ? "—"
+                          : formatPercent(e.ecartMoyenPercent / 100)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
     </div>

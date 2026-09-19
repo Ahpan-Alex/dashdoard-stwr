@@ -43,8 +43,19 @@ import type {
   Parametres,
   PointDeVente,
   Produit,
+  TransfertStock,
   Vente,
+  BonATirer,
+  Commande,
 } from "./types";
+import { batEnRetardRelance, cycleIdBat } from "./bat";
+import { anomaliesFournisseurRetenu } from "./classement-fournisseurs";
+import { ecartsMoyensParAcheteur } from "./dashboard-indicateurs";
+import {
+  etatDelaiMission,
+  etatDelaiOf,
+  etatDelaiTransfert,
+} from "./delais-alerte";
 
 export type CategorieAlerte = "stock" | "production" | "achat" | "vente";
 
@@ -55,6 +66,11 @@ export type TypeAlerte =
   | "mission_avance_non_rapprochee"
   | "mission_471_non_reclasse"
   | "dp_sans_reponse"
+  | "dp_fournisseur_atypique"
+  | "mission_ouverte"
+  | "mission_ecart_acheteur"
+  | "transfert_en_attente"
+  | "of_non_cloture"
   | "vente_echeance_approche"
   | "vente_impayee"
   | "vente_partielle_sans_mouvement"
@@ -69,7 +85,8 @@ export type TypeAlerte =
   | "of_retard"
   | "of_ecart_matiere"
   | "of_rupture_composant"
-  | "atelier_surcharge";
+  | "atelier_surcharge"
+  | "bat_relance";
 
 export type GraviteAlerte = "info" | "warning" | "danger";
 
@@ -77,6 +94,8 @@ export type RegleAlerte = {
   actif: boolean;
   delaiJours?: number;
   seuilPercent?: number;
+  /** Seuil d'écart en montant (Ar), ex. écart moyen acheteur. */
+  seuilMontant?: number;
   /** Écart de fabrication : seuil % propre à un atelier (sinon le global). */
   seuilsParAtelier?: Record<string, number>;
 };
@@ -102,6 +121,17 @@ export type ParametresAlertes = {
   productionEcartFabrication: RegleAlerte;
   productionRuptureComposant: RegleAlerte;
   productionSurchargeAtelier: RegleAlerte;
+  batRelance: RegleAlerte;
+  /** Mission ouverte sans clôture ni justificatif (mécanisme Délai + Alerte). */
+  missionOuverte: RegleAlerte;
+  /** Écart moyen glissant par acheteur (montant et/ou %). */
+  missionEcartAcheteur: RegleAlerte;
+  /** Transfert inter-sites en attente de validation. */
+  transfertEnAttente: RegleAlerte;
+  /** OF non clôturé depuis la dernière action (distinct du retard vs date prévue). */
+  ofNonCloture: RegleAlerte;
+  /** Fournisseur retenu ni moins cher ni conforme au dernier prix. */
+  dpFournisseurAtypique: RegleAlerte;
 };
 
 export type AlerteInstance = {
@@ -115,6 +145,8 @@ export type AlerteInstance = {
   gravite: GraviteAlerte;
   entiteId: string;
   pointDeVenteId?: string;
+  /** Quantité proposée pour une DP générée depuis un seuil de stock. */
+  quantiteSuggeree?: number;
 };
 
 export type SuiviAlertesUser = {
@@ -145,6 +177,12 @@ export const PARAMETRES_ALERTES_DEFAUT: ParametresAlertes = {
   productionEcartFabrication: { actif: true, seuilPercent: 10 },
   productionRuptureComposant: { actif: true },
   productionSurchargeAtelier: { actif: true },
+  batRelance: { actif: true, delaiJours: 7 },
+  missionOuverte: { actif: true, delaiJours: 7 },
+  missionEcartAcheteur: { actif: true, seuilPercent: 10, seuilMontant: 0 },
+  transfertEnAttente: { actif: true, delaiJours: 7 },
+  ofNonCloture: { actif: true, delaiJours: 7 },
+  dpFournisseurAtypique: { actif: true },
 };
 
 export const MODULES_ALERTES = [
@@ -188,6 +226,11 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   mission_avance_non_rapprochee: "Avance de mission non rapprochée",
   mission_471_non_reclasse: "Compte 471 en attente de reclassement",
   dp_sans_reponse: "Demande de prix sans réponse",
+  dp_fournisseur_atypique: "Fournisseur retenu atypique",
+  mission_ouverte: "Mission ouverte sans clôture",
+  mission_ecart_acheteur: "Écart moyen acheteur au-delà du seuil",
+  transfert_en_attente: "Transfert en attente de validation",
+  of_non_cloture: "OF non clôturé (délai d'inaction)",
   vente_echeance_approche: "Échéance client approchante",
   vente_impayee: "Facture client en retard",
   vente_partielle_sans_mouvement: "Paiement partiel sans mouvement",
@@ -203,6 +246,7 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   of_ecart_matiere: "Écart de fabrication anormal",
   of_rupture_composant: "Rupture de composant en cours d'OF",
   atelier_surcharge: "Atelier en surcharge",
+  bat_relance: "BAT en attente — relance client",
 };
 
 const CLES_REGLES = Object.keys(
@@ -262,6 +306,10 @@ function fusionnerRegle(defaut: RegleAlerte, raw: unknown): RegleAlerte {
     src.seuilPercent === undefined
       ? defaut.seuilPercent
       : Number(src.seuilPercent);
+  const montantRaw =
+    src.seuilMontant === undefined
+      ? defaut.seuilMontant
+      : Number(src.seuilMontant);
   const ateliersRaw = asRecord(src.seuilsParAtelier);
   const seuilsParAtelier: Record<string, number> = {
     ...(defaut.seuilsParAtelier ?? {}),
@@ -282,6 +330,10 @@ function fusionnerRegle(defaut: RegleAlerte, raw: unknown): RegleAlerte {
       pctRaw != null && Number.isFinite(pctRaw) && pctRaw >= 0
         ? pctRaw
         : defaut.seuilPercent,
+    seuilMontant:
+      montantRaw != null && Number.isFinite(montantRaw) && montantRaw >= 0
+        ? montantRaw
+        : defaut.seuilMontant,
     seuilsParAtelier:
       Object.keys(seuilsParAtelier).length > 0 ? seuilsParAtelier : undefined,
   };
@@ -441,6 +493,9 @@ export type ContexteAlertes = {
   missionsAchat?: MissionAchat[];
   naturesDepenseMission?: NatureDepenseMission[];
   demandesPrix?: DemandePrix[];
+  bonsATirer?: BonATirer[];
+  commandes?: Commande[];
+  transfertsStock?: TransfertStock[];
   aujourdHui?: string;
 };
 
@@ -693,6 +748,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
           gravite: effective ? "danger" : "warning",
           entiteId: p.id,
           pointDeVenteId: ligne.pointDeVenteId,
+          quantiteSuggeree: Math.max(1, Math.ceil((seuilRupture ?? 1) - qty)),
         });
       } else if (
         cfg.stockReappro.actif &&
@@ -710,6 +766,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
           gravite: "warning",
           entiteId: p.id,
           pointDeVenteId: ligne.pointDeVenteId,
+          quantiteSuggeree: Math.max(1, Math.ceil((seuilReappro ?? 1) - qty)),
         });
       }
 
@@ -1055,7 +1112,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
   if (cfg.achatDpSansReponse.actif) {
     const delai = delaiPositif(cfg.achatDpSansReponse, 7);
     for (const dp of ctx.demandesPrix ?? []) {
-      if (dp.statut === "annulee" || dp.statut === "cloturee") continue;
+      if (dp.statut === "annulee" || dp.statut === "cloturee" || dp.statut === "cloturee_sans_suite") continue;
       const offresOk = dp.offres.some((o) => o.prixUnitaire > 0);
       if (offresOk) continue;
       const attente = joursEntre(jourISO(dp.date), today);
@@ -1087,9 +1144,144 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
         titre: `${p.code} — compte comptable manquant`,
         message: `${libelleProduit(p)} n'a pas de compte de charge et/ou de vente associé.`,
         date: today,
-        href: `/parametres/produits`,
+        href: `/comptabilite/produits-sans-compte`,
         gravite: "warning",
         entiteId: p.id,
+      });
+    }
+  }
+
+  if (cfg.batRelance.actif) {
+    const delai = delaiPositif(cfg.batRelance, 7);
+    const cmdParId = new Map((ctx.commandes ?? []).map((c) => [c.id, c]));
+    const courants = new Map<string, BonATirer>();
+    for (const b of ctx.bonsATirer ?? []) {
+      const cid = cycleIdBat(b);
+      const prev = courants.get(cid);
+      if (!prev || b.version > prev.version) courants.set(cid, b);
+    }
+    for (const bat of courants.values()) {
+      if (!batEnRetardRelance(bat, delai, new Date(`${today}T12:00:00`))) continue;
+      const cmd = cmdParId.get(bat.commandeId);
+      const attente = joursEntre(jourISO(bat.dateEnvoi), today);
+      out.push({
+        id: `bat_relance:${cycleIdBat(bat)}`,
+        type: "bat_relance",
+        categorie: "vente",
+        titre: `${cmd?.numero ?? "Commande"} — BAT V${bat.version} à relancer`,
+        message: `En attente de validation depuis ${attente} j (seuil ${delai} j). Relance client nécessaire.`,
+        date: jourISO(bat.dateEnvoi),
+        href: `/commandes/bat`,
+        gravite: attente >= delai * 2 ? "danger" : "warning",
+        entiteId: bat.id,
+        pointDeVenteId: cmd?.pointDeVenteId,
+      });
+    }
+  }
+
+  if (cfg.missionOuverte.actif) {
+    for (const m of missions) {
+      const etat = etatDelaiMission(m, cfg, today);
+      if (!etat?.enRetard) continue;
+      out.push({
+        id: `mission_ouverte:${m.id}`,
+        type: "mission_ouverte",
+        categorie: "achat",
+        titre: `${m.numero} — ouverte sans clôture`,
+        message: `Aucune clôture ni justificatif depuis ${etat.joursAttente} j (seuil ${etat.delaiJours} j).`,
+        date: etat.dateDerniereAction,
+        href: `/missions/${m.id}`,
+        gravite: etat.joursAttente >= etat.delaiJours * 2 ? "danger" : "warning",
+        entiteId: m.id,
+        pointDeVenteId: m.siteDestinataireId,
+      });
+    }
+  }
+
+  if (cfg.missionEcartAcheteur.actif) {
+    const seuilPct = percentPositif(cfg.missionEcartAcheteur, 10);
+    const seuilMontant = Number(cfg.missionEcartAcheteur.seuilMontant);
+    const montantActif = Number.isFinite(seuilMontant) && seuilMontant > 0;
+    for (const row of ecartsMoyensParAcheteur(missions)) {
+      const depassePct =
+        row.ecartMoyenPercent != null &&
+        Math.abs(row.ecartMoyenPercent) >= seuilPct;
+      const depasseMontant =
+        montantActif && Math.abs(row.ecartMoyenMontant) >= seuilMontant;
+      if (!depassePct && !depasseMontant) continue;
+      out.push({
+        id: `mission_ecart_acheteur:${row.acheteurUserId}`,
+        type: "mission_ecart_acheteur",
+        categorie: "achat",
+        titre: `${row.acheteurNom} — écart moyen hors seuil`,
+        message: `Écart moyen ${Math.round(row.ecartMoyenMontant)} Ar (${row.ecartMoyenPercent == null ? "—" : `${row.ecartMoyenPercent.toFixed(1)} %`}) sur ${row.nbMissions} mission(s).`,
+        date: today,
+        href: "/missions/suivi",
+        gravite: "warning",
+        entiteId: row.acheteurUserId,
+      });
+    }
+  }
+
+  if (cfg.dpFournisseurAtypique.actif) {
+    for (const dp of ctx.demandesPrix ?? []) {
+      if (
+        dp.statut === "annulee" ||
+        dp.statut === "brouillon" ||
+        dp.statut === "cloturee_sans_suite"
+      ) {
+        continue;
+      }
+      const anomalies = anomaliesFournisseurRetenu(dp, ctx.achats);
+      if (anomalies.length === 0) continue;
+      out.push({
+        id: `dp_fournisseur_atypique:${dp.id}`,
+        type: "dp_fournisseur_atypique",
+        categorie: "achat",
+        titre: `${dp.numero} — fournisseur retenu atypique`,
+        message: `${anomalies.length} ligne(s) : le retenu n'est ni le moins cher du comparatif ni conforme au dernier prix connu.`,
+        date: jourISO(dp.date),
+        href: `/demandes-prix/${dp.id}`,
+        gravite: "warning",
+        entiteId: dp.id,
+      });
+    }
+  }
+
+  if (cfg.transfertEnAttente.actif) {
+    for (const t of ctx.transfertsStock ?? []) {
+      const etat = etatDelaiTransfert(t, cfg, today);
+      if (!etat?.enRetard) continue;
+      out.push({
+        id: `transfert_en_attente:${t.id}`,
+        type: "transfert_en_attente",
+        categorie: "stock",
+        titre: `${t.numero} — transfert en attente`,
+        message: `Validation en attente depuis ${etat.joursAttente} j (seuil ${etat.delaiJours} j).`,
+        date: etat.dateDerniereAction,
+        href: "/transferts",
+        gravite: etat.joursAttente >= etat.delaiJours * 2 ? "danger" : "warning",
+        entiteId: t.id,
+        pointDeVenteId: t.siteSourceId,
+      });
+    }
+  }
+
+  if (cfg.ofNonCloture.actif) {
+    for (const of_ of ofs) {
+      const etat = etatDelaiOf(of_, cfg, today);
+      if (!etat?.enRetard) continue;
+      out.push({
+        id: `of_non_cloture:${of_.id}`,
+        type: "of_non_cloture",
+        categorie: "production",
+        titre: `${of_.numero} — non clôturé`,
+        message: `Aucune clôture depuis ${etat.joursAttente} j (seuil ${etat.delaiJours} j, dernière action).`,
+        date: etat.dateDerniereAction,
+        href: `/fabrication/${of_.id}`,
+        gravite: etat.joursAttente >= etat.delaiJours * 2 ? "danger" : "warning",
+        entiteId: of_.id,
+        pointDeVenteId: of_.atelierId,
       });
     }
   }
@@ -1105,6 +1297,9 @@ export function alerteVisiblePourUtilisateur(
   alerte: AlerteInstance,
   hasPermission: (p: Permission) => boolean,
 ): boolean {
+  if (alerte.type === "bat_relance") {
+    return hasPermission("commercial.lire") || hasPermission("factures.lire");
+  }
   if (alerte.categorie === "vente") return hasPermission("factures.lire");
   if (alerte.categorie === "stock") return hasPermission("produits.lire");
   if (alerte.categorie === "production") return hasPermission("produits.lire");
@@ -1322,6 +1517,63 @@ export function explicationAlerte(
         calcul: `Encours (factures − acomptes) / plafond ≥ ${percentPositif(n.ventePlafondCredit, 80)} %. Distinct du refus de vente à 100 %.`,
         seuil: `Seuil actuel : ${percentPositif(n.ventePlafondCredit, 80)} % du plafond`,
         hrefParametre: href("vente"),
+      };
+    case "bat_relance":
+      return {
+        signification:
+          "Un Bon à Tirer est resté en attente de validation client au-delà du délai paramétré — une relance est nécessaire.",
+        calcul: `Dernière version du cycle en statut « En attente », âge depuis la date d'envoi ≥ délai.`,
+        seuil: `Seuil actuel : ${delaiPositif(n.batRelance, 7)} jours`,
+        hrefParametre: "/parametres/bat",
+      };
+    case "mission_ouverte":
+      return {
+        signification:
+          "Une mission d'achat est restée ouverte sans clôture ni justificatif au-delà du délai paramétré.",
+        calcul:
+          "Dernière action (création, validation ou mouvement de fonds) ; mission hors clôturée / annulée / rejetée, sans justificatif.",
+        seuil: `Seuil actuel : ${delaiPositif(n.missionOuverte, 7)} jours`,
+        hrefParametre: "/parametres/achats",
+      };
+    case "mission_ecart_acheteur":
+      return {
+        signification:
+          "L'écart moyen glissant d'un acheteur (avance − réel) dépasse le seuil en montant ou en pourcentage.",
+        calcul:
+          "Moyenne des écarts des dernières missions clôturées avec avance, par acheteur.",
+        seuil: `Seuil actuel : ${percentPositif(n.missionEcartAcheteur, 10)} %${
+          n.missionEcartAcheteur.seuilMontant
+            ? ` ou ${n.missionEcartAcheteur.seuilMontant} Ar`
+            : ""
+        }`,
+        hrefParametre: "/parametres/achats",
+      };
+    case "dp_fournisseur_atypique":
+      return {
+        signification:
+          "Le fournisseur retenu n'est ni le moins cher du comparatif, ni au dernier prix d'achat connu.",
+        calcul:
+          "Pour chaque ligne retenue : prix net ≠ mini du comparatif ET prix net ≠ dernier achat réel de l'article.",
+        seuil: "Alerte combinée — les deux écarts en même temps",
+        hrefParametre: "/parametres/alertes/achats",
+      };
+    case "transfert_en_attente":
+      return {
+        signification:
+          "Un transfert inter-sites attend encore une validation (demande ou réception) au-delà du délai.",
+        calcul:
+          "Statut demande : délai depuis la date de demande. Statut expédié : délai depuis l'expédition.",
+        seuil: `Seuil actuel : ${delaiPositif(n.transfertEnAttente, 7)} jours`,
+        hrefParametre: "/parametres/stock",
+      };
+    case "of_non_cloture":
+      return {
+        signification:
+          "Un OF brouillon ou en cours n'a pas été clôturé depuis trop longtemps (inaction), indépendamment de la date de clôture prévue.",
+        calcul:
+          "Dernière action = dernière validation d'étape, sinon date de création. Distinct de l'alerte « OF en retard » (date prévue).",
+        seuil: `Seuil actuel : ${delaiPositif(n.ofNonCloture, 7)} jours`,
+        hrefParametre: "/parametres/fabrication",
       };
   }
 }

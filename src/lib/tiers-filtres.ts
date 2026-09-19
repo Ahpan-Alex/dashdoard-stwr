@@ -8,11 +8,14 @@ import {
   estClient,
   estFournisseur,
   soldeClientTiers,
+  tauxUtilisationPlafond,
+  avertissementPlafond,
 } from "./tiers";
 import type {
   Achat,
   Acompte,
   Facture,
+  JournalActivite,
   Parametres,
   Tiers,
 } from "./types";
@@ -30,10 +33,13 @@ export type FiltresListeTiers = {
   statutSolde: FiltreStatutSolde;
   trancheAgee: FiltreTrancheAgee;
   depassePlafond: FiltreOuiNon;
+  prochePlafond: FiltreOuiNon;
   siteId: string;
   ville: string;
   region: string;
   actif: FiltreActif;
+  dateCreationDebut: string;
+  dateCreationFin: string;
 };
 
 export const FILTRES_LISTE_TIERS_VIDE: FiltresListeTiers = {
@@ -43,10 +49,13 @@ export const FILTRES_LISTE_TIERS_VIDE: FiltresListeTiers = {
   statutSolde: "tous",
   trancheAgee: "tous",
   depassePlafond: "tous",
+  prochePlafond: "tous",
   siteId: "",
   ville: "",
   region: "",
   actif: "tous",
+  dateCreationDebut: "",
+  dateCreationFin: "",
 };
 
 export type CtxFiltresTiers = {
@@ -54,6 +63,8 @@ export type CtxFiltresTiers = {
   acomptes: Acompte[];
   achats: Achat[];
   parametres: Parametres;
+  journalActivites?: JournalActivite[];
+  seuilPlafondPercent?: number;
 };
 
 function norm(s: string) {
@@ -154,6 +165,52 @@ function depassePlafondTiers(t: Tiers, ctx: CtxFiltresTiers): boolean {
   return soldeClientTiers(t.id, ctx).solde > plafond;
 }
 
+function jourLocal(iso: string | undefined): string | null {
+  if (!iso?.trim()) return null;
+  try {
+    const d = parseISO(iso.trim());
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Date de création de la fiche : champ dédié, sinon journal. */
+export function dateCreationEffectiveTiers(
+  t: Tiers,
+  journal?: JournalActivite[],
+): string | null {
+  const directe = jourLocal(t.dateCreation);
+  if (directe) return directe;
+  if (!journal?.length) return null;
+  let plusAncienne: string | null = null;
+  for (const j of journal) {
+    if (j.entiteId !== t.id || j.action !== "creation") continue;
+    if (j.entite !== "tiers" && j.entite !== "client" && j.entite !== "fournisseur") {
+      continue;
+    }
+    const jour = jourLocal(j.date);
+    if (jour && (!plusAncienne || jour < plusAncienne)) plusAncienne = jour;
+  }
+  return plusAncienne;
+}
+
+function dansPlageCreation(
+  jour: string | null,
+  debut: string,
+  fin: string,
+): boolean {
+  if (!debut && !fin) return true;
+  if (!jour) return false;
+  if (debut && jour < debut) return false;
+  if (fin && jour > fin) return false;
+  return true;
+}
+
 export function filtrerListeTiers(
   liste: Tiers[],
   filtres: FiltresListeTiers,
@@ -210,6 +267,28 @@ export function filtrerListeTiers(
       const depasse = depassePlafondTiers(t, ctx);
       if (filtres.depassePlafond === "oui" && !depasse) return false;
       if (filtres.depassePlafond === "non" && depasse) return false;
+    }
+
+    if (filtres.prochePlafond !== "tous" && estClient(t)) {
+      const { usagePercent, depasse } = tauxUtilisationPlafond(t, ctx);
+      const niv = avertissementPlafond(
+        usagePercent,
+        ctx.seuilPlafondPercent ?? 80,
+        depasse,
+      );
+      const proche = niv === "avertissement";
+      if (filtres.prochePlafond === "oui" && !proche) return false;
+      if (filtres.prochePlafond === "non" && proche) return false;
+    }
+
+    if (
+      !dansPlageCreation(
+        dateCreationEffectiveTiers(t, ctx.journalActivites),
+        filtres.dateCreationDebut.trim(),
+        filtres.dateCreationFin.trim(),
+      )
+    ) {
+      return false;
     }
 
     return true;

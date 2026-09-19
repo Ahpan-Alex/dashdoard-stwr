@@ -612,7 +612,7 @@ export function createDefaultModeles(): ModeleDocument[] {
     type,
     rubriques: [...DEFAULT_RUBRIQUES[type]],
     mentionsLegales: MENTIONS_DEFAUT,
-    piedDePage: "Merci de votre confiance — STWR Poissonnerie",
+    piedDePage: "Merci de votre confiance — Négoo",
     piedDePageAlignement: "centre",
     piedDePageLigne: "aucune",
     afficherMentionTvaImmatriculation: true,

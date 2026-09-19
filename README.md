@@ -1,6 +1,6 @@
-# STWR — Dashboard Poissonnerie
+# Négoo — Dashboard
 
-Application Next.js (TypeScript) pour la gestion d'une poissonnerie multi-points de vente.
+Application Next.js (TypeScript) pour la gestion commerciale d'entreprises de fabrication de supports publicitaires (multi-sites).
 
 ## Auth (Phase 1)
 
@@ -32,7 +32,7 @@ Les **données métier** (stocks, factures, etc.) sont chargées depuis l’API 
 - **Entrées** — enregistrement des arrivages fournisseurs
 - **Stocks** — suivi des quantités et valorisation (achat / vente)
 - **Chiffre d'affaires** — vues hebdomadaire, mensuelle et annuelle
-- **Points de vente** — gestion de plusieurs étals / boutiques
+- **Sites** — gestion de plusieurs ateliers / points de vente
 - **Comptabilité** — plan comptable personnalisé et écritures d'achat/vente (export CSV / Excel)
 - **Administration** — users, rôles, sessions, audit (via API)
 

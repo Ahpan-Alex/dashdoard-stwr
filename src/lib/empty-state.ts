@@ -4,13 +4,22 @@ import {
 } from "./alertes";
 import { createDefaultModeles } from "./document-templates";
 import { ficheTiersDiversMarche } from "./missions";
-import { seedCategoriesProduits } from "./produits";
+import { normaliserCategoriesProduits, seedCategoriesProduits } from "./produits";
 import { fusionnerUnitesMesure, seedUnitesMesure } from "./unites-mesure";
 import { fusionnerTypesClients, seedTypesClients } from "./types-clients";
 import {
   fusionnerNaturesDepenseMission,
   seedNaturesDepenseMission,
 } from "./natures-depense-mission";
+import {
+  fusionnerMotifsSortieAtelier,
+  seedMotifsSortieAtelier,
+} from "./sorties-atelier";
+import {
+  fusionnerComptesTresorerie,
+  fusionnerModesPaiement,
+  seedModesPaiement,
+} from "./tresorerie";
 import type { AppState } from "./types";
 
 /** État métier vide — plus de données fake côté client. */
@@ -72,15 +81,22 @@ export function emptyAppState(): AppState {
     transformations: [],
     achats: [],
     transfertsStock: [],
+    transfertsMatiereOf: [],
     ordresFabrication: [],
     bonsATirer: [],
     missionsAchat: [],
     demandesPrix: [],
+    besoinsAchat: [],
     pointsDeVente: [],
     categoriesProduits: seedCategoriesProduits(),
     unitesMesure: seedUnitesMesure(),
     typesClients: seedTypesClients(),
     naturesDepenseMission: seedNaturesDepenseMission(),
+    motifsSortieAtelier: seedMotifsSortieAtelier(),
+    sortiesAtelier: [],
+    comptesTresorerie: [],
+    lignesReleveBancaire: [],
+    modesPaiement: seedModesPaiement(),
     exercicesComptables: [],
     produits: [],
     tarifsClients: [],
@@ -120,14 +136,14 @@ export function pickAppState(state: AppState): AppState {
     transformations: state.transformations ?? [],
     achats: state.achats ?? [],
     transfertsStock: state.transfertsStock ?? [],
+    transfertsMatiereOf: state.transfertsMatiereOf ?? [],
     ordresFabrication: state.ordresFabrication ?? [],
     bonsATirer: state.bonsATirer ?? [],
     missionsAchat: state.missionsAchat ?? [],
     demandesPrix: state.demandesPrix ?? [],
+    besoinsAchat: state.besoinsAchat ?? [],
     pointsDeVente: state.pointsDeVente,
-    categoriesProduits: Array.isArray(state.categoriesProduits)
-      ? state.categoriesProduits
-      : seedCategoriesProduits(),
+    categoriesProduits: normaliserCategoriesProduits(state.categoriesProduits),
     unitesMesure: fusionnerUnitesMesure(state.unitesMesure, state.produits ?? []),
     typesClients: fusionnerTypesClients(
       state.typesClients,
@@ -137,6 +153,15 @@ export function pickAppState(state: AppState): AppState {
     naturesDepenseMission: fusionnerNaturesDepenseMission(
       state.naturesDepenseMission,
     ),
+    motifsSortieAtelier: fusionnerMotifsSortieAtelier(state.motifsSortieAtelier),
+    sortiesAtelier: Array.isArray(state.sortiesAtelier)
+      ? state.sortiesAtelier
+      : [],
+    comptesTresorerie: fusionnerComptesTresorerie(state.comptesTresorerie),
+    lignesReleveBancaire: Array.isArray(state.lignesReleveBancaire)
+      ? state.lignesReleveBancaire
+      : [],
+    modesPaiement: fusionnerModesPaiement(state.modesPaiement),
     exercicesComptables: Array.isArray(state.exercicesComptables)
       ? state.exercicesComptables
       : [],

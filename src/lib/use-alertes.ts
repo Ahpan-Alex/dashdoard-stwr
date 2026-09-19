@@ -33,6 +33,9 @@ export function useAlertes() {
   const missionsAchat = useStore((s) => s.missionsAchat);
   const naturesDepenseMission = useStore((s) => s.naturesDepenseMission);
   const demandesPrix = useStore((s) => s.demandesPrix);
+  const bonsATirer = useStore((s) => s.bonsATirer);
+  const commandes = useStore((s) => s.commandes);
+  const transfertsStock = useStore((s) => s.transfertsStock);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const alertesSuivi = useStore((s) => s.alertesSuivi);
 
@@ -57,6 +60,9 @@ export function useAlertes() {
         missionsAchat,
         naturesDepenseMission,
         demandesPrix,
+        bonsATirer,
+        commandes,
+        transfertsStock,
       }),
     [
       parametresAlertes,
@@ -77,6 +83,9 @@ export function useAlertes() {
       missionsAchat,
       naturesDepenseMission,
       demandesPrix,
+      bonsATirer,
+      commandes,
+      transfertsStock,
     ],
   );
 

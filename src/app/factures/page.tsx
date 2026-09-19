@@ -22,7 +22,6 @@ import {
   creerSnapshotAcomptesDocument,
   isLigneProduit,
   libelleClient,
-  MODES_PAIEMENT,
   montantLigneHT,
   montantRemiseLigne,
   normaliserRemiseLigne,
@@ -47,6 +46,7 @@ import {
   stockDisponible,
   stockRestantPourSaisie,
 } from "@/lib/calculations";
+import { quantiteReserveeProduitSite } from "@/lib/repartition-achat-of";
 import { useStore } from "@/lib/store";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
 import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
@@ -60,6 +60,10 @@ import {
 } from "@/components/remise-saisie";
 import { LigneDimensionsSaisie, ResumeSurfaceLigne } from "@/components/ligne-dimensions-saisie";
 import { champsSurfaceLigne } from "@/lib/surface-vente";
+import {
+  comptesTresorerieActifs,
+  modesPaiementActifs,
+} from "@/lib/tresorerie";
 import type {
   FactureStatut,
   FactureType,
@@ -98,10 +102,15 @@ export default function FacturesPage() {
     entrees,
     ventes,
     inventaires,
+    achats,
+    ordresFabrication,
+    transfertsMatiereOf,
     addFacture,
     updateAcompte,
     encaisserAcompte,
     pointDeVenteActifId,
+    modesPaiement,
+    comptesTresorerie,
   } = useStore();
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
@@ -136,12 +145,50 @@ export default function FacturesPage() {
     commentaireLibre: "",
     acomptePaye: "0",
     modePaiement: "virement" as ModePaiement,
+    compteTresorerieId: "",
+    referencePaiement: "",
     genererFactureAcompte: true,
   });
   const [lignes, setLignes] = useState<DraftLigne[]>([]);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
+
+  const ctxReservation = {
+    achats,
+    ordresFabrication,
+    transfertsMatiereOf: transfertsMatiereOf ?? [],
+  };
+  const reserveOf = (produitId: string) =>
+    form.pointDeVenteId
+      ? quantiteReserveeProduitSite(produitId, form.pointDeVenteId, ctxReservation)
+      : 0;
+  const stockLibreAffiche = (produitId: string) =>
+    Math.max(
+      0,
+      stockDisponible(
+        produitId,
+        form.pointDeVenteId,
+        entrees,
+        ventes,
+        inventaires,
+      ) - reserveOf(produitId),
+    );
+  const stockSaisie = (
+    produitId: string,
+    lignesEnCours: DraftLigne[],
+    excludeKey?: string,
+  ) =>
+    stockRestantPourSaisie(
+      produitId,
+      form.pointDeVenteId,
+      entrees,
+      ventes,
+      lignesEnCours,
+      excludeKey,
+      inventaires,
+      reserveOf(produitId),
+    );
 
   const modele = useModelePourType("facture");
 
@@ -274,15 +321,7 @@ export default function FacturesPage() {
       setStockError("Sélectionnez un point de vente avant d'ajouter un produit.");
       return;
     }
-    const dispo = stockRestantPourSaisie(
-      produitId,
-      form.pointDeVenteId,
-      entrees,
-      ventes,
-      lignes,
-      undefined,
-      inventaires,
-    );
+    const dispo = stockSaisie(produitId, lignes);
     if (dispo <= 0) {
       setStockError(
         `Stock insuffisant pour « ${prod.libelleCourt} » (disponible : 0 ${prod.unite}).`,
@@ -374,15 +413,7 @@ export default function FacturesPage() {
           merged.produitId &&
           patch.quantite !== undefined
         ) {
-          const max = stockRestantPourSaisie(
-            merged.produitId,
-            form.pointDeVenteId,
-            entrees,
-            ventes,
-            prev,
-            key,
-            inventaires,
-          );
+          const max = stockSaisie(merged.produitId, prev, key);
           merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
         }
         return merged;
@@ -401,15 +432,7 @@ export default function FacturesPage() {
     }
     for (const l of lignes) {
       if (!isLigneProduit(l) || !l.produitId) continue;
-      const max = stockRestantPourSaisie(
-        l.produitId,
-        form.pointDeVenteId,
-        entrees,
-        ventes,
-        lignes,
-        l.key,
-        inventaires,
-      );
+      const max = stockSaisie(l.produitId, lignes, l.key);
       if (l.quantite <= 0) {
         return `Quantité invalide pour « ${l.designation} ».`;
       }
@@ -627,6 +650,8 @@ export default function FacturesPage() {
           date: new Date(`${form.date}T12:00:00`).toISOString(),
           montantTTC: extra,
           modePaiement: form.modePaiement,
+          compteTresorerieId: form.compteTresorerieId || undefined,
+          reference: form.referencePaiement || undefined,
           devisId: form.devisId || undefined,
           commandeId: form.commandeId || undefined,
           factureId,
@@ -909,22 +934,8 @@ export default function FacturesPage() {
                       ) : (
                         catalogueFiltre.map((p) => {
                           const nbLignes = lignesProduitParId.counts.get(p.id) ?? 0;
-                          const stock = stockDisponible(
-                            p.id,
-                            form.pointDeVenteId,
-                            entrees,
-                            ventes,
-                            inventaires,
-                          );
-                          const restant = stockRestantPourSaisie(
-                            p.id,
-                            form.pointDeVenteId,
-                            entrees,
-                            ventes,
-                            lignes,
-                            undefined,
-                            inventaires,
-                          );
+                          const stock = stockLibreAffiche(p.id);
+                          const restant = stockSaisie(p.id, lignes);
                           const indispo = restant <= 0;
                           const prix = resolvePrixVenteHT(p, {
                             clientId: form.clientId,
@@ -1191,15 +1202,7 @@ export default function FacturesPage() {
                                   <>
                                     {" "}
                                     · Stock :{" "}
-                                    {formatNumber(
-                                      stockDisponible(
-                                        l.produitId,
-                                        form.pointDeVenteId,
-                                        entrees,
-                                        ventes,
-                                        inventaires,
-                                      ),
-                                    )}{" "}
+                                    {formatNumber(stockLibreAffiche(l.produitId))}{" "}
                                     {l.unite}
                                   </>
                                 )}
@@ -1226,15 +1229,7 @@ export default function FacturesPage() {
                                 min={0}
                                 max={
                                   l.produitId
-                                    ? stockRestantPourSaisie(
-                                        l.produitId,
-                                        form.pointDeVenteId,
-                                        entrees,
-                                        ventes,
-                                        lignes,
-                                        l.key,
-                                        inventaires,
-                                      )
+                                    ? stockSaisie(l.produitId, lignes, l.key)
                                     : undefined
                                 }
                                 value={l.quantite}
@@ -1346,12 +1341,46 @@ export default function FacturesPage() {
                         })
                       }
                     >
-                      {Object.entries(MODES_PAIEMENT).map(([id, label]) => (
-                        <option key={id} value={id}>
-                          {label}
+                      {modesPaiementActifs(modesPaiement ?? []).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.libelle}
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Compte de trésorerie (optionnel)
+                    <select
+                      className="select mt-1"
+                      value={form.compteTresorerieId}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          compteTresorerieId: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Pas de mouvement de trésorerie</option>
+                      {comptesTresorerieActifs(comptesTresorerie ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.libelle}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Référence (facultatif)
+                    <input
+                      className="input mt-1"
+                      value={form.referencePaiement}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          referencePaiement: e.target.value,
+                        })
+                      }
+                      placeholder="N° chèque, id transaction…"
+                    />
                   </label>
                   <div className="rounded-lg bg-card px-3 py-2">
                     <p className="text-[11px] text-muted">Reste à payer</p>

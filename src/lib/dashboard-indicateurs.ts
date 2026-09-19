@@ -13,7 +13,7 @@ import { resteAPayer, totauxFacture } from "./commercial";
 import { caHtFacturesPeriode, syntheseRentabiliteDeuxPaliers } from "./rentabilite";
 import { historiqueFournisseursProduit } from "./classement-fournisseurs";
 import { depenseEnAttenteReclassement } from "./comptabilite";
-import { lignesMainOeuvre, reliquatsMatieres } from "./fabrication";
+import { lignesMainOeuvre, quantiteTheoriqueComposantOf, reliquatsMatieres } from "./fabrication";
 import { achatConcerneSite, siteEstAtelier } from "./sites";
 import {
   fondsValidesMission,
@@ -23,10 +23,13 @@ import {
 import { libelleNatureDepense } from "./natures-depense-mission";
 import { natureStockDuProduit, NATURE_STOCK_LABELS } from "./nature-stock";
 import { libelleProduit } from "./produits";
+import { quantiteReserveeProduitSite, type CtxReservationOf } from "./repartition-achat-of";
+import { coutConsommablesAtelierPeriode } from "./sorties-atelier";
 import {
   labelsTranchesBalanceAgee,
   normaliserTranchesBalanceAgee,
   balanceAgeeClient,
+  soldeClientTiers,
 } from "./tiers";
 import type {
   Achat,
@@ -43,6 +46,7 @@ import type {
   Parametres,
   PointDeVente,
   Produit,
+  SortieAtelier,
   TransformationCommerciale,
   Vente,
   CategorieProduit,
@@ -154,6 +158,7 @@ export function indicateursProduction(
   sites: PointDeVente[],
   siteId: string | "tous",
   range: DateRange,
+  sortiesAtelier: SortieAtelier[] = [],
 ) {
   const ateliers = sites.filter((s) => s.actif && siteEstAtelier(s));
   const vis = ofs.filter((o) => ofDuSite(o, siteId) && ofDansPeriode(o, range));
@@ -176,11 +181,15 @@ export function indicateursProduction(
       const ecarts = duSite.reduce((s, o) => s + (o.ecart?.montant ?? 0), 0);
       let sorti = 0;
       let perte = 0;
+      let theoriqueBom = 0;
       for (const of_ of duSite) {
         const rel = reliquatsMatieres(of_);
         const retours = of_.retoursMatieres ?? [];
         for (const s of of_.sorties) {
           sorti += s.quantite;
+        }
+        for (const ligne of of_.nomenclatureLignes ?? []) {
+          theoriqueBom += quantiteTheoriqueComposantOf(of_, ligne.composantId);
         }
         for (const r of rel) {
           const rendu = retours
@@ -218,13 +227,23 @@ export function indicateursProduction(
         cycles.length > 0
           ? cycles.reduce((s, n) => s + n, 0) / cycles.length
           : null;
+      const coutConsommables = coutConsommablesAtelierPeriode(
+        sortiesAtelier,
+        atelier.id,
+        (d) => inDateRange(d, range),
+      );
       return {
         atelierId: atelier.id,
         nom: atelier.nom,
         ecarts,
         tauxPerte: sorti > 0 ? (perte / sorti) * 100 : null,
+        qteTheoriqueBom: theoriqueBom,
+        qteReelleSortie: sorti,
+        rendementMatiere:
+          sorti > 1e-9 ? (theoriqueBom / sorti) * 100 : null,
         heuresMod: heures,
         coutMod,
+        coutConsommables,
         cycleMoyenJours: cycleMoyen,
         nbOf: duSite.length,
       };
@@ -249,6 +268,7 @@ export function valorisationStockParNatureEtSite(
   sites: PointDeVente[],
   siteId: string | "tous",
   inventaires: Inventaire[],
+  ctxReservation?: CtxReservationOf,
 ) {
   const stocks = calculerStocks(
     produits,
@@ -259,17 +279,45 @@ export function valorisationStockParNatureEtSite(
     undefined,
     inventaires,
   );
-  const parNature = new Map<string, number>();
-  const parSite = new Map<string, number>();
+  type Ventile = { valeur: number; valeurDisponible: number; valeurReservee: number };
+  const zero = (): Ventile => ({ valeur: 0, valeurDisponible: 0, valeurReservee: 0 });
+  const parNature = new Map<string, Ventile>();
+  const parSite = new Map<string, Ventile>();
+  const bump = (map: Map<string, Ventile>, key: string, delta: Ventile) => {
+    const cur = map.get(key) ?? zero();
+    map.set(key, {
+      valeur: cur.valeur + delta.valeur,
+      valeurDisponible: cur.valeurDisponible + delta.valeurDisponible,
+      valeurReservee: cur.valeurReservee + delta.valeurReservee,
+    });
+  };
   for (const l of stocks) {
-    const nat = NATURE_STOCK_LABELS[natureStockDuProduit(l.produit)];
-    parNature.set(nat, (parNature.get(nat) ?? 0) + l.valeurAchat);
-    const nom = sites.find((s) => s.id === l.pointDeVenteId)?.nom ?? l.pointDeVenteId;
-    parSite.set(nom, (parSite.get(nom) ?? 0) + l.valeurAchat);
+    const cump =
+      l.quantiteRestante > 1e-9 ? l.valeurAchat / l.quantiteRestante : 0;
+    const reserveQty = ctxReservation
+      ? Math.min(
+          l.quantiteRestante,
+          quantiteReserveeProduitSite(l.produit.id, l.pointDeVenteId, ctxReservation),
+        )
+      : 0;
+    const libreQty = Math.max(0, l.quantiteRestante - reserveQty);
+    const delta: Ventile = {
+      valeur: l.valeurAchat,
+      valeurDisponible: libreQty * cump,
+      valeurReservee: reserveQty * cump,
+    };
+    bump(parNature, NATURE_STOCK_LABELS[natureStockDuProduit(l.produit)], delta);
+    bump(
+      parSite,
+      sites.find((s) => s.id === l.pointDeVenteId)?.nom ?? l.pointDeVenteId,
+      delta,
+    );
   }
+  const rows = (map: Map<string, Ventile>) =>
+    [...map.entries()].map(([nom, v]) => ({ nom, ...v }));
   return {
-    parNature: [...parNature.entries()].map(([nom, valeur]) => ({ nom, valeur })),
-    parSite: [...parSite.entries()].map(([nom, valeur]) => ({ nom, valeur })),
+    parNature: rows(parNature),
+    parSite: rows(parSite),
   };
 }
 
@@ -416,6 +464,77 @@ export function indicateursMissionsDashboard(
       ecarts.length > 0
         ? ecarts.reduce((s, n) => s + n, 0) / ecarts.length
         : null,
+  };
+}
+
+export type EcartMoyenAcheteur = {
+  acheteurUserId: string;
+  acheteurNom: string;
+  nbMissions: number;
+  ecartMoyenMontant: number;
+  ecartMoyenPercent: number | null;
+};
+
+/** Moyenne glissante de l'écart avance / réel, par acheteur. */
+export function ecartsMoyensParAcheteur(
+  missions: MissionAchat[],
+  nDernieres = 8,
+): EcartMoyenAcheteur[] {
+  const par = new Map<string, MissionAchat[]>();
+  for (const m of missions) {
+    if (m.statut !== "cloture" && m.statut !== "cloture_annule") continue;
+    const fonds = fondsValidesMission(m);
+    if (!(fonds > 0)) continue;
+    const key = m.acheteurUserId || m.acheteurNom;
+    const list = par.get(key) ?? [];
+    list.push(m);
+    par.set(key, list);
+  }
+  const out: EcartMoyenAcheteur[] = [];
+  for (const [, list] of par) {
+    const triees = [...list].sort((a, b) =>
+      (b.dateCloture ?? b.date).localeCompare(a.dateCloture ?? a.date),
+    );
+    const slice = triees.slice(0, Math.max(1, nDernieres));
+    const ecarts = slice.map((m) => fondsValidesMission(m) - totalDepenseMission(m));
+    const fonds = slice.map((m) => fondsValidesMission(m));
+    const totalFonds = fonds.reduce((s, n) => s + n, 0);
+    const moyenne = ecarts.reduce((s, n) => s + n, 0) / ecarts.length;
+    out.push({
+      acheteurUserId: slice[0].acheteurUserId,
+      acheteurNom: slice[0].acheteurNom,
+      nbMissions: slice.length,
+      ecartMoyenMontant: moyenne,
+      ecartMoyenPercent: totalFonds > 0 ? (moyenne / totalFonds) * 100 : null,
+    });
+  }
+  return out.sort(
+    (a, b) => Math.abs(b.ecartMoyenMontant) - Math.abs(a.ecartMoyenMontant),
+  );
+}
+
+export function indicateurPlafondCredit(
+  clients: { id: string; nom: string; plafondCredit?: number }[],
+  ctx: { factures: Facture[]; acomptes: Acompte[]; parametres: Parametres },
+  seuilPercent: number,
+) {
+  let avecPlafond = 0;
+  let enAlerte = 0;
+  let depasses = 0;
+  for (const c of clients) {
+    const plafond = Math.max(0, c.plafondCredit ?? 0);
+    if (!(plafond > 0)) continue;
+    avecPlafond += 1;
+    const solde = soldeClientTiers(c.id, ctx).solde;
+    if (solde > plafond + 1e-6) depasses += 1;
+    const usage = (solde / plafond) * 100;
+    if (usage + 1e-6 >= seuilPercent) enAlerte += 1;
+  }
+  return {
+    avecPlafond,
+    enAlerte,
+    depasses,
+    tauxAlerte: avecPlafond > 0 ? (enAlerte / avecPlafond) * 100 : null,
   };
 }
 

@@ -12,6 +12,7 @@ import { DocumentPreview } from "@/components/document-preview";
 import { DocumentPrintActions } from "@/components/document-print-actions";
 import { DocumentFiliation } from "@/components/document-filiation";
 import { FacturesSubnav } from "@/components/factures-subnav";
+import { SaisieLignesPaiement } from "@/components/saisie-lignes-paiement";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
@@ -158,6 +159,7 @@ export default function ListeFacturesPage() {
     updateFacture,
     addFacture,
     deleteFacture,
+    ajouterPaiementsFacture,
   } = useStore();
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
@@ -177,6 +179,7 @@ export default function ListeFacturesPage() {
   const [previewId, setPreviewId] = useState<string | null>(
     () => searchParams.get("facture"),
   );
+  const [encaisserId, setEncaisserId] = useState<string | null>(null);
   useEffect(() => {
     const factureId = searchParams.get("facture");
     if (factureId) setPreviewId(factureId);
@@ -476,35 +479,7 @@ export default function ListeFacturesPage() {
   }
 
   function enregistrerPaiement(id: string) {
-    const f = factures.find((x) => x.id === id);
-    if (!f) return;
-    if (f.type === "proforma" || f.statut === "brouillon") {
-      alert("Encaissement réservé aux factures fiscales.");
-      return;
-    }
-    const reste = resteAPayer(f, parametres, acomptes, factures);
-    const saisie = prompt(
-      `Montant encaissé (reste ${formatCurrency(reste)}) :`,
-      String(reste),
-    );
-    if (saisie === null) return;
-    const montant = Number(saisie);
-    if (Number.isNaN(montant) || montant <= 0) return;
-    const avoirs = totalAvoirsSurFacture(f.id, factures, parametres);
-    const t = totauxFacture(f, parametres, acomptes);
-    const netTTC = Math.max(0, t.totalTTC - avoirs);
-    const paye = Math.min(netTTC, f.montantPaye + montant);
-    const statut: FactureStatut =
-      paye >= netTTC - 1
-        ? "payee"
-        : paye > 0
-          ? "partiellement_payee"
-          : f.statut;
-    updateFacture(
-      id,
-      { montantPaye: paye, statut },
-      { action: "facture_paiement", detail: `+${montant} Ar` },
-    );
+    setEncaisserId(id);
   }
 
   function marquerEnvoyee(f: Facture) {
@@ -621,6 +596,46 @@ export default function ListeFacturesPage() {
       />
 
       <FacturesSubnav />
+
+      {encaisserId && (
+        <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
+          <h2 className="mb-2 font-display text-lg font-semibold">
+            Encaissement{" "}
+            {factures.find((f) => f.id === encaisserId)?.numero}
+          </h2>
+          <p className="mb-3 text-sm text-muted">
+            Reste{" "}
+            {formatCurrency(
+              resteAPayer(
+                factures.find((f) => f.id === encaisserId)!,
+                parametres,
+                acomptes,
+                factures,
+              ),
+            )}
+            . Fractionnez si besoin entre plusieurs modes.
+          </p>
+          <SaisieLignesPaiement
+            siteId={factures.find((f) => f.id === encaisserId)?.pointDeVenteId}
+            submitLabel="Enregistrer l'encaissement"
+            onValider={(lignes) => {
+              const res = ajouterPaiementsFacture(encaisserId, lignes);
+              if (!res.ok) {
+                alert(res.reason);
+                return;
+              }
+              setEncaisserId(null);
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary mt-2"
+            onClick={() => setEncaisserId(null)}
+          >
+            Annuler
+          </button>
+        </div>
+      )}
 
       {modalCompteProduit}
 

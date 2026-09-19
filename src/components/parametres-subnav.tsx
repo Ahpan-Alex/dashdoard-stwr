@@ -80,15 +80,23 @@ export function ParametresSubnav() {
         ))}
       </nav>
       {items.length > 0 && (
-        <nav className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <Pill
-              key={`${item.href}-${item.label}`}
-              href={item.href}
-              label={item.label}
-              active={itemParametresActif(pathname, item)}
-            />
-          ))}
+        <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-1">
+          {items.map((item) => {
+            const active = itemParametresActif(pathname, item);
+            return (
+              <Link
+                key={`${item.href}-${item.label}`}
+                href={item.href}
+                className={`text-xs transition-colors ${
+                  active
+                    ? "font-semibold text-sea-800 underline decoration-sea-400 underline-offset-4"
+                    : "text-muted hover:text-ink hover:underline"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       )}
     </div>

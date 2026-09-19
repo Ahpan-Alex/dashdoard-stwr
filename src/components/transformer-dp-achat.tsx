@@ -58,7 +58,8 @@ export function TransformerDpAchat({
   const consultes = dp.fournisseurIds ?? [];
 
   const [ouvert, setOuvert] = useState(false);
-  const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
+  const [etape, setEtape] = useState<"edition" | "validation">("edition");
+  const [siteId, setSiteId] = useState(dp.pointDeVenteId || sites[0]?.id || "");
   const [date, setDate] = useState(jourLocalISO());
   const [validiteJours, setValiditeJours] = useState(
     String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT),
@@ -91,9 +92,10 @@ export function TransformerDpAchat({
 
   function resetFormulaire() {
     setLignes(toEdit(dp, produits));
-    setSiteId(sites[0]?.id ?? "");
+    setSiteId(dp.pointDeVenteId || sites[0]?.id || "");
     setDate(jourLocalISO());
     setValiditeJours(String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT));
+    setEtape("edition");
     setOuvert(true);
   }
 
@@ -144,25 +146,30 @@ export function TransformerDpAchat({
     );
   }
 
-  function lancer() {
+  function validerFormulaire() {
     if (!siteId) {
       alert("Choisissez un site de destination.");
-      return;
+      return false;
     }
     if (commandesPrevues.length === 0) {
       alert("Attribuez au moins un article à un fournisseur, avec une quantité positive.");
-      return;
+      return false;
     }
     for (const l of lignes) {
       if (l.parts.some((p) => p.fournisseurId && !(Number(p.quantite) >= 0))) {
         alert("Les quantités doivent être positives.");
-        return;
+        return false;
       }
       if (l.parts.some((p) => p.fournisseurId && Number(p.prixAchatUnitaire) < 0)) {
         alert("Les prix ne peuvent pas être négatifs.");
-        return;
+        return false;
       }
     }
+    return true;
+  }
+
+  function lancer() {
+    if (!validerFormulaire()) return;
     const commandes = commandesPrevues.map((c) => ({
       fournisseurId: c.fournisseurId,
       lignes: c.lignes,
@@ -178,6 +185,7 @@ export function TransformerDpAchat({
       return;
     }
     setOuvert(false);
+    setEtape("edition");
   }
 
   return (
@@ -188,6 +196,45 @@ export function TransformerDpAchat({
             ? "Créer d’autres commandes"
             : "Transformer en commande fournisseur"}
         </button>
+      ) : etape === "validation" ? (
+        <div className="space-y-4">
+          <p className="text-sm font-semibold">Confirmer la transformation</p>
+          <p className="text-sm text-muted">
+            {commandesPrevues.length > 1
+              ? `${commandesPrevues.length} commandes brouillon seront créées.`
+              : "1 commande brouillon sera créée."}{" "}
+            La DP passera en statut Clôturée, avec le lien vers chaque commande.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {commandesPrevues.map((c) => (
+              <li key={c.fournisseurId}>
+                <span className="font-semibold">{nomFrn(c.fournisseurId)}</span>
+                {" · "}
+                {c.lignes.length} article{c.lignes.length > 1 ? "s" : ""}
+                {" · "}
+                {formatCurrency(
+                  c.lignes.reduce((s, l) => s + l.quantite * l.prixAchatUnitaire, 0),
+                )}{" "}
+                HT
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary" onClick={lancer}>
+              Confirmer
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setOuvert(false)}>
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setEtape("edition")}
+            >
+              Retour à l&apos;édition
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted">
@@ -349,9 +396,15 @@ export function TransformerDpAchat({
           )}
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary" onClick={lancer}>
-              Créer et prévisualiser
-              {commandesPrevues.length > 1 ? " les commandes" : " la commande"}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                if (!validerFormulaire()) return;
+                setEtape("validation");
+              }}
+            >
+              Continuer vers la validation
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setOuvert(false)}>
               Annuler

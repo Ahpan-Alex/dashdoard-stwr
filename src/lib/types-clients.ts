@@ -1,10 +1,12 @@
 import type { Client, Tiers, TypeClient } from "./types";
 
 export const CLIENT_TYPES_DEFAUT: Record<string, string> = {
-  particulier: "Particulier",
-  restaurant: "Restaurant",
-  hotel: "Hôtel",
-  grossiste: "Grossiste",
+  particulier: "Client particulier",
+  entreprise: "Client entreprise",
+  fournisseur_mp: "Fournisseur matière première",
+  restaurant: "Client entreprise",
+  hotel: "Enseigne / réseau",
+  grossiste: "Grossiste matières",
   autre: "Autre",
 };
 
@@ -17,13 +19,12 @@ export function normalizeCodeTypeClient(raw: string | undefined) {
 }
 
 export function seedTypesClients(): TypeClient[] {
-  return Object.entries(CLIENT_TYPES_DEFAUT).map(([code, libelle], i) => ({
-    id: `tc-${code}`,
-    code,
-    libelle,
-    ordre: i + 1,
-    actif: true,
-  }));
+  return [
+    { id: "tc-particulier", code: "particulier", libelle: "Client particulier", ordre: 1, actif: true },
+    { id: "tc-entreprise", code: "entreprise", libelle: "Client entreprise", ordre: 2, actif: true },
+    { id: "tc-fournisseur-mp", code: "fournisseur_mp", libelle: "Fournisseur matière première", ordre: 3, actif: true },
+    { id: "tc-autre", code: "autre", libelle: "Autre", ordre: 4, actif: true },
+  ];
 }
 
 export function typesClientsTries(types: TypeClient[]) {
@@ -70,9 +71,9 @@ export function motifTypeClientInvalide(
 ) {
   const c = normalizeCodeTypeClient(code);
   const l = libelle.trim();
-  if (!c) return "Indiquez un code (ex. particulier, hotel).";
+  if (!c) return "Indiquez un code (ex. particulier, entreprise).";
   if (c.length < 2) return "Le code doit faire au moins 2 caractères.";
-  if (!l) return "Indiquez le libellé (ex. Hôtel).";
+  if (!l) return "Indiquez le libellé (ex. Client entreprise).";
   const clash = types.find(
     (t) => t.id !== ignoreId && normalizeCodeTypeClient(t.code) === c,
   );
@@ -124,5 +125,21 @@ export function fusionnerTypesClients(
       actif: true,
     });
   }
-  return typesClientsTries(base);
+  return typesClientsTries(
+    base.map((t) => {
+      if (t.code === "restaurant" && t.libelle === "Restaurant") {
+        return { ...t, libelle: "Client entreprise" };
+      }
+      if (t.code === "hotel" && t.libelle === "Hôtel") {
+        return { ...t, libelle: "Enseigne / réseau" };
+      }
+      if (t.code === "grossiste" && t.libelle === "Grossiste") {
+        return { ...t, libelle: "Grossiste matières" };
+      }
+      if (t.code === "particulier" && t.libelle === "Particulier") {
+        return { ...t, libelle: "Client particulier" };
+      }
+      return t;
+    }),
+  );
 }

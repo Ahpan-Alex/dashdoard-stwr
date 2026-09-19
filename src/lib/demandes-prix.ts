@@ -1,13 +1,40 @@
 import { nextNumero } from "./commercial";
 import type { OptsNumeroDocument } from "./exercices";
 import { libelleProduit } from "./produits";
-import type { DemandePrix, DemandePrixOffre, DemandePrixStatut, Produit } from "./types";
+import type {
+  DemandePrix,
+  DemandePrixConsultation,
+  DemandePrixConsultationStatut,
+  DemandePrixOffre,
+  DemandePrixStatut,
+  Produit,
+} from "./types";
 
 export const DP_STATUT_LABELS: Record<DemandePrixStatut, string> = {
   brouillon: "Brouillon",
   en_cours: "En cours",
   cloturee: "Clôturée",
+  cloturee_sans_suite: "Clôturée sans suite",
   annulee: "Annulée",
+};
+
+export function badgeClasseDp(statut: DemandePrixStatut) {
+  if (statut === "cloturee") return "badge-success";
+  if (statut === "en_cours") return "badge-sand";
+  if (statut === "annulee") return "badge-danger";
+  if (statut === "cloturee_sans_suite") return "badge-sand";
+  return "badge-sea";
+}
+
+export const DP_CONSULTATION_STATUT_LABELS: Record<
+  DemandePrixConsultationStatut,
+  string
+> = {
+  envoyee: "Envoyée",
+  en_attente: "En attente",
+  repondue: "Répondue",
+  relancee: "Relancée",
+  sans_reponse: "Sans réponse",
 };
 
 export function nextNumeroDemandePrix(
@@ -22,7 +49,109 @@ export function nextNumeroDemandePrix(
 }
 
 export function dpEstVerrouillee(d: Pick<DemandePrix, "statut">) {
-  return d.statut === "cloturee" || d.statut === "annulee";
+  return (
+    d.statut === "cloturee" ||
+    d.statut === "cloturee_sans_suite" ||
+    d.statut === "annulee"
+  );
+}
+
+export function prixNetOffre(
+  o: Pick<DemandePrixOffre, "prixUnitaire" | "remisePercent">,
+) {
+  const pu = o.prixUnitaire || 0;
+  const r = Math.min(100, Math.max(0, o.remisePercent ?? 0));
+  return Math.round(pu * (1 - r / 100));
+}
+
+export function consultationsDp(
+  dp: Pick<DemandePrix, "fournisseurIds" | "consultations">,
+): DemandePrixConsultation[] {
+  return (dp.fournisseurIds ?? []).map((fournisseurId) => {
+    const exist = (dp.consultations ?? []).find((c) => c.fournisseurId === fournisseurId);
+    return exist ?? { fournisseurId, statut: "en_attente" };
+  });
+}
+
+function fournisseurARepondu(
+  dp: Pick<DemandePrix, "offres">,
+  fournisseurId: string,
+) {
+  return (dp.offres ?? []).some(
+    (o) => o.fournisseurId === fournisseurId && o.prixUnitaire > 0,
+  );
+}
+
+/** Statut affiché : Répondue dès qu'un prix est saisi, sinon le statut manuel. */
+export function statutConsultationEffective(
+  dp: Pick<DemandePrix, "offres" | "consultations" | "fournisseurIds">,
+  fournisseurId: string,
+): DemandePrixConsultationStatut {
+  const base =
+    consultationsDp(dp).find((c) => c.fournisseurId === fournisseurId)?.statut ??
+    "en_attente";
+  if (fournisseurARepondu(dp, fournisseurId) && base !== "sans_reponse") {
+    return "repondue";
+  }
+  return base;
+}
+
+/**
+ * Statut global : clôture/annulation stockées, sinon dérivé des consultations.
+ */
+export function statutGlobalDp(dp: DemandePrix): DemandePrixStatut {
+  if (
+    dp.statut === "annulee" ||
+    dp.statut === "cloturee" ||
+    dp.statut === "cloturee_sans_suite"
+  ) {
+    return dp.statut;
+  }
+  const ids = dp.fournisseurIds ?? [];
+  if (ids.length === 0 || dp.statut === "brouillon") {
+    const aucuneEnvoyee = ids.every((fid) => {
+      const s = statutConsultationEffective(dp, fid);
+      return s === "en_attente";
+    });
+    if (aucuneEnvoyee && !ids.some((fid) => fournisseurARepondu(dp, fid))) {
+      return "brouillon";
+    }
+  }
+  return "en_cours";
+}
+
+export function libelleStatutGlobalDp(dp: DemandePrix): string {
+  const stocke = statutGlobalDp(dp);
+  if (stocke !== "en_cours") return DP_STATUT_LABELS[stocke];
+  const ids = dp.fournisseurIds ?? [];
+  if (ids.length === 0) return DP_STATUT_LABELS.en_cours;
+  const stats = ids.map((fid) => statutConsultationEffective(dp, fid));
+  if (stats.every((s) => s === "repondue")) return "Répondue";
+  if (stats.every((s) => s === "sans_reponse")) return "Sans réponse";
+  if (stats.some((s) => s === "relancee") && !stats.every((s) => s === "repondue")) {
+    return "Relancée";
+  }
+  if (stats.every((s) => s === "envoyee" || s === "en_attente")) {
+    return stats.some((s) => s === "envoyee") ? "Envoyée" : "En attente";
+  }
+  return DP_STATUT_LABELS.en_cours;
+}
+
+export function fournisseurRetenuLigne(
+  dp: Pick<DemandePrix, "retenuesParLigne">,
+  ligneId: string,
+) {
+  return (dp.retenuesParLigne ?? []).find((r) => r.ligneId === ligneId)?.fournisseurId;
+}
+
+export function synchroniserConsultations(
+  fournisseurIds: string[],
+  prev: DemandePrixConsultation[] | undefined,
+): DemandePrixConsultation[] {
+  return fournisseurIds.map((fournisseurId) => {
+    const exist = (prev ?? []).find((c) => c.fournisseurId === fournisseurId);
+    return exist ?? { fournisseurId, statut: "en_attente" as const };
+  });
 }
 
 export function offreLigneFournisseur(
@@ -40,13 +169,13 @@ export function offresPricéesLigne(
   return offres.filter((o) => o.ligneId === ligneId && o.prixUnitaire > 0);
 }
 
-/** Rang 1 = prix le plus bas. Prix égaux : même rang (compétition). */
+/** Rang 1 = prix net le plus bas. Prix égaux : même rang (compétition). */
 export function rangsPrixParFournisseur(offres: DemandePrixOffre[]): Map<string, number> {
   const sorted = [...offres]
     .filter((o) => o.prixUnitaire > 0)
     .sort(
       (a, b) =>
-        a.prixUnitaire - b.prixUnitaire || a.fournisseurId.localeCompare(b.fournisseurId),
+        prixNetOffre(a) - prixNetOffre(b) || a.fournisseurId.localeCompare(b.fournisseurId),
     );
   const rangs = new Map<string, number>();
   let rang = 0;
@@ -54,9 +183,10 @@ export function rangsPrixParFournisseur(offres: DemandePrixOffre[]): Map<string,
   let seen = 0;
   for (const o of sorted) {
     seen += 1;
-    if (prev === undefined || o.prixUnitaire > prev) {
+    const net = prixNetOffre(o);
+    if (prev === undefined || net > prev) {
       rang = seen;
-      prev = o.prixUnitaire;
+      prev = net;
     }
     rangs.set(o.fournisseurId, rang);
   }
@@ -64,7 +194,7 @@ export function rangsPrixParFournisseur(offres: DemandePrixOffre[]): Map<string,
 }
 
 export function prixMiniLigne(offres: DemandePrixOffre[], ligneId: string) {
-  const prix = offresPricéesLigne(offres, ligneId).map((o) => o.prixUnitaire);
+  const prix = offresPricéesLigne(offres, ligneId).map((o) => prixNetOffre(o));
   if (prix.length === 0) return null;
   return Math.min(...prix);
 }
@@ -74,8 +204,8 @@ export function trierOffresParPrix(
   sens: "asc" | "desc",
 ) {
   return [...offres].sort((a, b) => {
-    const pa = a.prixUnitaire > 0 ? a.prixUnitaire : sens === "asc" ? Infinity : -Infinity;
-    const pb = b.prixUnitaire > 0 ? b.prixUnitaire : sens === "asc" ? Infinity : -Infinity;
+    const pa = a.prixUnitaire > 0 ? prixNetOffre(a) : sens === "asc" ? Infinity : -Infinity;
+    const pb = b.prixUnitaire > 0 ? prixNetOffre(b) : sens === "asc" ? Infinity : -Infinity;
     if (pa !== pb) return sens === "asc" ? pa - pb : pb - pa;
     return a.fournisseurId.localeCompare(b.fournisseurId);
   });
@@ -106,7 +236,7 @@ export function lignesCommandeDepuisDp(
       return {
         produitId: l.produitId,
         quantite: l.quantite,
-        prixAchatUnitaire: offre?.prixUnitaire ?? 0,
+        prixAchatUnitaire: offre ? prixNetOffre(offre) || offre.prixUnitaire : 0,
         designation: p
           ? `${p.code || ""} — ${libelleProduit(p) || "Article"}`.replace(/^ — /, "")
           : "Article",
@@ -115,15 +245,17 @@ export function lignesCommandeDepuisDp(
 }
 
 export function dpPeutEtreTransformee(
-  dp: Pick<DemandePrix, "statut" | "fournisseurIdsRetenus" | "fournisseurIds" | "lignes">,
+  dp: Pick<DemandePrix, "statut" | "fournisseurIdsRetenus" | "fournisseurIds" | "lignes" | "retenuesParLigne">,
 ) {
-  if (dp.statut === "annulee") return false;
+  if (dp.statut === "annulee" || dp.statut === "cloturee_sans_suite") return false;
   if ((dp.lignes ?? []).length === 0) return false;
   return (dp.fournisseurIdsRetenus ?? dp.fournisseurIds ?? []).length > 0;
 }
 
-/** Fournisseurs parmi lesquels répartir les articles (retenus, sinon consultés). */
+/** Fournisseurs parmi lesquels répartir les articles (retenus par ligne, sinon consultés). */
 export function fournisseursPourTransformation(dp: DemandePrix) {
+  const parLigne = [...new Set((dp.retenuesParLigne ?? []).map((r) => r.fournisseurId).filter(Boolean))];
+  if (parLigne.length > 0) return parLigne;
   const retenus = dp.fournisseurIdsRetenus ?? [];
   if (retenus.length > 0) return retenus;
   return dp.fournisseurIds ?? [];
@@ -139,8 +271,8 @@ export function fournisseurMoinsCherLigne(
   let bestPrix = Infinity;
   for (const fid of candidatIds) {
     const o = offreLigneFournisseur(dp, ligneId, fid);
-    if (o && o.prixUnitaire > 0 && o.prixUnitaire < bestPrix) {
-      bestPrix = o.prixUnitaire;
+    if (o && o.prixUnitaire > 0 && prixNetOffre(o) < bestPrix) {
+      bestPrix = prixNetOffre(o);
       best = fid;
     }
   }
@@ -171,7 +303,12 @@ export function affectationsInitialesParArticle(
     .filter((l) => l.produitId)
     .map((l) => {
       const p = produits.find((x) => x.id === l.produitId);
-      const fid = fournisseurMoinsCherLigne(dp, l.id, candidats) ?? candidats[0] ?? "";
+      const retenus = fournisseurRetenuLigne(dp, l.id);
+      const fid =
+        (retenus && candidats.includes(retenus) ? retenus : undefined) ??
+        fournisseurMoinsCherLigne(dp, l.id, candidats) ??
+        candidats[0] ??
+        "";
       const offre = fid ? offreLigneFournisseur(dp, l.id, fid) : undefined;
       return {
         ligneId: l.id,
@@ -185,7 +322,7 @@ export function affectationsInitialesParArticle(
               {
                 fournisseurId: fid,
                 quantite: l.quantite,
-                prixAchatUnitaire: offre?.prixUnitaire ?? 0,
+                prixAchatUnitaire: offre ? prixNetOffre(offre) || offre.prixUnitaire : 0,
               },
             ]
           : [],

@@ -11,15 +11,16 @@ import { TdCol, ThCol } from "@/components/table-col";
 import { calculerStocks } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { categorieLabel, libelleProduit } from "@/lib/produits";
+import { quantiteReserveeProduitSite } from "@/lib/repartition-achat-of";
 import { useStore } from "@/lib/store";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 
 function ligneAlerteStock(ligne: {
   produit: { seuilReappro?: number; seuilRupture?: number };
-  quantiteRestante: number;
+  quantiteDisponible: number;
 }) {
-  const { produit, quantiteRestante: qty } = ligne;
+  const { produit, quantiteDisponible: qty } = ligne;
   if (produit.seuilRupture != null && qty <= produit.seuilRupture) return true;
   if (produit.seuilReappro != null && qty <= produit.seuilReappro) return true;
   return false;
@@ -36,9 +37,17 @@ function StocksContent() {
     ventes,
     pointsDeVente,
     inventaires,
+    achats,
+    ordresFabrication,
+    transfertsMatiereOf,
   } = useStore();
   const { visibles, actif } = useSitesVisibles();
   const { visible, colSpan } = useAffichageTable("stocks");
+  const ctxReservation = {
+    achats,
+    ordresFabrication,
+    transfertsMatiereOf: transfertsMatiereOf ?? [],
+  };
 
   const stocks = calculerStocks(
     produits,
@@ -48,7 +57,21 @@ function StocksContent() {
     visibles.length ? visibles : pointsDeVente,
     undefined,
     inventaires,
-  );
+  ).map((ligne) => {
+    const reserve = Math.min(
+      ligne.quantiteRestante,
+      quantiteReserveeProduitSite(
+        ligne.produit.id,
+        ligne.pointDeVenteId,
+        ctxReservation,
+      ),
+    );
+    return {
+      ...ligne,
+      quantiteReservee: reserve,
+      quantiteDisponible: Math.max(0, ligne.quantiteRestante - reserve),
+    };
+  });
 
   const valeurAchat = stocks.reduce((s, l) => s + l.valeurAchat, 0);
   const valeurVente = stocks.reduce((s, l) => s + l.valeurVente, 0);
@@ -66,7 +89,7 @@ function StocksContent() {
     <div>
       <PageHeader
         title="Stocks"
-        description="État des stocks par produit et par site. Le CUMP est calculé indépendamment pour chaque site — pas de CUMP consolidé entreprise."
+        description="État des stocks par produit et par site. Le CUMP est calculé indépendamment pour chaque site — pas de CUMP consolidé entreprise. Le disponible exclut les quantités réservées à un OF."
       />
 
       <div className="mb-6 flex flex-col gap-3 rounded-[var(--radius)] border border-sea-200 bg-sea-100/40 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -118,14 +141,14 @@ function StocksContent() {
               Exemple
             </p>
             <ul className="mt-1 list-disc space-y-1 pl-5">
-              <li>Entrée 1 : 10 kg à 8 000 Ar = 80 000 Ar</li>
-              <li>Entrée 2 : 5 kg à 11 000 Ar = 55 000 Ar</li>
+              <li>Entrée 1 : 10 m² à 8 000 Ar = 80 000 Ar</li>
+              <li>Entrée 2 : 5 m² à 11 000 Ar = 55 000 Ar</li>
               <li>
                 CUMP = (80 000 + 55 000) ÷ (10 + 5) ={" "}
-                <strong>9 000 Ar / kg</strong>
+                <strong>9 000 Ar / m²</strong>
               </li>
               <li>
-                Le stock restant est valorisé à 9 000 Ar le kg (et non au dernier
+                Le stock restant est valorisé à 9 000 Ar le m² (et non au dernier
                 prix payé).
               </li>
             </ul>
@@ -207,6 +230,8 @@ function StocksContent() {
             entrees: `${formatNumber(ligne.quantiteEntree)} ${ligne.produit.unite}`,
             vendues: `${formatNumber(ligne.quantiteVendue)} ${ligne.produit.unite}`,
             restant: `${formatNumber(ligne.quantiteRestante)} ${ligne.produit.unite}`,
+            disponible: `${formatNumber(ligne.quantiteDisponible)} ${ligne.produit.unite}`,
+            reserve: `${formatNumber(ligne.quantiteReservee)} ${ligne.produit.unite}`,
             cump: formatCurrency(
               ligne.quantiteRestante > 1e-9
                 ? ligne.valeurAchat / ligne.quantiteRestante
@@ -229,6 +254,8 @@ function StocksContent() {
                 <ThCol id="entrees" show={visible}>Entrées</ThCol>
                 <ThCol id="vendues" show={visible}>Vendues</ThCol>
                 <ThCol id="restant" show={visible}>Restant</ThCol>
+                <ThCol id="disponible" show={visible}>Disponible</ThCol>
+                <ThCol id="reserve" show={visible}>Réservé OF</ThCol>
                 <ThCol id="valeurAchat" show={visible}>Valeur achat</ThCol>
                 <ThCol id="valeurVente" show={visible}>Valeur vente</ThCol>
               </tr>
@@ -283,6 +310,10 @@ function StocksContent() {
                       {ligne.produit.unite}
                     </TdCol>
                     <TdCol id="restant" show={visible}>
+                      {formatNumber(ligne.quantiteRestante)}{" "}
+                      {ligne.produit.unite}
+                    </TdCol>
+                    <TdCol id="disponible" show={visible}>
                       <span
                         className={
                           bas
@@ -290,9 +321,12 @@ function StocksContent() {
                             : "font-semibold text-ink"
                         }
                       >
-                        {formatNumber(ligne.quantiteRestante)}{" "}
+                        {formatNumber(ligne.quantiteDisponible)}{" "}
                         {ligne.produit.unite}
                       </span>
+                    </TdCol>
+                    <TdCol id="reserve" show={visible}>
+                      {formatNumber(ligne.quantiteReservee)} {ligne.produit.unite}
                     </TdCol>
                     <TdCol id="valeurAchat" show={visible}>{formatCurrency(ligne.valeurAchat)}</TdCol>
                     <TdCol id="valeurVente" show={visible}>{formatCurrency(ligne.valeurVente)}</TdCol>

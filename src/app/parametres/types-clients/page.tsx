@@ -91,7 +91,7 @@ export default function ParametresTypesClientsPage() {
     <div>
       <PageHeader
         title="Types de clients"
-        description="Catalogue des types (particulier, hôtel, collectivité…) pour classer les fiches clients."
+        description="Catalogue des types (particulier, entreprise, fournisseur matière première…) pour classer les fiches."
         showPosSelector={false}
         actions={
           <button type="button" className="btn btn-primary" onClick={ouvrirCreation}>
@@ -128,7 +128,7 @@ export default function ParametresTypesClientsPage() {
               Code *
               <input
                 className="input mt-1 font-mono"
-                placeholder="ex. hotel, collectivite"
+                placeholder="ex. entreprise, particulier"
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value })}
                 required
@@ -138,7 +138,7 @@ export default function ParametresTypesClientsPage() {
               Libellé *
               <input
                 className="input mt-1"
-                placeholder="ex. Hôtel, Collectivité"
+                placeholder="ex. Client entreprise, Enseigne"
                 value={form.libelle}
                 onChange={(e) => setForm({ ...form, libelle: e.target.value })}
                 required
@@ -208,7 +208,7 @@ export default function ParametresTypesClientsPage() {
             {liste.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-sm text-muted">
-                  Aucun type. Ajoutez particulier, hôtel, collectivité…
+                  Aucun type. Ajoutez particulier, entreprise…
                 </td>
               </tr>
             )}

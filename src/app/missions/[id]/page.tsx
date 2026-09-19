@@ -12,6 +12,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { useAuthStore } from "@/lib/auth-store";
 import { MODES_PAIEMENT } from "@/lib/commercial";
+import { modesPaiementActifs } from "@/lib/tresorerie";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { jourLocalISO } from "@/lib/inventaire";
@@ -103,6 +104,8 @@ function MissionDetail() {
   const tiers = useStore((s) => s.tiers ?? []);
   const naturesDepenseMission = useStore((s) => s.naturesDepenseMission ?? []);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const comptesTresorerie = useStore((s) => s.comptesTresorerie ?? []);
+  const modesPaiement = useStore((s) => s.modesPaiement ?? []);
   const parametres = useStore((s) => s.parametres);
   const journal = useStore((s) =>
     (s.journalActivites ?? []).filter(
@@ -133,6 +136,7 @@ function MissionDetail() {
     date: jourLocalISO(),
     modePaiement: "especes",
     compteSource: "",
+    compteTresorerieId: "",
     reference: "",
   });
 
@@ -706,6 +710,7 @@ function MissionDetail() {
                   date: fondsForm.date,
                   modePaiement: fondsForm.modePaiement,
                   compteSource: fondsForm.compteSource || undefined,
+                  compteTresorerieId: fondsForm.compteTresorerieId || undefined,
                   reference: fondsForm.reference || undefined,
                 }),
               );
@@ -745,11 +750,30 @@ function MissionDetail() {
                   setFondsForm({ ...fondsForm, modePaiement: e.target.value })
                 }
               >
-                {Object.entries(MODES_PAIEMENT).map(([k, lab]) => (
-                  <option key={k} value={k}>
-                    {lab}
+                {modesPaiementActifs(modesPaiement).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.libelle}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Compte de trésorerie (optionnel)
+              <select
+                className="select mt-1"
+                value={fondsForm.compteTresorerieId}
+                onChange={(e) =>
+                  setFondsForm({ ...fondsForm, compteTresorerieId: e.target.value })
+                }
+              >
+                <option value="">Pas de mouvement de trésorerie</option>
+                {comptesTresorerie
+                  .filter((c) => c.actif)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.libelle}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="block text-xs font-semibold text-muted">
@@ -1207,7 +1231,7 @@ function MissionDetail() {
           )}
         </div>
         <p className="mb-3 text-xs text-muted">
-          Fournisseur obligatoire (fiche Tiers ou Divers / Marché). Nature
+          Fournisseur obligatoire (fiche Tiers ou Divers / Fournitures). Nature
           catalogue ou saisie libre (imputation automatique au compte 471).
           Total divers : {formatCurrency(totalDepensesDiverses(mission))}
         </p>

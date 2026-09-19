@@ -117,6 +117,14 @@ export function AlertesListe({ categorie }: { categorie: CategorieAlerte }) {
                       <ExternalLink className="h-3.5 w-3.5" />
                       Ouvrir
                     </Link>
+                    {(a.type === "stock_reappro" || a.type === "stock_rupture") && (
+                      <Link
+                        href={`/demandes-prix?nouveau=1&produit=${encodeURIComponent(a.entiteId)}&pdv=${encodeURIComponent(a.pointDeVenteId ?? "")}&qte=${encodeURIComponent(String(a.quantiteSuggeree ?? 1))}&alerte=${encodeURIComponent(a.id)}`}
+                        className="btn btn-primary !px-2 !py-1 text-xs"
+                      >
+                        Créer une DP
+                      </Link>
+                    )}
                     {traitee ? (
                       <button
                         type="button"

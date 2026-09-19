@@ -122,6 +122,8 @@ export const DemandePrixDocument = forwardRef<HTMLDivElement, Props>(
               <th>Désignation</th>
               <th className="text-right">Quantité</th>
               <th>Unité</th>
+              <th>Livraison souhaitée</th>
+              <th>Spécifications</th>
               <th className="text-right">Prix unitaire HT proposé</th>
               <th className="text-right">Délai (j)</th>
             </tr>
@@ -135,6 +137,16 @@ export const DemandePrixDocument = forwardRef<HTMLDivElement, Props>(
                   <td>{p ? libelleProduit(p) || "Article" : "Article"}</td>
                   <td className="text-right">{formatNumber(ligne.quantite)}</td>
                   <td>{p?.unite || "—"}</td>
+                  <td>
+                    {ligne.dateLivraisonSouhaitee || dp.dateLivraisonSouhaitee
+                      ? formatDate(
+                          ligne.dateLivraisonSouhaitee ||
+                            dp.dateLivraisonSouhaitee ||
+                            "",
+                        )
+                      : "—"}
+                  </td>
+                  <td>{ligne.specifications || "—"}</td>
                   <td className="text-right text-muted">………………</td>
                   <td className="text-right text-muted">………………</td>
                 </tr>

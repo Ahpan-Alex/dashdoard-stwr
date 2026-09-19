@@ -98,7 +98,7 @@ export function FournisseurFicheForm({
           className="input mt-1"
           value={form.specialite}
           onChange={(e) => setForm({ ...form, specialite: e.target.value })}
-          placeholder="Poissons, crustacés…"
+          placeholder="Vinyle, bâches, profilés alu…"
         />
       </label>
       <label className="block text-xs font-semibold text-muted">

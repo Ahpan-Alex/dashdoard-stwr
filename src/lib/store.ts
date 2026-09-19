@@ -36,6 +36,8 @@ import {
   nextNumeroAchat,
   nextNumeroAvoirAchat,
   nextNumeroLivraison,
+  completerLigneLivraison,
+  motifEcartLivraisonNonValide,
   quantiteLivreeProduit,
   quantiteRetourneeProduit,
   reliquatProduit,
@@ -54,6 +56,8 @@ import {
   rebuildVentesDepuisFactures,
   splitTTC,
   totauxFacture,
+  resteAPayer,
+  totalAvoirsSurFacture,
 } from "./commercial";
 import {
   putAlertesSuivi,
@@ -68,8 +72,36 @@ import {
   avecPresentationSiBesoin,
   creerSnapshotPresentation,
 } from "./document-presentation";
+import {
+  completerLignePaiement,
+  compteTresorerieUtilise,
+  modePaiementUtilise,
+  motifCompteTresorerieInvalide,
+  motifModePaiementInvalide,
+  motifSaisieLignePaiement,
+  motifSiteSansTresorerie,
+  montantLignesPaiement,
+  type SaisieLignePaiement,
+} from "./tresorerie";
+import {
+  libelleMotifSortieAtelier,
+  motifSortieAtelierInvalide,
+  regenererEntreesSortiesAtelier,
+} from "./sorties-atelier";
 import { emptyAppState, pickAppState } from "./empty-state";
 import { motifRepartitionInvalide, siteEstAtelier, sitesAchat, utilisateurRattacheAuSite } from "./sites";
+import {
+  motifRepartitionOfInvalide,
+  nextNumeroTransfertMatiereOf,
+  quantiteReserveeOf,
+  stockDisponiblePourOf,
+  stockLibreDisponible,
+} from "./repartition-achat-of";
+import {
+  motifBesoinAchatInvalide,
+  nextNumeroBesoinAchat,
+  prorataRepartitionsOf,
+} from "./besoins-achat";
 import {
   appliquerRoleUnique,
   appliquerSeedComptesDefaut,
@@ -130,6 +162,7 @@ import {
   lignesMainOeuvre,
   listerMouvementsBloquantAnnulationOf,
   messageAnnulationRefusee,
+  motifLancementOfDimension,
   montantEcartCloture,
   motifAchatNatureInterdite,
   motifProduitOfInvalide,
@@ -142,11 +175,14 @@ import {
   tauxHoraireModAtelier,
 } from "./fabrication";
 import {
+  actorPeutValiderBat,
   batAFichier,
-  batCourant,
+  batCourantCycle,
+  cycleIdBat,
   motifBatOfManquant,
   motifCreationBatImpossible,
-  prochaineVersionBat,
+  prochaineVersionCycle,
+  produitIdsBat,
 } from "./bat";
 import {
   depensesValides,
@@ -170,6 +206,7 @@ import {
   dpEstVerrouillee,
   nextNumeroDemandePrix,
   offreLigneFournisseur,
+  synchroniserConsultations,
 } from "./demandes-prix";
 import { normaliserValiditeJours } from "./validite-document";
 import {
@@ -177,8 +214,15 @@ import {
   normaliserNomenclatures,
 } from "./nomenclature";
 import {
+  dimensionDepuisCommande,
+  motifDimensionNomenclatureManquante,
+  motifNomenclaturesProduit,
+  resoudreLignesNomenclatureOf,
+} from "./nomenclature-formules";
+import {
   estUsageCommercial,
   natureStockDuProduit,
+  produitEstAchetable,
   produitEstFabrique,
   usageCommercialDuProduit,
 } from "./nature-stock";
@@ -203,6 +247,7 @@ import {
 } from "./exercices";
 import type { OptsNumeroDocument } from "./exercices";
 import { createId } from "./id";
+import { parserReleveBancaireCsv } from "./rapprochement-bancaire";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
 import {
@@ -223,6 +268,8 @@ import type {
   CibleTransformation,
   Client,
   CompteComptable,
+  CompteTresorerie,
+  LigneReleveBancaire,
   EcritureComptable,
   Commande,
   CommandeStatut,
@@ -238,8 +285,10 @@ import type {
   JournalActivite,
   JournalAudit,
   JournalEcriture,
+  LignePaiement,
   LivraisonAchatLigne,
   ModePaiement,
+  ModePaiementParam,
   MouvementCompteCourant,
   Parametres,
   PointDeVente,
@@ -247,16 +296,20 @@ import type {
   RoleCompteComptable,
   RapportFinJournee,
   SourceTransformation,
+  SortieAtelier,
+  StatutChequeDiffere,
   TarifClient,
   TransfertComptable,
   Tiers,
   TransfertStock,
   TransfertStockLigne,
+  TransfertMatiereOf,
   TransformationCommerciale,
   TypeClient,
   NatureDepenseMission,
   UniteMesure,
   Vente,
+  BesoinAchat,
   OrdreFabrication,
   TypeNomenclature,
   MissionAchat,
@@ -266,11 +319,15 @@ import type {
   MissionLignePrevisionnelle,
   MissionMouvementFonds,
   MissionReglementStatut,
+  MotifSortieAtelier,
   DemandePrix,
+  DemandePrixConsultationStatut,
   DemandePrixLigne,
   DemandePrixOffre,
   DemandePrixStatut,
   ExerciceComptable,
+  BatMotifRefus,
+  BatOrigine,
   BonATirer,
 } from "./types";
 
@@ -292,15 +349,22 @@ type Store = {
   transformations: TransformationCommerciale[];
   achats: Achat[];
   transfertsStock: TransfertStock[];
+  transfertsMatiereOf: TransfertMatiereOf[];
   ordresFabrication: OrdreFabrication[];
   bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
   demandesPrix: DemandePrix[];
+  besoinsAchat: BesoinAchat[];
   pointsDeVente: PointDeVente[];
   categoriesProduits: CategorieProduit[];
   unitesMesure: UniteMesure[];
   typesClients: TypeClient[];
   naturesDepenseMission: NatureDepenseMission[];
+  motifsSortieAtelier: MotifSortieAtelier[];
+  sortiesAtelier: SortieAtelier[];
+  comptesTresorerie: CompteTresorerie[];
+  lignesReleveBancaire: LigneReleveBancaire[];
+  modesPaiement: ModePaiementParam[];
   exercicesComptables: ExerciceComptable[];
   produits: Produit[];
   tarifsClients: TarifClient[];
@@ -381,8 +445,13 @@ type Store = {
     action: "lue" | "nonlue" | "traitee" | "rouvrir",
   ) => void;
 
-  addPointDeVente: (pdv: Omit<PointDeVente, "id">) => void;
-  updatePointDeVente: (id: string, data: Partial<PointDeVente>) => void;
+  addPointDeVente: (
+    pdv: Omit<PointDeVente, "id">,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  updatePointDeVente: (
+    id: string,
+    data: Partial<PointDeVente>,
+  ) => { ok: boolean; reason?: string };
   deletePointDeVente: (id: string) => { ok: boolean; reason?: string };
 
   addEntree: (entree: Omit<EntreeStock, "id">) => void;
@@ -401,7 +470,7 @@ type Store = {
   ) => string;
   updateAchat: (
     id: string,
-    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours" | "numeroFactureFournisseur">>,
+    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours" | "numeroFactureFournisseur" | "modePaiement">>,
   ) => { ok: boolean; reason?: string };
   validerAchat: (id: string) => { ok: boolean; reason?: string };
   annulerAchat: (id: string) => { ok: boolean; reason?: string };
@@ -414,12 +483,14 @@ type Store = {
       note?: string;
       confirmer?: boolean;
       datePeremption?: string;
+      validerEcarts?: boolean;
     },
   ) => { ok: boolean; reason?: string; id?: string };
   confirmerLivraisonAchat: (
     achatId: string,
     livraisonId: string,
     lignes?: LivraisonAchatLigne[],
+    opts?: { validerEcarts?: boolean },
   ) => { ok: boolean; reason?: string };
   annulerLivraisonAchat: (
     achatId: string,
@@ -427,11 +498,25 @@ type Store = {
   ) => { ok: boolean; reason?: string };
   ajouterPaiementAchat: (
     achatId: string,
-    data: { date: string; montant: number; modePaiement: ModePaiement; note?: string },
+    data: SaisieLignePaiement,
+  ) => { ok: boolean; reason?: string };
+  ajouterPaiementsAchat: (
+    achatId: string,
+    lignes: SaisieLignePaiement[],
   ) => { ok: boolean; reason?: string };
   supprimerPaiementAchat: (
     achatId: string,
     paiementId: string,
+  ) => { ok: boolean; reason?: string };
+  changerStatutChequeAchat: (
+    achatId: string,
+    paiementId: string,
+    statut: StatutChequeDiffere,
+  ) => { ok: boolean; reason?: string };
+  ajouterRemboursementAvoirAchat: (
+    achatId: string,
+    avoirId: string,
+    data: SaisieLignePaiement,
   ) => { ok: boolean; reason?: string };
   ajouterAvoirAchat: (
     achatId: string,
@@ -463,6 +548,47 @@ type Store = {
   ) => { ok: boolean; reason?: string };
   annulerTransfert: (id: string) => { ok: boolean; reason?: string };
 
+  majRepartitionsOfAchat: (
+    achatId: string,
+    ligneId: string,
+    repartitionsOf: Achat["lignes"][number]["repartitionsOf"],
+  ) => { ok: boolean; reason?: string };
+  demanderTransfertMatiereOf: (data: {
+    produitId: string;
+    pointDeVenteId: string;
+    ofSourceId: string;
+    ofDestinataireId: string;
+    quantite: number;
+    achatId?: string;
+    achatLigneId?: string;
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  validerTransfertMatiereOfSource: (id: string) => { ok: boolean; reason?: string };
+  validerTransfertMatiereOfDestinataire: (id: string) => { ok: boolean; reason?: string };
+  annulerTransfertMatiereOf: (id: string) => { ok: boolean; reason?: string };
+
+  creerBesoinAchat: (data: {
+    produitId: string;
+    quantiteNecessaire: number;
+    pointDeVenteId: string;
+    repartitionsOf?: Achat["lignes"][number]["repartitionsOf"];
+    note?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  modifierBesoinAchat: (
+    id: string,
+    data: Partial<Pick<BesoinAchat, "quantiteNecessaire" | "pointDeVenteId" | "repartitionsOf" | "note">>,
+  ) => { ok: boolean; reason?: string };
+  annulerBesoinAchat: (id: string) => { ok: boolean; reason?: string };
+  creerAchatDepuisBesoin: (data: {
+    besoinId: string;
+    fournisseurId: string;
+    quantite: number;
+    prixAchatUnitaire: number;
+    modePaiement: ModePaiement;
+    pointDeVenteId?: string;
+    note?: string;
+  }) => { ok: true; achatId: string } | { ok: false; reason: string };
+
   creerOrdreFabrication: (data: {
     atelierId: string;
     produitId: string;
@@ -471,6 +597,8 @@ type Store = {
     commandeId?: string;
     dateCloturePrevue?: string;
     note?: string;
+    dimensionLargeur?: number;
+    dimensionHauteur?: number;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierOrdreFabrication: (
     id: string,
@@ -486,6 +614,8 @@ type Store = {
         | "commandeId"
         | "dateCloturePrevue"
         | "note"
+        | "dimensionLargeur"
+        | "dimensionHauteur"
       >
     >,
   ) => { ok: boolean; reason?: string };
@@ -505,6 +635,24 @@ type Store = {
     },
   ) => { ok: boolean; reason?: string; id?: string };
   supprimerSortieOf: (ofId: string, sortieId: string) => { ok: boolean; reason?: string };
+  ajouterSortieAtelier: (data: {
+    date: string;
+    atelierId: string;
+    siteSourceId?: string;
+    produitId: string;
+    quantite: number;
+    motifId?: string;
+    motifLibre?: string;
+  }) => { ok: boolean; reason?: string; id?: string };
+  supprimerSortieAtelier: (id: string) => { ok: boolean; reason?: string };
+  addMotifSortieAtelier: (data: {
+    libelle: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateMotifSortieAtelier: (
+    id: string,
+    data: Partial<Pick<MotifSortieAtelier, "libelle" | "actif" | "ordre">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteMotifSortieAtelier: (id: string) => { ok: true } | { ok: false; reason: string };
   ajouterFraisOf: (
     ofId: string,
     data: { date: string; libelle: string; montant: number },
@@ -546,10 +694,14 @@ type Store = {
 
   creerBonATirer: (data: {
     commandeId: string;
+    ligneIds?: string[];
     fichierNom?: string;
     fichierMime?: string;
     fichierDataUrl?: string;
     commentaire?: string;
+    origine?: BatOrigine;
+    sourceBatId?: string;
+    gabarit?: boolean;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   completerFichierBat: (
     id: string,
@@ -559,10 +711,24 @@ type Store = {
     id: string,
     data: {
       decision: "valide" | "modifications_demandees";
-      validateurNom?: string;
       commentaire?: string;
+      motifRefus?: BatMotifRefus;
       fichierSuivant?: { nom: string; mime: string; dataUrl: string };
     },
+  ) => { ok: boolean; reason?: string };
+  dupliquerBatValide: (data: {
+    sourceId: string;
+    commandeId: string;
+    ligneIds?: string[];
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  creerBatDepuisGabarit: (data: {
+    gabaritId: string;
+    commandeId: string;
+    ligneIds?: string[];
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  marquerGabaritBat: (
+    id: string,
+    gabarit: boolean,
   ) => { ok: boolean; reason?: string };
 
   creerMissionAchat: (data: {
@@ -619,6 +785,7 @@ type Store = {
       date: string;
       modePaiement?: string;
       compteSource?: string;
+      compteTresorerieId?: string;
       reference?: string;
     },
   ) => { ok: boolean; reason?: string };
@@ -634,10 +801,20 @@ type Store = {
 
   creerDemandePrix: (data: {
     date: string;
-    lignes: { produitId: string; quantite: number }[];
+    lignes: {
+      produitId: string;
+      quantite: number;
+      dateLivraisonSouhaitee?: string;
+      pointDeVenteId?: string;
+      specifications?: string;
+    }[];
     fournisseurIds: string[];
     note?: string;
     validiteJours?: number;
+    pointDeVenteId?: string;
+    dateLivraisonSouhaitee?: string;
+    origine?: "libre" | "alerte_stock";
+    alerteId?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierDemandePrix: (
     id: string,
@@ -647,15 +824,34 @@ type Store = {
       fournisseurIds: string[];
       offres: DemandePrixOffre[];
       fournisseurIdsRetenus: string[];
+      retenuesParLigne: { ligneId: string; fournisseurId: string }[];
+      consultations: DemandePrix["consultations"];
       note: string;
       validiteJours: number;
+      pointDeVenteId: string;
+      dateLivraisonSouhaitee: string;
     }>,
   ) => { ok: boolean; reason?: string };
   patchOffreDemandePrix: (
     id: string,
     ligneId: string,
     fournisseurId: string,
-    patch: Partial<Pick<DemandePrixOffre, "prixUnitaire" | "delaiJours">>,
+    patch: Partial<
+      Pick<
+        DemandePrixOffre,
+        | "prixUnitaire"
+        | "delaiJours"
+        | "remisePercent"
+        | "validiteOffreJours"
+        | "francoPort"
+        | "conditions"
+      >
+    >,
+  ) => { ok: boolean; reason?: string };
+  majConsultationDemandePrix: (
+    id: string,
+    fournisseurId: string,
+    statut: DemandePrixConsultationStatut,
   ) => { ok: boolean; reason?: string };
   changerStatutDemandePrix: (
     id: string,
@@ -875,6 +1071,8 @@ type Store = {
     date: string;
     montantTTC: number;
     modePaiement: ModePaiement;
+    compteTresorerieId?: string;
+    reference?: string;
     devisId?: string;
     commandeId?: string;
     factureId?: string;
@@ -882,6 +1080,52 @@ type Store = {
     genererFactureAcompte?: boolean;
     note?: string;
   }) => { ok: true; acompteId: string; numero: string; factureAcompteId?: string } | { ok: false; reason: string };
+
+  ajouterPaiementsFacture: (
+    factureId: string,
+    lignes: SaisieLignePaiement[],
+  ) => { ok: boolean; reason?: string };
+  supprimerPaiementFacture: (
+    factureId: string,
+    paiementId: string,
+  ) => { ok: boolean; reason?: string };
+  changerStatutChequeFacture: (
+    factureId: string,
+    paiementId: string,
+    statut: StatutChequeDiffere,
+  ) => { ok: boolean; reason?: string };
+
+  importerReleveBancaire: (opts: {
+    compteTresorerieId: string;
+    texte: string;
+    fichierNom?: string;
+  }) => { ok: true; imported: number } | { ok: false; reason: string };
+  pointerLigneReleve: (
+    ligneId: string,
+    mouvementId: string | null,
+  ) => { ok: true } | { ok: false; reason: string };
+  supprimerLigneReleve: (ligneId: string) => { ok: true } | { ok: false; reason: string };
+
+  addCompteTresorerie: (data: {
+    libelle: string;
+    type: CompteTresorerie["type"];
+    siteId?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateCompteTresorerie: (
+    id: string,
+    data: Partial<Pick<CompteTresorerie, "libelle" | "type" | "siteId" | "actif" | "ordre">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteCompteTresorerie: (id: string) => { ok: true } | { ok: false; reason: string };
+
+  addModePaiement: (data: {
+    libelle: string;
+    necessiteEcheance?: boolean;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateModePaiement: (
+    id: string,
+    data: Partial<Pick<ModePaiementParam, "libelle" | "necessiteEcheance" | "actif" | "ordre">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteModePaiement: (id: string) => { ok: true } | { ok: false; reason: string };
 
   /** Remplace l'état métier (hydratation API). */
   applyBusinessData: (data: AppState) => void;
@@ -1053,6 +1297,7 @@ function journalDepuis(state: {
   tiers?: Tiers[];
   missionsAchat?: MissionAchat[];
   naturesDepenseMission?: NatureDepenseMission[];
+  sortiesAtelier?: SortieAtelier[];
   ecrituresComptables?: EcritureComptable[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
@@ -1066,6 +1311,7 @@ function journalDepuis(state: {
     tiers: state.tiers,
     missionsAchat: state.missionsAchat,
     naturesDepenseMission: state.naturesDepenseMission,
+    sortiesAtelier: state.sortiesAtelier,
     existantes: state.ecrituresComptables,
   });
 }
@@ -1082,6 +1328,7 @@ function avecJournal<T extends Record<string, unknown>>(
     tiers?: Tiers[];
     missionsAchat?: MissionAchat[];
     naturesDepenseMission?: NatureDepenseMission[];
+    sortiesAtelier?: SortieAtelier[];
     ecrituresComptables?: EcritureComptable[];
   },
   patch: T,
@@ -1161,6 +1408,31 @@ function persisterAlertesSuivi(suivi: SuiviAlertesUser) {
 
 function nomFournisseur(state: { fournisseurs: Fournisseur[] }, id: string) {
   return state.fournisseurs.find((f) => f.id === id)?.nom ?? "Fournisseur";
+}
+
+function completerLignesLivraisonAchat(
+  achat: Achat,
+  lignes: LivraisonAchatLigne[],
+  validerEcarts?: boolean,
+  ignoreLivraisonId?: string,
+) {
+  const actor = getActiviteActor();
+  return lignes.map((l) => {
+    const cmd =
+      achat.lignes.find((x) => x.produitId === l.produitId)?.quantite ??
+      l.quantiteCommandee ??
+      l.quantitePrevue;
+    const horsCourante = ignoreLivraisonId
+      ? {
+          ...achat,
+          livraisons: achat.livraisons.filter((liv) => liv.id !== ignoreLivraisonId),
+        }
+      : achat;
+    const dejaLivre = l.produitId
+      ? quantiteLivreeProduit(horsCourante, l.produitId)
+      : 0;
+    return completerLigneLivraison(l, cmd, { validerEcarts, actor, dejaLivre });
+  });
 }
 
 function regenererEntreesAchat(
@@ -1902,36 +2174,48 @@ export const useStore = create<Store>()((set, get) => ({
         );
       },
 
-      addPointDeVente: (pdv) =>
-        set((state) => {
-          const nouveau = { ...pdv, id: uid("pdv") };
-          return {
-            pointsDeVente: [...state.pointsDeVente, nouveau],
-            journalActivites: [
-              entreeActivite("creation", "point_de_vente", {
-                entiteId: nouveau.id,
-                libelle: nouveau.nom,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
-      updatePointDeVente: (id, data) =>
-        set((state) => {
-          const prev = state.pointsDeVente.find((p) => p.id === id);
-          return {
-            pointsDeVente: state.pointsDeVente.map((p) =>
-              p.id === id ? { ...p, ...data } : p,
-            ),
-            journalActivites: [
-              entreeActivite("modification", "point_de_vente", {
-                entiteId: id,
-                libelle: prev?.nom,
-              }),
-              ...state.journalActivites,
-            ],
-          };
-        }),
+      addPointDeVente: (pdv) => {
+        const state = get();
+        const id = uid("pdv");
+        const motif = motifSiteSansTresorerie(
+          { ...pdv, id },
+          state.comptesTresorerie ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const nouveau = { ...pdv, id };
+        set((s) => ({
+          pointsDeVente: [...s.pointsDeVente, nouveau],
+          journalActivites: [
+            entreeActivite("creation", "point_de_vente", {
+              entiteId: nouveau.id,
+              libelle: nouveau.nom,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updatePointDeVente: (id, data) => {
+        const state = get();
+        const prev = state.pointsDeVente.find((p) => p.id === id);
+        if (!prev) return { ok: false, reason: "Point de vente introuvable." };
+        const next = { ...prev, ...data };
+        if (data.rolesSite !== undefined) {
+          const motif = motifSiteSansTresorerie(next, state.comptesTresorerie ?? []);
+          if (motif) return { ok: false, reason: motif };
+        }
+        set((s) => ({
+          pointsDeVente: s.pointsDeVente.map((p) => (p.id === id ? next : p)),
+          journalActivites: [
+            entreeActivite("modification", "point_de_vente", {
+              entiteId: id,
+              libelle: next.nom,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
       deletePointDeVente: (id) => {
         const state = get();
         const pdv = state.pointsDeVente.find((p) => p.id === id);
@@ -1966,10 +2250,15 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
-      addEntree: (entree) =>
+      addEntree: (entree) => {
+        if (entree.origine && entree.origine !== "stock_initial") return;
         set((state) => ({
-          entrees: [{ ...entree, id: uid("ent") }, ...state.entrees],
-        })),
+          entrees: [
+            { ...entree, id: uid("ent"), origine: "stock_initial" },
+            ...state.entrees,
+          ],
+        }));
+      },
       updateEntree: (id, data) => {
         const state = get();
         const prev = state.entrees.find((e) => e.id === id);
@@ -2072,6 +2361,8 @@ export const useStore = create<Store>()((set, get) => ({
         if (data.lignes) {
           const motifRep = motifRepartitionInvalide(data.lignes);
           if (motifRep) return { ok: false, reason: motifRep };
+          const motifOf = motifRepartitionOfInvalide(data.lignes);
+          if (motifOf) return { ok: false, reason: motifOf };
         }
         set((s) => ({
           achats: s.achats.map((a) => (a.id === id ? { ...a, ...data } : a)),
@@ -2096,6 +2387,8 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const motifRep = motifRepartitionInvalide(prev.lignes);
         if (motifRep) return { ok: false, reason: motifRep };
+        const motifOf = motifRepartitionOfInvalide(prev.lignes);
+        if (motifOf) return { ok: false, reason: motifOf };
         const motifNat = motifAchatNatureInterdite(
           get().produits,
           prev.lignes,
@@ -2207,15 +2500,15 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.statut !== "valide") {
           return { ok: false, reason: "Validez la commande avant d'enregistrer une livraison." };
         }
-        for (const l of data.lignes) {
-          const reliquat = reliquatProduit(prev, l.produitId);
-          const q = data.confirmer === false ? 0 : l.quantiteLivree;
-          if (q - reliquat > 1e-9) {
-            return {
-              ok: false,
-              reason: "Quantité livrée supérieure au reliquat commandé.",
-            };
-          }
+        const confirmer = data.confirmer !== false;
+        const lignes = completerLignesLivraisonAchat(
+          prev,
+          data.lignes,
+          data.validerEcarts,
+        );
+        if (confirmer) {
+          const motifEcart = motifEcartLivraisonNonValide(lignes);
+          if (motifEcart) return { ok: false, reason: motifEcart };
         }
         const id = uid("liv");
         const draft = {
@@ -2223,11 +2516,10 @@ export const useStore = create<Store>()((set, get) => ({
           numero: nextNumeroLivraison(state.achats),
           date: data.date,
           statut: "en_attente" as const,
-          lignes: data.lignes,
+          lignes,
           note: data.note,
           datePeremption: data.datePeremption,
         };
-        const confirmer = data.confirmer !== false;
         const liv = {
           ...draft,
           statut: confirmer
@@ -2255,7 +2547,7 @@ export const useStore = create<Store>()((set, get) => ({
         }));
         return { ok: true, id };
       },
-      confirmerLivraisonAchat: (achatId, livraisonId, lignes) => {
+      confirmerLivraisonAchat: (achatId, livraisonId, lignes, opts) => {
         const state = get();
         const prev = state.achats.find((a) => a.id === achatId);
         if (!prev) return { ok: false, reason: "Achat introuvable." };
@@ -2264,19 +2556,14 @@ export const useStore = create<Store>()((set, get) => ({
         if (livPrev.statut === "annulee") {
           return { ok: false, reason: "Cette livraison est annulée." };
         }
-        const livLignes = lignes ?? livPrev.lignes;
-        const horsCette = {
-          ...prev,
-          livraisons: prev.livraisons.filter((l) => l.id !== livraisonId),
-        };
-        for (const l of livLignes) {
-          if (l.quantiteLivree - reliquatProduit(horsCette, l.produitId) > 1e-9) {
-            return {
-              ok: false,
-              reason: "Quantité livrée supérieure au reliquat commandé.",
-            };
-          }
-        }
+        const livLignes = completerLignesLivraisonAchat(
+          prev,
+          lignes ?? livPrev.lignes,
+          opts?.validerEcarts,
+          livraisonId,
+        );
+        const motifEcart = motifEcartLivraisonNonValide(livLignes);
+        if (motifEcart) return { ok: false, reason: motifEcart };
         const liv = {
           ...livPrev,
           lignes: livLignes,
@@ -2359,34 +2646,43 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
       ajouterPaiementAchat: (achatId, data) => {
+        return get().ajouterPaiementsAchat(achatId, [data]);
+      },
+      ajouterPaiementsAchat: (achatId, lignes) => {
         const state = get();
         const prev = state.achats.find((a) => a.id === achatId);
         if (!prev) return { ok: false, reason: "Achat introuvable." };
         if (prev.statut !== "valide") {
           return { ok: false, reason: "Validez la commande avant d'enregistrer un paiement." };
         }
-        if (data.montant <= 0) {
-          return { ok: false, reason: "Montant de paiement invalide." };
-        }
+        const modes = state.modesPaiement ?? [];
+        const comptes = state.comptesTresorerie ?? [];
         const solde = soldeAchat(prev);
-        if (data.montant - solde > 0.5) {
+        let cumul = 0;
+        const creees: LignePaiement[] = [];
+        for (const data of lignes) {
+          const motif = motifSaisieLignePaiement(data, modes, comptes);
+          if (motif) return { ok: false, reason: motif };
+          cumul += data.montant;
+          creees.push(completerLignePaiement(data, uid("pay"), modes));
+        }
+        if (cumul - solde > 0.5) {
           return {
             ok: false,
             reason: `Le paiement dépasse le solde restant (${Math.round(solde)} Ar).`,
           };
         }
-        const paiement = { ...data, id: uid("pay") };
         set((s) => ({
           achats: s.achats.map((a) =>
             a.id === achatId
-              ? { ...a, paiements: [paiement, ...a.paiements] }
+              ? { ...a, paiements: [...creees, ...a.paiements] }
               : a,
           ),
           journalActivites: [
             entreeActivite("creation", "achat", {
               entiteId: achatId,
               libelle: prev.numero,
-              detail: "Paiement fournisseur",
+              detail: creees.length > 1 ? `${creees.length} paiements` : "Paiement fournisseur",
             }),
             ...s.journalActivites,
           ],
@@ -2407,6 +2703,74 @@ export const useStore = create<Store>()((set, get) => ({
               entiteId: achatId,
               libelle: prev.numero,
               detail: "Paiement fournisseur",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      changerStatutChequeAchat: (achatId, paiementId, statut) => {
+        const prev = get().achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const ligne = prev.paiements.find((p) => p.id === paiementId);
+        if (!ligne) return { ok: false, reason: "Paiement introuvable." };
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId
+              ? {
+                  ...a,
+                  paiements: a.paiements.map((p) =>
+                    p.id === paiementId ? { ...p, statutCheque: statut } : p,
+                  ),
+                }
+              : a,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "achat", {
+              entiteId: achatId,
+              libelle: prev.numero,
+              detail: `Chèque ${statut}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      ajouterRemboursementAvoirAchat: (achatId, avoirId, data) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const avoir = prev.avoirs.find((x) => x.id === avoirId);
+        if (!avoir) return { ok: false, reason: "Avoir introuvable." };
+        if (avoir.statut !== "valide") {
+          return { ok: false, reason: "Validez l'avoir avant un remboursement." };
+        }
+        const modes = state.modesPaiement ?? [];
+        const motif = motifSaisieLignePaiement(
+          data,
+          modes,
+          state.comptesTresorerie ?? [],
+        );
+        if (motif) return { ok: false, reason: motif };
+        const ligne = completerLignePaiement(data, uid("pay"), modes);
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId
+              ? {
+                  ...a,
+                  avoirs: a.avoirs.map((av) =>
+                    av.id === avoirId
+                      ? { ...av, paiements: [ligne, ...(av.paiements ?? [])] }
+                      : av,
+                  ),
+                }
+              : a,
+          ),
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: prev.numero,
+              detail: `Remboursement ${avoir.numero}`,
             }),
             ...s.journalActivites,
           ],
@@ -2578,6 +2942,27 @@ export const useStore = create<Store>()((set, get) => ({
           },
         );
         if (motifStock) return { ok: false, reason: motifStock };
+        const ctxRes = {
+          achats: state.achats,
+          ordresFabrication: state.ordresFabrication,
+          transfertsMatiereOf: state.transfertsMatiereOf ?? [],
+        };
+        for (const l of lignes) {
+          const libre = stockLibreDisponible(
+            l.produitId,
+            data.siteSourceId,
+            state.entrees,
+            state.ventes,
+            state.inventaires,
+            ctxRes,
+          );
+          if (libre + 1e-9 < l.quantite) {
+            return {
+              ok: false,
+              reason: `Stock libre insuffisant (disponible : ${libre}). Le reste est réservé à des OF.`,
+            };
+          }
+        }
         const actor = getActiviteActor();
         const nouveau: TransfertStock = {
           id: uid("trf"),
@@ -2749,6 +3134,376 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true };
       },
 
+      majRepartitionsOfAchat: (achatId, ligneId, repartitionsOf) => {
+        const state = get();
+        const prev = state.achats.find((a) => a.id === achatId);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        if (prev.statut === "annule") {
+          return { ok: false, reason: "Cet achat est annulé." };
+        }
+        const ligne = prev.lignes.find((l) => l.id === ligneId);
+        if (!ligne) return { ok: false, reason: "Ligne introuvable." };
+        const nextLigne = { ...ligne, repartitionsOf: repartitionsOf ?? [] };
+        const motifOf = motifRepartitionOfInvalide(
+          prev.lignes.map((l) => (l.id === ligneId ? nextLigne : l)),
+        );
+        if (motifOf) return { ok: false, reason: motifOf };
+        set((s) => ({
+          achats: s.achats.map((a) =>
+            a.id === achatId
+              ? {
+                  ...a,
+                  lignes: a.lignes.map((l) => (l.id === ligneId ? nextLigne : l)),
+                }
+              : a,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      demanderTransfertMatiereOf: (data) => {
+        if (data.ofSourceId === data.ofDestinataireId) {
+          return { ok: false, reason: "Les OF source et destinataire doivent être distincts." };
+        }
+        if (!(data.quantite > 0)) return { ok: false, reason: "Quantité invalide." };
+        const state = get();
+        const source = state.ordresFabrication.find((o) => o.id === data.ofSourceId);
+        const dest = state.ordresFabrication.find((o) => o.id === data.ofDestinataireId);
+        if (!source || !dest) return { ok: false, reason: "OF introuvable." };
+        if (source.statut === "annule" || dest.statut === "annule") {
+          return { ok: false, reason: "Un des OF est annulé." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(source.atelierId)) {
+          return {
+            ok: false,
+            reason: "Vous devez être rattaché à l'atelier de l'OF source pour demander le transfert.",
+          };
+        }
+        const ctxRes = {
+          achats: state.achats,
+          ordresFabrication: state.ordresFabrication,
+          transfertsMatiereOf: state.transfertsMatiereOf ?? [],
+        };
+        const reserve = quantiteReserveeOf(
+          data.produitId,
+          data.pointDeVenteId,
+          data.ofSourceId,
+          ctxRes,
+        );
+        if (reserve + 1e-9 < data.quantite) {
+          return {
+            ok: false,
+            reason: `Quantité réservée insuffisante sur l'OF source (${reserve}).`,
+          };
+        }
+        const actor = getActiviteActor();
+        const nouveau: TransfertMatiereOf = {
+          id: uid("tmof"),
+          numero: nextNumeroTransfertMatiereOf(state.transfertsMatiereOf ?? [], optsNum(state)),
+          date: new Date().toISOString(),
+          produitId: data.produitId,
+          pointDeVenteId: data.pointDeVenteId,
+          ofSourceId: data.ofSourceId,
+          ofDestinataireId: data.ofDestinataireId,
+          quantite: data.quantite,
+          achatId: data.achatId,
+          achatLigneId: data.achatLigneId,
+          statut: "demande",
+          note: data.note,
+        };
+        set((s) => ({
+          transfertsMatiereOf: [nouveau, ...(s.transfertsMatiereOf ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "transfert_matiere_of", {
+              entiteId: nouveau.id,
+              libelle: nouveau.numero,
+              detail: actor.nom,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id: nouveau.id };
+      },
+
+      validerTransfertMatiereOfSource: (id) => {
+        const state = get();
+        const prev = (state.transfertsMatiereOf ?? []).find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut !== "demande") {
+          return { ok: false, reason: "Ce transfert n'est pas en attente de validation source." };
+        }
+        const source = state.ordresFabrication.find((o) => o.id === prev.ofSourceId);
+        if (!source) return { ok: false, reason: "OF source introuvable." };
+        if (!utilisateurCourantPeutAgirSurSite(source.atelierId)) {
+          return {
+            ok: false,
+            reason: "Validation source : rattachement à l'atelier de l'OF source requis.",
+          };
+        }
+        const actor = getActiviteActor();
+        set((s) => ({
+          transfertsMatiereOf: (s.transfertsMatiereOf ?? []).map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  statut: "valide_source" as const,
+                  dateValidationSource: new Date().toISOString(),
+                  validateurSourceId: actor.id,
+                  validateurSourceNom: actor.nom,
+                }
+              : t,
+          ),
+          journalActivites: [
+            entreeActivite("validation", "transfert_matiere_of", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Validation OF source",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      validerTransfertMatiereOfDestinataire: (id) => {
+        const state = get();
+        const prev = (state.transfertsMatiereOf ?? []).find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut !== "valide_source") {
+          return {
+            ok: false,
+            reason: "La validation de l'OF source est requise avant celle du destinataire.",
+          };
+        }
+        const dest = state.ordresFabrication.find((o) => o.id === prev.ofDestinataireId);
+        if (!dest) return { ok: false, reason: "OF destinataire introuvable." };
+        if (!utilisateurCourantPeutAgirSurSite(dest.atelierId)) {
+          return {
+            ok: false,
+            reason: "Validation destinataire : rattachement à l'atelier de l'OF destinataire requis.",
+          };
+        }
+        const ctxRes = {
+          achats: state.achats,
+          ordresFabrication: state.ordresFabrication,
+          transfertsMatiereOf: state.transfertsMatiereOf ?? [],
+        };
+        const reserve = quantiteReserveeOf(
+          prev.produitId,
+          prev.pointDeVenteId,
+          prev.ofSourceId,
+          ctxRes,
+        );
+        if (reserve + 1e-9 < prev.quantite) {
+          return {
+            ok: false,
+            reason: `La quantité réservée sur l'OF source a changé (${reserve}).`,
+          };
+        }
+        const actor = getActiviteActor();
+        set((s) => ({
+          transfertsMatiereOf: (s.transfertsMatiereOf ?? []).map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  statut: "effectue" as const,
+                  dateValidationDestinataire: new Date().toISOString(),
+                  validateurDestId: actor.id,
+                  validateurDestNom: actor.nom,
+                }
+              : t,
+          ),
+          journalActivites: [
+            entreeActivite("validation", "transfert_matiere_of", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Validation OF destinataire — transfert effectif",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      annulerTransfertMatiereOf: (id) => {
+        const state = get();
+        const prev = (state.transfertsMatiereOf ?? []).find((t) => t.id === id);
+        if (!prev) return { ok: false, reason: "Transfert introuvable." };
+        if (prev.statut === "effectue" || prev.statut === "annule") {
+          return { ok: false, reason: "Ce transfert ne peut plus être annulé." };
+        }
+        set((s) => ({
+          transfertsMatiereOf: (s.transfertsMatiereOf ?? []).map((t) =>
+            t.id === id ? { ...t, statut: "annule" as const } : t,
+          ),
+          journalActivites: [
+            entreeActivite("annulation", "transfert_matiere_of", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      creerBesoinAchat: (data) => {
+        const motif = motifBesoinAchatInvalide(data);
+        if (motif) return { ok: false, reason: motif };
+        const state = get();
+        const produit = state.produits.find((p) => p.id === data.produitId);
+        if (!produit) return { ok: false, reason: "Article introuvable." };
+        if (!produitEstAchetable(produit, state.categoriesProduits)) {
+          return {
+            ok: false,
+            reason: "Cet article ne s'achète pas (semi-fini ou fini).",
+          };
+        }
+        const site = state.pointsDeVente.find((s) => s.id === data.pointDeVenteId);
+        if (!site) return { ok: false, reason: "Site introuvable." };
+        const nouveau: BesoinAchat = {
+          id: uid("ba"),
+          numero: nextNumeroBesoinAchat(state.besoinsAchat ?? [], optsNum(state)),
+          date: new Date().toISOString(),
+          produitId: data.produitId,
+          quantiteNecessaire: data.quantiteNecessaire,
+          pointDeVenteId: data.pointDeVenteId,
+          repartitionsOf: (data.repartitionsOf ?? []).map((r) => ({
+            ...r,
+            id: r.id || uid("bao"),
+          })),
+          note: data.note?.trim() || undefined,
+        };
+        set((s) => ({
+          besoinsAchat: [nouveau, ...(s.besoinsAchat ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "besoin_achat", {
+              entiteId: nouveau.id,
+              libelle: nouveau.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, id: nouveau.id };
+      },
+
+      modifierBesoinAchat: (id, data) => {
+        const state = get();
+        const prev = (state.besoinsAchat ?? []).find((b) => b.id === id);
+        if (!prev) return { ok: false, reason: "Besoin introuvable." };
+        if (prev.annule) return { ok: false, reason: "Ce besoin est annulé." };
+        const next: BesoinAchat = { ...prev, ...data };
+        const motif = motifBesoinAchatInvalide(next);
+        if (motif) return { ok: false, reason: motif };
+        set((s) => ({
+          besoinsAchat: (s.besoinsAchat ?? []).map((b) => (b.id === id ? next : b)),
+          journalActivites: [
+            entreeActivite("modification", "besoin_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      annulerBesoinAchat: (id) => {
+        const state = get();
+        const prev = (state.besoinsAchat ?? []).find((b) => b.id === id);
+        if (!prev) return { ok: false, reason: "Besoin introuvable." };
+        if (prev.annule) return { ok: false, reason: "Ce besoin est déjà annulé." };
+        set((s) => ({
+          besoinsAchat: (s.besoinsAchat ?? []).map((b) =>
+            b.id === id ? { ...b, annule: true } : b,
+          ),
+          journalActivites: [
+            entreeActivite("annulation", "besoin_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      creerAchatDepuisBesoin: (data) => {
+        if (!(data.quantite > 0)) return { ok: false, reason: "Quantité invalide." };
+        if (data.prixAchatUnitaire < 0) return { ok: false, reason: "Prix unitaire invalide." };
+        const state = get();
+        const besoin = (state.besoinsAchat ?? []).find((b) => b.id === data.besoinId);
+        if (!besoin) return { ok: false, reason: "Besoin introuvable." };
+        if (besoin.annule) return { ok: false, reason: "Ce besoin est annulé." };
+        const produit = state.produits.find((p) => p.id === besoin.produitId);
+        if (!produit) return { ok: false, reason: "Article introuvable." };
+        const fournisseur = state.fournisseurs.find((f) => f.id === data.fournisseurId);
+        if (!fournisseur) return { ok: false, reason: "Fournisseur introuvable." };
+        const siteId = data.pointDeVenteId || besoin.pointDeVenteId;
+        const site = state.pointsDeVente.find((s) => s.id === siteId);
+        if (!site) return { ok: false, reason: "Site introuvable." };
+        const motifNat = motifAchatNatureInterdite(
+          state.produits,
+          [{ produitId: besoin.produitId }],
+          state.categoriesProduits,
+        );
+        if (motifNat) return { ok: false, reason: motifNat };
+        const repsOf = prorataRepartitionsOf(
+          besoin.repartitionsOf,
+          besoin.quantiteNecessaire,
+          data.quantite,
+        ).map((r) => ({ ...r, id: uid("rof") }));
+        const ofsUniques = [...new Set(repsOf.map((r) => r.ofId))];
+        const achatId = uid("ach");
+        const numero = nextNumeroAchat(state.achats, optsNum(state));
+        const actor = getActiviteActor();
+        const achat: Achat = {
+          id: achatId,
+          numero,
+          fournisseurId: data.fournisseurId,
+          pointDeVenteId: siteId,
+          date: new Date().toISOString(),
+          statut: "brouillon",
+          tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
+          lignes: [
+            {
+              id: uid("al"),
+              produitId: besoin.produitId,
+              typeAchat: produit.typeAchat ?? "matieres_premieres",
+              quantite: data.quantite,
+              prixAchatUnitaire: data.prixAchatUnitaire,
+              repartitions: [{ pointDeVenteId: siteId, quantite: data.quantite }],
+              repartitionsOf: repsOf,
+              besoinAchatId: besoin.id,
+            },
+          ],
+          livraisons: [],
+          paiements: [],
+          avoirs: [],
+          note:
+            data.note?.trim() ||
+            `Couverture du besoin ${besoin.numero}`,
+          vendeurId: actor.id,
+          vendeurNom: actor.nom,
+          besoinAchatId: besoin.id,
+          modePaiement: data.modePaiement,
+          ofId: ofsUniques.length === 1 ? ofsUniques[0] : undefined,
+          ofComposantId: ofsUniques.length === 1 ? besoin.produitId : undefined,
+        };
+        set((s) => ({
+          achats: [achat, ...s.achats],
+          journalActivites: [
+            entreeActivite("creation", "achat", {
+              entiteId: achatId,
+              libelle: numero,
+              detail: `Besoin ${besoin.numero}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true, achatId };
+      },
+
       creerOrdreFabrication: (data) => {
         const state = get();
         if (!utilisateurCourantPeutAgirSurSite(data.atelierId)) {
@@ -2769,7 +3524,34 @@ export const useStore = create<Store>()((set, get) => ({
           if (!cmd) return { ok: false, reason: "Commande client introuvable." };
         }
         const source = data.nomenclatureSource ?? "automatique";
-        const copie = copierNomenclatureVersOf(produit!, source);
+        const cmd = data.commandeId
+          ? state.commandes.find((c) => c.id === data.commandeId)
+          : undefined;
+        const dimCmd = data.commandeId
+          ? dimensionDepuisCommande(cmd, data.produitId)
+          : null;
+        const dimensionLargeur =
+          Number(data.dimensionLargeur) > 0
+            ? Number(data.dimensionLargeur)
+            : dimCmd?.largeur;
+        const dimensionHauteur =
+          Number(data.dimensionHauteur) > 0
+            ? Number(data.dimensionHauteur)
+            : dimCmd?.hauteur;
+        const nomC = (cid: string) =>
+          state.produits.find((p) => p.id === cid)?.code ?? cid;
+        const copie = copierNomenclatureVersOf(
+          produit!,
+          source,
+          { largeur: dimensionLargeur, hauteur: dimensionHauteur },
+          nomC,
+        );
+        const motifDim = motifDimensionNomenclatureManquante(
+          copie.lignes,
+          dimensionLargeur,
+          dimensionHauteur,
+        );
+        if (motifDim) return { ok: false, reason: motifDim };
         const nouveau: OrdreFabrication = {
           id: uid("of"),
           numero: nextNumeroOf(state.ordresFabrication),
@@ -2780,6 +3562,8 @@ export const useStore = create<Store>()((set, get) => ({
           nomenclatureNom: copie.nom,
           nomenclatureLignes: copie.lignes,
           commandeId: data.commandeId,
+          dimensionLargeur,
+          dimensionHauteur,
           statut: "brouillon",
           dateCreation: new Date().toISOString(),
           dateCloturePrevue: data.dateCloturePrevue,
@@ -2835,15 +3619,49 @@ export const useStore = create<Store>()((set, get) => ({
         let nomenclatureNom = data.nomenclatureNom ?? prev.nomenclatureNom;
         let nomenclatureSource = data.nomenclatureSource ?? prev.nomenclatureSource;
         const produitId = data.produitId ?? prev.produitId;
+        const commandeId =
+          data.commandeId !== undefined ? data.commandeId : prev.commandeId;
+        const cmd = commandeId
+          ? state.commandes.find((c) => c.id === commandeId)
+          : undefined;
+        const dimCmd = commandeId
+          ? dimensionDepuisCommande(cmd, produitId)
+          : null;
+        const dimensionLargeur =
+          data.dimensionLargeur !== undefined
+            ? data.dimensionLargeur
+            : dimCmd && data.commandeId
+              ? dimCmd.largeur
+              : prev.dimensionLargeur;
+        const dimensionHauteur =
+          data.dimensionHauteur !== undefined
+            ? data.dimensionHauteur
+            : dimCmd && data.commandeId
+              ? dimCmd.hauteur
+              : prev.dimensionHauteur;
+        const nomC = (cid: string) =>
+          state.produits.find((p) => p.id === cid)?.code ?? cid;
+        const dims = { largeur: dimensionLargeur, hauteur: dimensionHauteur };
         if (data.produitId || data.nomenclatureSource) {
           const produit = state.produits.find((p) => p.id === produitId);
           const motifProd = motifProduitOfInvalide(produit);
           if (motifProd) return { ok: false, reason: motifProd };
           if (!data.nomenclatureLignes) {
-            const copie = copierNomenclatureVersOf(produit!, nomenclatureSource);
+            const copie = copierNomenclatureVersOf(produit!, nomenclatureSource, dims, nomC);
             nomenclatureLignes = copie.lignes;
             nomenclatureNom = copie.nom;
           }
+        } else if (
+          (data.dimensionLargeur !== undefined ||
+            data.dimensionHauteur !== undefined ||
+            data.commandeId !== undefined) &&
+          !data.nomenclatureLignes
+        ) {
+          nomenclatureLignes = resoudreLignesNomenclatureOf(
+            nomenclatureLignes,
+            dims,
+            nomC,
+          );
         }
         const next: OrdreFabrication = {
           ...prev,
@@ -2851,6 +3669,9 @@ export const useStore = create<Store>()((set, get) => ({
           nomenclatureLignes,
           nomenclatureNom,
           nomenclatureSource,
+          commandeId,
+          dimensionLargeur,
+          dimensionHauteur,
         };
         set((s) => ({
           ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
@@ -2869,7 +3690,7 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Vous devez être rattaché à l'atelier." };
         }
         const bats = state.bonsATirer ?? [];
-        const motifBat = motifBatOfManquant(prev, bats);
+        const motifBat = motifBatOfManquant(prev, bats, state.commandes);
         if (motifBat && !opts?.derogationBat) {
           return { ok: false, reason: motifBat };
         }
@@ -2879,6 +3700,8 @@ export const useStore = create<Store>()((set, get) => ({
             reason: "Vous n'êtes pas habilité à déroger à l'obligation de BAT validé.",
           };
         }
+        const motifDim = motifLancementOfDimension(prev);
+        if (motifDim) return { ok: false, reason: motifDim };
         const actor = getActiviteActor();
         const derogation = Boolean(opts?.derogationBat && motifBat);
         const next: OrdreFabrication = {
@@ -2928,17 +3751,24 @@ export const useStore = create<Store>()((set, get) => ({
         if (data.quantite <= 0) return { ok: false, reason: "Quantité invalide." };
         const composant = state.produits.find((p) => p.id === data.composantId);
         if (!composant) return { ok: false, reason: "Composant introuvable." };
-        const dispo = stockDisponibleComposant({
-          produitId: data.composantId,
-          siteId: data.siteSourceId,
-          entrees: state.entrees,
-          ventes: state.ventes,
-          inventaires: state.inventaires,
-        });
+        const ctxRes = {
+          achats: state.achats,
+          ordresFabrication: state.ordresFabrication,
+          transfertsMatiereOf: state.transfertsMatiereOf ?? [],
+        };
+        const dispo = stockDisponiblePourOf(
+          data.composantId,
+          data.siteSourceId,
+          ofId,
+          state.entrees,
+          state.ventes,
+          state.inventaires,
+          ctxRes,
+        );
         if (dispo + 1e-9 < data.quantite) {
           return {
             ok: false,
-            reason: `Stock insuffisant sur le site source (disponible : ${dispo}). Créez une demande d'achat pour la quantité manquante.`,
+            reason: `Stock insuffisant pour cet OF (disponible : ${dispo}, hors réservations des autres OF). Créez une demande d'achat pour la quantité manquante.`,
           };
         }
         const etat = cumpCourantSite({
@@ -3028,6 +3858,210 @@ export const useStore = create<Store>()((set, get) => ({
           entrees: regenererEntreesOf(s.entrees, next, s.produits),
         }));
         return { ok: true };
+      },
+
+      ajouterSortieAtelier: (data) => {
+        const state = get();
+        if (data.quantite <= 0) return { ok: false, reason: "Quantité invalide." };
+        const atelier = state.pointsDeVente.find((s) => s.id === data.atelierId);
+        if (!atelier || !siteEstAtelier(atelier)) {
+          return { ok: false, reason: "Choisissez un atelier destinataire." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(data.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à cet atelier." };
+        }
+        const siteSourceId = data.siteSourceId || data.atelierId;
+        if (!utilisateurCourantPeutAgirSurSite(siteSourceId)) {
+          return { ok: false, reason: "Vous n'êtes pas rattaché au site source." };
+        }
+        const produit = state.produits.find((p) => p.id === data.produitId);
+        if (!produit) return { ok: false, reason: "Article introuvable." };
+        const dispo = stockDisponible(
+          data.produitId,
+          siteSourceId,
+          state.entrees,
+          state.ventes,
+          state.inventaires,
+        );
+        if (dispo + 1e-9 < data.quantite) {
+          return {
+            ok: false,
+            reason: `Stock insuffisant (disponible : ${dispo}).`,
+          };
+        }
+        const etat = cumpCourantSite({
+          produitId: data.produitId,
+          siteId: siteSourceId,
+          entrees: state.entrees,
+          ventes: state.ventes,
+          inventaires: state.inventaires,
+          produit,
+        });
+        const motifCatalogue = libelleMotifSortieAtelier(
+          state.motifsSortieAtelier,
+          data.motifId,
+          "",
+        );
+        const motif =
+          [motifCatalogue !== "—" ? motifCatalogue : "", data.motifLibre?.trim()]
+            .filter(Boolean)
+            .join(" — ") || "Sortie atelier";
+        const id = uid("sat");
+        const sortie: SortieAtelier = {
+          id,
+          date: data.date,
+          atelierId: data.atelierId,
+          siteSourceId,
+          produitId: data.produitId,
+          quantite: data.quantite,
+          motifId: data.motifId,
+          motif,
+          cumpSortie: etat.cump,
+          valeur: data.quantite * etat.cump,
+        };
+        const sorties = [sortie, ...(state.sortiesAtelier ?? [])];
+        const entrees = regenererEntreesSortiesAtelier(
+          state.entrees,
+          sorties,
+          state.produits,
+        );
+        if (
+          stockDevientNegatif(
+            entrees,
+            state.ventes,
+            state.inventaires,
+            siteSourceId,
+            [data.produitId],
+          )
+        ) {
+          return { ok: false, reason: "Stock insuffisant sur le site source." };
+        }
+        set((s) =>
+          avecJournal(s, {
+            sortiesAtelier: sorties,
+            entrees,
+            journalActivites: [
+              entreeActivite("creation", "sortie_atelier", {
+                entiteId: id,
+                libelle: `${produit.libelleCourt || produit.code} → ${atelier.nom}`,
+                detail: motif,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true, id };
+      },
+      supprimerSortieAtelier: (id) => {
+        const state = get();
+        const prev = (state.sortiesAtelier ?? []).find((s) => s.id === id);
+        if (!prev) return { ok: false, reason: "Sortie introuvable." };
+        const sorties = (state.sortiesAtelier ?? []).filter((s) => s.id !== id);
+        const entrees = regenererEntreesSortiesAtelier(
+          state.entrees,
+          sorties,
+          state.produits,
+        );
+        set((s) =>
+          avecJournal(s, {
+            sortiesAtelier: sorties,
+            entrees,
+            journalActivites: [
+              entreeActivite("suppression", "sortie_atelier", {
+                entiteId: id,
+                libelle: prev.motif,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true };
+      },
+
+      addMotifSortieAtelier: (data) => {
+        const state = get();
+        const motif = motifSortieAtelierInvalide(
+          data.libelle,
+          state.motifsSortieAtelier ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("msa");
+        const ordre =
+          (state.motifsSortieAtelier ?? []).reduce(
+            (m, n) => Math.max(m, n.ordre),
+            0,
+          ) + 1;
+        const libelle = data.libelle.trim();
+        set((s) => ({
+          motifsSortieAtelier: [
+            ...(s.motifsSortieAtelier ?? []),
+            { id, libelle, ordre, actif: true },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "motif_sortie_atelier", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateMotifSortieAtelier: (id, data) => {
+        const state = get();
+        const prev = (state.motifsSortieAtelier ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false as const, reason: "Motif introuvable." };
+        if (data.libelle != null) {
+          const motif = motifSortieAtelierInvalide(
+            data.libelle,
+            state.motifsSortieAtelier ?? [],
+            id,
+          );
+          if (motif) return { ok: false as const, reason: motif };
+        }
+        set((s) => ({
+          motifsSortieAtelier: (s.motifsSortieAtelier ?? []).map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  ...data,
+                  libelle: data.libelle != null ? data.libelle.trim() : m.libelle,
+                }
+              : m,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "motif_sortie_atelier", {
+              entiteId: id,
+              libelle: data.libelle?.trim() || prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteMotifSortieAtelier: (id) => {
+        const state = get();
+        const prev = (state.motifsSortieAtelier ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false as const, reason: "Motif introuvable." };
+        if ((state.sortiesAtelier ?? []).some((s) => s.motifId === id)) {
+          return {
+            ok: false as const,
+            reason: "Ce motif est déjà utilisé : suppression impossible.",
+          };
+        }
+        set((s) => ({
+          motifsSortieAtelier: (s.motifsSortieAtelier ?? []).filter(
+            (m) => m.id !== id,
+          ),
+          journalActivites: [
+            entreeActivite("suppression", "motif_sortie_atelier", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
       },
 
       ajouterFraisOf: (ofId, data) => {
@@ -3385,38 +4419,50 @@ export const useStore = create<Store>()((set, get) => ({
 
       creerBonATirer: (data) => {
         if (!actorPeutGererBat()) {
-          return { ok: false, reason: "La création d'un BAT est réservée au rôle commercial." };
+          return { ok: false, reason: "La création d'un BAT est réservée aux utilisateurs ayant accès à la commande." };
         }
         const state = get();
         const cmd = state.commandes.find((c) => c.id === data.commandeId);
         if (!cmd) return { ok: false, reason: "Commande client introuvable." };
+        if (cmd.statut === "annulee") {
+          return { ok: false, reason: "Impossible de créer un BAT sur une commande annulée." };
+        }
         const bats = state.bonsATirer ?? [];
-        const courant = batCourant(bats, data.commandeId);
-        if (courant?.statut === "en_attente" && !batAFichier(courant) && data.fichierDataUrl) {
-          const res = get().completerFichierBat(courant.id, {
+        const ligneIds = (data.ligneIds ?? []).filter(Boolean);
+        const courantSansFichier = bats
+          .filter((b) => b.commandeId === data.commandeId && b.statut === "en_attente" && !batAFichier(b))
+          .sort((a, b) => b.version - a.version)[0];
+        if (courantSansFichier && data.fichierDataUrl) {
+          const res = get().completerFichierBat(courantSansFichier.id, {
             nom: data.fichierNom ?? "bat",
             mime: data.fichierMime ?? "application/octet-stream",
             dataUrl: data.fichierDataUrl,
           });
           if (!res.ok) return { ok: false, reason: res.reason ?? "Impossible de joindre le fichier." };
-          return { ok: true, id: courant.id };
+          return { ok: true, id: courantSansFichier.id };
         }
-        const motif = motifCreationBatImpossible(bats, data.commandeId);
+        const motif = motifCreationBatImpossible(bats, cmd, ligneIds);
         if (motif) return { ok: false, reason: motif };
         if (!data.fichierDataUrl) {
           return { ok: false, reason: "Joignez le fichier du BAT (image ou PDF)." };
         }
         const id = uid("bat");
+        const cycleId = uid("btc");
         const nouveau: BonATirer = {
           id,
+          cycleId,
           commandeId: data.commandeId,
-          version: prochaineVersionBat(bats, data.commandeId),
+          ligneIds: ligneIds.length ? ligneIds : undefined,
+          version: 1,
           fichierNom: data.fichierNom,
           fichierMime: data.fichierMime,
           fichierDataUrl: data.fichierDataUrl,
           statut: "en_attente",
           dateEnvoi: new Date().toISOString(),
           commentaire: data.commentaire?.trim() || undefined,
+          origine: data.origine ?? "scratch",
+          sourceBatId: data.sourceBatId,
+          gabarit: data.gabarit,
         };
         set((s) => ({
           bonsATirer: [nouveau, ...(s.bonsATirer ?? [])],
@@ -3433,7 +4479,7 @@ export const useStore = create<Store>()((set, get) => ({
 
       completerFichierBat: (id, fichier) => {
         if (!actorPeutGererBat()) {
-          return { ok: false, reason: "Seul le rôle commercial peut joindre un fichier BAT." };
+          return { ok: false, reason: "Seul un utilisateur habilité peut joindre un fichier BAT." };
         }
         const state = get();
         const prev = (state.bonsATirer ?? []).find((b) => b.id === id);
@@ -3470,9 +4516,6 @@ export const useStore = create<Store>()((set, get) => ({
       },
 
       enregistrerRetourBat: (id, data) => {
-        if (!actorPeutGererBat()) {
-          return { ok: false, reason: "Seul le rôle commercial peut enregistrer le retour BAT." };
-        }
         const state = get();
         const prev = (state.bonsATirer ?? []).find((b) => b.id === id);
         if (!prev) return { ok: false, reason: "BAT introuvable." };
@@ -3483,12 +4526,12 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Joignez le fichier avant d'enregistrer le retour client." };
         }
         const cmd = state.commandes.find((c) => c.id === prev.commandeId);
+        const actor = getActiviteActor();
         if (data.decision === "valide") {
-          const nom = data.validateurNom?.trim();
-          if (!nom) {
+          if (!actorPeutValiderBat(useAuthStore.getState().currentUser(), state.parametres)) {
             return {
               ok: false,
-              reason: "Indiquez le contact côté client qui a validé le BAT.",
+              reason: "La validation du BAT est réservée au rôle habilité (Paramètres BAT).",
             };
           }
           const now = new Date().toISOString();
@@ -3499,7 +4542,9 @@ export const useStore = create<Store>()((set, get) => ({
                     ...b,
                     statut: "valide" as const,
                     dateValidation: now,
-                    validateurNom: nom,
+                    validateurUserId: actor.id,
+                    validateurUserNom: actor.nom,
+                    validateurNom: actor.nom,
                     commentaire: data.commentaire?.trim() || b.commentaire,
                   }
                 : b,
@@ -3508,23 +4553,37 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite("validation", "bon_a_tirer", {
                 entiteId: id,
                 libelle: `${cmd?.numero ?? ""} V${prev.version}`,
-                detail: `Validé par ${nom}`,
+                detail: `Validé par ${actor.nom ?? "utilisateur interne"}`,
               }),
               ...s.journalActivites,
             ],
           }));
           return { ok: true };
         }
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "Vous n'êtes pas habilité à enregistrer des modifications BAT." };
+        }
+        if (!data.motifRefus) {
+          return {
+            ok: false,
+            reason: "Indiquez le motif des modifications (Couleur, Texte, Dimension ou Autre).",
+          };
+        }
         const now = new Date().toISOString();
+        const cycleId = cycleIdBat(prev);
         const suivant: BonATirer = {
           id: uid("bat"),
+          cycleId,
           commandeId: prev.commandeId,
-          version: prev.version + 1,
+          ligneIds: prev.ligneIds,
+          version: prochaineVersionCycle(state.bonsATirer ?? [], cycleId),
           fichierNom: data.fichierSuivant?.nom,
           fichierMime: data.fichierSuivant?.mime,
           fichierDataUrl: data.fichierSuivant?.dataUrl,
           statut: "en_attente",
           dateEnvoi: now,
+          origine: prev.origine,
+          sourceBatId: prev.sourceBatId,
         };
         set((s) => ({
           bonsATirer: [
@@ -3535,6 +4594,7 @@ export const useStore = create<Store>()((set, get) => ({
                     ...b,
                     statut: "modifications_demandees" as const,
                     commentaire: data.commentaire?.trim() || b.commentaire,
+                    motifRefus: data.motifRefus,
                   }
                 : b,
             ),
@@ -3543,7 +4603,104 @@ export const useStore = create<Store>()((set, get) => ({
             entreeActivite("modification", "bon_a_tirer", {
               entiteId: id,
               libelle: `${cmd?.numero ?? ""} V${prev.version}`,
-              detail: `Modifications demandées → V${suivant.version}`,
+              detail: `Modifications demandées (${data.motifRefus}) → V${suivant.version}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
+      dupliquerBatValide: (data) => {
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "La duplication d'un BAT est réservée aux utilisateurs ayant accès à la commande." };
+        }
+        const state = get();
+        const source = (state.bonsATirer ?? []).find((b) => b.id === data.sourceId);
+        if (!source || source.statut !== "valide" || !batAFichier(source)) {
+          return { ok: false, reason: "Choisissez un BAT validé avec fichier." };
+        }
+        const cmd = state.commandes.find((c) => c.id === data.commandeId);
+        if (!cmd) return { ok: false, reason: "Commande cible introuvable." };
+        const sourceCmd = state.commandes.find((c) => c.id === source.commandeId);
+        if (sourceCmd && sourceCmd.clientId !== cmd.clientId) {
+          return { ok: false, reason: "La duplication fidèle est réservée au même client. Utilisez un gabarit pour un autre client." };
+        }
+        const idsCibles =
+          data.ligneIds && data.ligneIds.length > 0
+            ? data.ligneIds.filter((id) => cmd.lignes.some((l) => l.id === id))
+            : sourceCmd
+              ? cmd.lignes
+                  .filter(
+                    (l) =>
+                      l.produitId &&
+                      produitIdsBat(source, sourceCmd).includes(l.produitId),
+                  )
+                  .map((l) => l.id)
+              : [];
+        const creer = get().creerBonATirer({
+          commandeId: data.commandeId,
+          ligneIds: idsCibles,
+          fichierNom: source.fichierNom,
+          fichierMime: source.fichierMime,
+          fichierDataUrl: source.fichierDataUrl,
+          commentaire: source.commentaire,
+          origine: "duplication",
+          sourceBatId: source.id,
+        });
+        if (creer.ok !== true) {
+          return { ok: false, reason: ("reason" in creer ? creer.reason : undefined) ?? "Duplication impossible." };
+        }
+        const nouveauId = creer.id;
+        const val = get().enregistrerRetourBat(nouveauId, {
+          decision: "valide",
+          commentaire: "Duplication d'un BAT déjà validé (même client / même produit).",
+        });
+        if (!val.ok) {
+          return { ok: false, reason: val.reason ?? "Validation impossible." };
+        }
+        return { ok: true, id: nouveauId };
+      },
+
+      creerBatDepuisGabarit: (data) => {
+        const state = get();
+        const gabarit = (state.bonsATirer ?? []).find((b) => b.id === data.gabaritId);
+        if (!gabarit?.gabarit || gabarit.statut !== "valide" || !batAFichier(gabarit)) {
+          return { ok: false, reason: "Choisissez un BAT marqué comme modèle de référence, validé, avec fichier." };
+        }
+        return get().creerBonATirer({
+          commandeId: data.commandeId,
+          ligneIds: data.ligneIds,
+          fichierNom: gabarit.fichierNom,
+          fichierMime: gabarit.fichierMime,
+          fichierDataUrl: gabarit.fichierDataUrl,
+          origine: "gabarit",
+          sourceBatId: gabarit.id,
+        });
+      },
+
+      marquerGabaritBat: (id, gabarit) => {
+        if (!actorPeutGererBat()) {
+          return { ok: false, reason: "Marquage gabarit réservé aux utilisateurs ayant accès à la commande." };
+        }
+        const state = get();
+        const prev = (state.bonsATirer ?? []).find((b) => b.id === id);
+        if (!prev) return { ok: false, reason: "BAT introuvable." };
+        const courant = batCourantCycle(state.bonsATirer ?? [], cycleIdBat(prev));
+        if (!courant || courant.statut !== "valide") {
+          return { ok: false, reason: "Seul un BAT validé peut être marqué comme modèle de référence." };
+        }
+        const cmd = state.commandes.find((c) => c.id === prev.commandeId);
+        const cycle = cycleIdBat(prev);
+        set((s) => ({
+          bonsATirer: (s.bonsATirer ?? []).map((b) =>
+            cycleIdBat(b) === cycle ? { ...b, gabarit } : b,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "bon_a_tirer", {
+              entiteId: courant.id,
+              libelle: `${cmd?.numero ?? ""} V${courant.version}`,
+              detail: gabarit ? "Marqué gabarit" : "Gabarit retiré",
             }),
             ...s.journalActivites,
           ],
@@ -4161,6 +5318,7 @@ export const useStore = create<Store>()((set, get) => ({
           date: data.date,
           modePaiement: data.modePaiement,
           compteSource: data.compteSource,
+          compteTresorerieId: data.compteTresorerieId,
           reference: data.reference,
           responsableUserId: actor.id,
           responsableNom: actor.nom,
@@ -4214,10 +5372,14 @@ export const useStore = create<Store>()((set, get) => ({
           id: uid("dpl"),
           produitId: l.produitId,
           quantite: l.quantite,
+          dateLivraisonSouhaitee: l.dateLivraisonSouhaitee || data.dateLivraisonSouhaitee,
+          pointDeVenteId: l.pointDeVenteId || data.pointDeVenteId,
+          specifications: l.specifications?.trim() || undefined,
         }));
+        const fournisseurIds = [...new Set(data.fournisseurIds)];
         const offres: DemandePrixOffre[] = [];
         for (const ligne of lignes) {
-          for (const fournisseurId of data.fournisseurIds) {
+          for (const fournisseurId of fournisseurIds) {
             offres.push({
               id: uid("dpo"),
               ligneId: ligne.id,
@@ -4232,10 +5394,15 @@ export const useStore = create<Store>()((set, get) => ({
           date: data.date,
           statut: "brouillon",
           lignes,
-          fournisseurIds: [...new Set(data.fournisseurIds)],
+          fournisseurIds,
           offres,
+          consultations: synchroniserConsultations(fournisseurIds, []),
           note: data.note,
           validiteJours: normaliserValiditeJours(data.validiteJours),
+          pointDeVenteId: data.pointDeVenteId,
+          dateLivraisonSouhaitee: data.dateLivraisonSouhaitee,
+          origine: data.origine ?? "libre",
+          alerteId: data.alerteId,
         };
         set((s) => ({
           demandesPrix: [nouveau, ...(s.demandesPrix ?? [])],
@@ -4243,6 +5410,7 @@ export const useStore = create<Store>()((set, get) => ({
             entreeActivite("creation", "demande_prix", {
               entiteId: nouveau.id,
               libelle: nouveau.numero,
+              detail: data.origine === "alerte_stock" ? "Depuis une alerte stock" : undefined,
             }),
             ...s.journalActivites,
           ],
@@ -4257,12 +5425,16 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.statut === "annulee") {
           return { ok: false, reason: "Cette demande de prix est annulée." };
         }
-        const patchRetenus = data.fournisseurIdsRetenus !== undefined;
+        const patchRetenus =
+          data.fournisseurIdsRetenus !== undefined || data.retenuesParLigne !== undefined;
         const patchMetier =
           data.lignes !== undefined ||
           data.fournisseurIds !== undefined ||
           data.offres !== undefined ||
-          data.date !== undefined;
+          data.date !== undefined ||
+          data.consultations !== undefined ||
+          data.pointDeVenteId !== undefined ||
+          data.dateLivraisonSouhaitee !== undefined;
         if (dpEstVerrouillee(prev) && patchMetier) {
           return {
             ok: false,
@@ -4297,16 +5469,24 @@ export const useStore = create<Store>()((set, get) => ({
           offres = nextOffres;
         }
         const consultes = new Set(fournisseurIds);
-        const retenus = patchRetenus
+        const retenus = patchRetenus && data.fournisseurIdsRetenus !== undefined
           ? [...new Set(data.fournisseurIdsRetenus ?? [])].filter((fid) => consultes.has(fid))
           : prev.fournisseurIdsRetenus;
+        const retenuesParLigne = (data.retenuesParLigne ?? prev.retenuesParLigne ?? [])
+          .filter((r) => consultes.has(r.fournisseurId) && lignes.some((l) => l.id === r.ligneId));
+        const consultations = synchroniserConsultations(
+          fournisseurIds,
+          data.consultations ?? prev.consultations,
+        );
         const next: DemandePrix = {
           ...prev,
           ...data,
           lignes,
           fournisseurIds,
           offres,
+          consultations,
           fournisseurIdsRetenus: retenus,
+          retenuesParLigne,
           validiteJours:
             data.validiteJours !== undefined
               ? normaliserValiditeJours(data.validiteJours)
@@ -4337,10 +5517,76 @@ export const useStore = create<Store>()((set, get) => ({
                 ...patch,
               },
             ];
+        const aRepondu = offres.some(
+          (o) => o.fournisseurId === fournisseurId && o.prixUnitaire > 0,
+        );
+        const consultations = synchroniserConsultations(
+          prev.fournisseurIds,
+          prev.consultations,
+        ).map((c) => {
+          if (c.fournisseurId !== fournisseurId) return c;
+          if (aRepondu && c.statut !== "sans_reponse") {
+            return {
+              ...c,
+              statut: "repondue" as const,
+              dateReponse: c.dateReponse ?? new Date().toISOString(),
+            };
+          }
+          return c;
+        });
+        const passeEnCours =
+          prev.statut === "brouillon" && aRepondu ? "en_cours" : prev.statut;
         set((s) => ({
           demandesPrix: (s.demandesPrix ?? []).map((d) =>
-            d.id === id ? { ...d, offres } : d,
+            d.id === id ? { ...d, offres, consultations, statut: passeEnCours } : d,
           ),
+        }));
+        return { ok: true };
+      },
+
+      majConsultationDemandePrix: (id, fournisseurId, statut) => {
+        const prev = (get().demandesPrix ?? []).find((d) => d.id === id);
+        if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
+        if (dpEstVerrouillee(prev)) {
+          return { ok: false, reason: "Cette demande de prix est clôturée ou annulée." };
+        }
+        if (!(prev.fournisseurIds ?? []).includes(fournisseurId)) {
+          return { ok: false, reason: "Ce fournisseur n'est pas consulté sur cette DP." };
+        }
+        const maintenant = new Date().toISOString();
+        const consultations = synchroniserConsultations(
+          prev.fournisseurIds,
+          prev.consultations,
+        ).map((c) => {
+          if (c.fournisseurId !== fournisseurId) return c;
+          return {
+            ...c,
+            statut,
+            dateEnvoi:
+              statut === "envoyee" || statut === "en_attente" || statut === "relancee"
+                ? c.dateEnvoi ?? maintenant
+                : c.dateEnvoi,
+            dateRelance: statut === "relancee" ? maintenant : c.dateRelance,
+            dateReponse: statut === "repondue" ? c.dateReponse ?? maintenant : c.dateReponse,
+          };
+        });
+        const passeEnCours =
+          prev.statut === "brouillon" &&
+          (statut === "envoyee" || statut === "relancee" || statut === "repondue")
+            ? "en_cours"
+            : prev.statut;
+        set((s) => ({
+          demandesPrix: (s.demandesPrix ?? []).map((d) =>
+            d.id === id ? { ...d, consultations, statut: passeEnCours } : d,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "demande_prix", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: `Consultation ${statut}`,
+            }),
+            ...s.journalActivites,
+          ],
         }));
         return { ok: true };
       },
@@ -4352,7 +5598,10 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.statut === "annulee") {
           return { ok: false, reason: "Cette demande est déjà annulée." };
         }
-        if (prev.statut === "cloturee" && statut !== "annulee") {
+        if (
+          (prev.statut === "cloturee" || prev.statut === "cloturee_sans_suite") &&
+          statut !== "annulee"
+        ) {
           return { ok: false, reason: "Document verrouillé." };
         }
         set((s) => ({
@@ -4373,14 +5622,15 @@ export const useStore = create<Store>()((set, get) => ({
         const state = get();
         const prev = (state.demandesPrix ?? []).find((d) => d.id === id);
         if (!prev) return { ok: false, reason: "Demande de prix introuvable." };
-        if (prev.statut === "annulee") {
-          return { ok: false, reason: "Cette demande de prix est annulée." };
+        if (prev.statut === "annulee" || prev.statut === "cloturee_sans_suite") {
+          return { ok: false, reason: "Cette demande de prix ne peut plus être transformée." };
         }
         const consultes = new Set(prev.fournisseurIds ?? []);
         if (consultes.size === 0) {
           return { ok: false, reason: "Aucun fournisseur consulté sur cette demande." };
         }
-        if (!data.pointDeVenteId) {
+        const siteDest = data.pointDeVenteId || prev.pointDeVenteId;
+        if (!siteDest) {
           return { ok: false, reason: "Choisissez un site de destination." };
         }
         if (data.commandes.length === 0) {
@@ -4433,7 +5683,7 @@ export const useStore = create<Store>()((set, get) => ({
             id: achatId,
             numero,
             fournisseurId: cmd.fournisseurId,
-            pointDeVenteId: data.pointDeVenteId,
+            pointDeVenteId: siteDest,
             date: data.date ?? prev.date,
             statut: "brouillon",
             tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
@@ -4459,10 +5709,21 @@ export const useStore = create<Store>()((set, get) => ({
             ...data.commandes.map((c) => c.fournisseurId),
           ]),
         ];
+        const retenuesParLigne = [
+          ...(prev.retenuesParLigne ?? []),
+        ];
         set((s) => ({
           achats: [...nouveaux, ...s.achats],
           demandesPrix: (s.demandesPrix ?? []).map((d) =>
-            d.id === id ? { ...d, achatIds, fournisseurIdsRetenus: retenusMaj } : d,
+            d.id === id
+              ? {
+                  ...d,
+                  achatIds,
+                  fournisseurIdsRetenus: retenusMaj,
+                  retenuesParLigne,
+                  statut: "cloturee",
+                }
+              : d,
           ),
           journalActivites: [
             ...nouveaux.map((a) =>
@@ -4534,6 +5795,10 @@ export const useStore = create<Store>()((set, get) => ({
       addProduit: (produit) => {
         const state = get();
         const nature = natureStockDuProduit(produit);
+        if (produitEstFabrique({ natureStock: nature })) {
+          const formules = motifNomenclaturesProduit(produit.nomenclatures);
+          if (formules) return { ok: false, reason: formules };
+        }
         const nomenclatures = normaliserNomenclatures(
           produit.nomenclatures,
           produitEstFabrique({ natureStock: nature }),
@@ -4608,6 +5873,12 @@ export const useStore = create<Store>()((set, get) => ({
                 "Ce produit a déjà été fabriqué par un OF : il ne peut pas devenir matière première.",
             };
           }
+        }
+        if (produitEstFabrique({ natureStock: natureCible })) {
+          const formules = motifNomenclaturesProduit(
+            data.nomenclatures !== undefined ? data.nomenclatures : prev.nomenclatures,
+          );
+          if (formules) return { ok: false, reason: formules };
         }
         const nomenclatures = normaliserNomenclatures(
           data.nomenclatures !== undefined ? data.nomenclatures : prev.nomenclatures,
@@ -5687,7 +6958,7 @@ export const useStore = create<Store>()((set, get) => ({
         const frn = state.fournisseurs.find((f) => f.id === id);
         if (!frn) return { ok: false, reason: "Fournisseur introuvable." };
         if (frn.id === TIERS_DIVERS_MARCHE_ID) {
-          return { ok: false, reason: "Le tiers système « Divers / Marché » ne peut pas être supprimé." };
+          return { ok: false, reason: "Le tiers système « Divers / Fournitures » ne peut pas être supprimé." };
         }
         if (fournisseurEstReference(id, frn.nom, state.entrees, state.achats, state.missionsAchat, state.demandesPrix)) {
           return {
@@ -5782,6 +7053,7 @@ export const useStore = create<Store>()((set, get) => ({
           roles,
           compteClientId,
           compteFournisseurId,
+          dateCreation: data.dateCreation ?? new Date().toISOString(),
           code:
             data.code?.trim() ||
             (roles.includes("client") ? nextCodeClient(state.clients) : undefined),
@@ -5952,6 +7224,7 @@ export const useStore = create<Store>()((set, get) => ({
           roles,
           compteClientId,
           compteFournisseurId,
+          dateCreation: data.dateCreation ?? prev.dateCreation,
         };
         const sync = syncTiersState({
           clients: state.clients,
@@ -6734,6 +8007,8 @@ export const useStore = create<Store>()((set, get) => ({
           montantTTC,
           tauxTVA: state.parametres.tauxTVA,
           modePaiement: data.modePaiement,
+          compteTresorerieId: data.compteTresorerieId,
+          reference: data.reference,
           devisId: data.devisId,
           commandeId: data.commandeId,
           factureId: data.factureId || factureAcompteId,
@@ -6747,6 +8022,370 @@ export const useStore = create<Store>()((set, get) => ({
           numero: numeroAco,
           factureAcompteId,
         };
+      },
+
+      ajouterPaiementsFacture: (factureId, lignes) => {
+        const state = get();
+        const prev = state.factures.find((f) => f.id === factureId);
+        if (!prev) return { ok: false, reason: "Facture introuvable." };
+        if (prev.type === "proforma" || prev.statut === "brouillon") {
+          return { ok: false, reason: "Encaissement réservé aux factures fiscales." };
+        }
+        const modes = state.modesPaiement ?? [];
+        const comptes = state.comptesTresorerie ?? [];
+        const creees: LignePaiement[] = [];
+        let cumul = 0;
+        for (const data of lignes) {
+          const motif = motifSaisieLignePaiement(data, modes, comptes);
+          if (motif) return { ok: false, reason: motif };
+          cumul += data.montant;
+          creees.push(completerLignePaiement(data, uid("pay"), modes));
+        }
+        let existants = prev.paiements ?? [];
+        if (existants.length === 0 && prev.montantPaye > 0) {
+          existants = [
+            {
+              id: uid("pay"),
+              date: prev.date,
+              montant: prev.montantPaye,
+              modePaiement: "autre",
+              note: "Encaissement déjà saisi",
+            },
+          ];
+        }
+        const reste = resteAPayer(prev, state.parametres, state.acomptes, state.factures);
+        if (cumul - reste > 0.5) {
+          return {
+            ok: false,
+            reason: `Le paiement dépasse le reste à encaisser (${Math.round(reste)} Ar).`,
+          };
+        }
+        const paiements = [...creees, ...existants];
+        const paye = montantLignesPaiement(paiements);
+        const avoirs = totalAvoirsSurFacture(prev.id, state.factures, state.parametres);
+        const t = totauxFacture(prev, state.parametres, state.acomptes);
+        const netTTC = Math.max(0, t.totalTTC - avoirs);
+        const statut =
+          paye >= netTTC - 1 ? "payee" : paye > 0 ? "partiellement_payee" : prev.statut;
+        set((s) => ({
+          factures: s.factures.map((f) =>
+            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+          ),
+          journalAudit: [
+            {
+              id: uid("aud"),
+              date: new Date().toISOString(),
+              action: "facture_paiement",
+              entite: "facture",
+              entiteId: factureId,
+              numero: prev.numero,
+              detail: `+${cumul} Ar`,
+            },
+            ...s.journalAudit,
+          ],
+          journalActivites: [
+            entreeActivite("creation", "facture", {
+              entiteId: factureId,
+              libelle: prev.numero,
+              detail: "Encaissement",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+      supprimerPaiementFacture: (factureId, paiementId) => {
+        const state = get();
+        const prev = state.factures.find((f) => f.id === factureId);
+        if (!prev) return { ok: false, reason: "Facture introuvable." };
+        const paiements = (prev.paiements ?? []).filter((p) => p.id !== paiementId);
+        const paye = montantLignesPaiement(paiements);
+        const avoirs = totalAvoirsSurFacture(prev.id, state.factures, state.parametres);
+        const t = totauxFacture(prev, state.parametres, state.acomptes);
+        const netTTC = Math.max(0, t.totalTTC - avoirs);
+        const statut =
+          paye >= netTTC - 1
+            ? "payee"
+            : paye > 0
+              ? "partiellement_payee"
+              : prev.dateEnvoi
+                ? "envoyee"
+                : prev.statut === "payee" || prev.statut === "partiellement_payee"
+                  ? "validee"
+                  : prev.statut;
+        set((s) => ({
+          factures: s.factures.map((f) =>
+            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+          ),
+        }));
+        return { ok: true };
+      },
+      changerStatutChequeFacture: (factureId, paiementId, statutCheque) => {
+        const state = get();
+        const prev = state.factures.find((f) => f.id === factureId);
+        if (!prev) return { ok: false, reason: "Facture introuvable." };
+        const paiements = (prev.paiements ?? []).map((p) =>
+          p.id === paiementId ? { ...p, statutCheque } : p,
+        );
+        const paye = montantLignesPaiement(paiements);
+        const avoirs = totalAvoirsSurFacture(prev.id, state.factures, state.parametres);
+        const t = totauxFacture(prev, state.parametres, state.acomptes);
+        const netTTC = Math.max(0, t.totalTTC - avoirs);
+        const statut =
+          paye >= netTTC - 1 ? "payee" : paye > 0 ? "partiellement_payee" : prev.statut;
+        set((s) => ({
+          factures: s.factures.map((f) =>
+            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      importerReleveBancaire: ({ compteTresorerieId, texte, fichierNom }) => {
+        const compte = (get().comptesTresorerie ?? []).find(
+          (c) => c.id === compteTresorerieId,
+        );
+        if (!compte) {
+          return { ok: false as const, reason: "Compte de trésorerie introuvable." };
+        }
+        const parsed = parserReleveBancaireCsv(texte);
+        if (!parsed.ok) return parsed;
+        const dateImport = new Date().toISOString();
+        const nouvelles: LigneReleveBancaire[] = parsed.lignes.map((l) => ({
+          ...l,
+          id: uid("rel"),
+          compteTresorerieId,
+          dateImport,
+          fichierNom,
+        }));
+        set((s) => ({
+          lignesReleveBancaire: [
+            ...nouvelles,
+            ...(s.lignesReleveBancaire ?? []),
+          ],
+        }));
+        return { ok: true as const, imported: nouvelles.length };
+      },
+      pointerLigneReleve: (ligneId, mouvementId) => {
+        const lignes = get().lignesReleveBancaire ?? [];
+        const ligne = lignes.find((l) => l.id === ligneId);
+        if (!ligne) {
+          return { ok: false as const, reason: "Ligne de relevé introuvable." };
+        }
+        if (mouvementId) {
+          const deja = lignes.find(
+            (l) => l.mouvementId === mouvementId && l.id !== ligneId,
+          );
+          if (deja) {
+            return {
+              ok: false as const,
+              reason: "Ce mouvement est déjà pointé sur une autre ligne.",
+            };
+          }
+        }
+        set((s) => ({
+          lignesReleveBancaire: (s.lignesReleveBancaire ?? []).map((l) =>
+            l.id === ligneId
+              ? { ...l, mouvementId: mouvementId || undefined }
+              : l,
+          ),
+        }));
+        return { ok: true as const };
+      },
+      supprimerLigneReleve: (ligneId) => {
+        set((s) => ({
+          lignesReleveBancaire: (s.lignesReleveBancaire ?? []).filter(
+            (l) => l.id !== ligneId,
+          ),
+        }));
+        return { ok: true as const };
+      },
+
+      addCompteTresorerie: (data) => {
+        const state = get();
+        const motif = motifCompteTresorerieInvalide(
+          data.libelle,
+          state.comptesTresorerie ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("ctr");
+        const ordre =
+          (state.comptesTresorerie ?? []).reduce((m, c) => Math.max(m, c.ordre), 0) + 1;
+        set((s) => ({
+          comptesTresorerie: [
+            ...(s.comptesTresorerie ?? []),
+            {
+              id,
+              libelle: data.libelle.trim(),
+              type: data.type,
+              siteId: data.siteId || undefined,
+              actif: true,
+              ordre,
+            },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "compte_tresorerie", {
+              entiteId: id,
+              libelle: data.libelle.trim(),
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateCompteTresorerie: (id, data) => {
+        const state = get();
+        const prev = (state.comptesTresorerie ?? []).find((c) => c.id === id);
+        if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifCompteTresorerieInvalide(
+          libelle,
+          state.comptesTresorerie ?? [],
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        set((s) => ({
+          comptesTresorerie: (s.comptesTresorerie ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  libelle,
+                  type: data.type ?? c.type,
+                  siteId:
+                    data.siteId !== undefined ? data.siteId || undefined : c.siteId,
+                  actif: data.actif ?? c.actif,
+                  ordre: data.ordre ?? c.ordre,
+                }
+              : c,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "compte_tresorerie", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteCompteTresorerie: (id) => {
+        const state = get();
+        const prev = (state.comptesTresorerie ?? []).find((c) => c.id === id);
+        if (!prev) return { ok: false as const, reason: "Compte introuvable." };
+        if (
+          compteTresorerieUtilise(id, {
+            achats: state.achats,
+            factures: state.factures,
+            acomptes: state.acomptes,
+            missions: state.missionsAchat,
+          })
+        ) {
+          return {
+            ok: false as const,
+            reason: "Ce compte est déjà utilisé : suppression impossible.",
+          };
+        }
+        set((s) => ({
+          comptesTresorerie: (s.comptesTresorerie ?? []).filter((c) => c.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "compte_tresorerie", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+
+      addModePaiement: (data) => {
+        const state = get();
+        const motif = motifModePaiementInvalide(
+          data.libelle,
+          state.modesPaiement ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("mdp");
+        const ordre =
+          (state.modesPaiement ?? []).reduce((m, x) => Math.max(m, x.ordre), 0) + 1;
+        set((s) => ({
+          modesPaiement: [
+            ...(s.modesPaiement ?? []),
+            {
+              id,
+              libelle: data.libelle.trim(),
+              necessiteEcheance: Boolean(data.necessiteEcheance),
+              actif: true,
+              ordre,
+            },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "mode_paiement", {
+              entiteId: id,
+              libelle: data.libelle.trim(),
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateModePaiement: (id, data) => {
+        const state = get();
+        const prev = (state.modesPaiement ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false as const, reason: "Mode introuvable." };
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const motif = motifModePaiementInvalide(libelle, state.modesPaiement ?? [], id);
+        if (motif) return { ok: false as const, reason: motif };
+        set((s) => ({
+          modesPaiement: (s.modesPaiement ?? []).map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  libelle,
+                  necessiteEcheance: data.necessiteEcheance ?? m.necessiteEcheance,
+                  actif: data.actif ?? m.actif,
+                  ordre: data.ordre ?? m.ordre,
+                }
+              : m,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "mode_paiement", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteModePaiement: (id) => {
+        const state = get();
+        const prev = (state.modesPaiement ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false as const, reason: "Mode introuvable." };
+        if (
+          modePaiementUtilise(id, {
+            achats: state.achats,
+            factures: state.factures,
+            acomptes: state.acomptes,
+            missions: state.missionsAchat,
+          })
+        ) {
+          return {
+            ok: false as const,
+            reason: "Ce mode est déjà utilisé : suppression impossible.",
+          };
+        }
+        set((s) => ({
+          modesPaiement: (s.modesPaiement ?? []).filter((m) => m.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "mode_paiement", {
+              entiteId: id,
+              libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
       },
 
       applyBusinessData: (data) => {

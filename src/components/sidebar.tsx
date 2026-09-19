@@ -28,6 +28,7 @@ import {
   LogOut,
   UserRound,
   Bell,
+  CreditCard,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuthStore } from "@/lib/auth-store";
@@ -130,11 +131,13 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Exploitation",
     links: [
-      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix"],
+      { href: "/achats", label: "Achats", icon: ShoppingCart, matchPrefixes: ["/achats", "/demandes-prix", "/besoins-achat"],
         anyOf: ["achats.lire", "achats.gerer"],
         children: [
           { href: "/achats", label: "Commandes fournisseurs", exact: true },
           { href: "/demandes-prix", label: "Demandes de prix" },
+          { href: "/besoins-achat", label: "Besoins d'achat" },
+          { href: "/achats/delais-livraison", label: "Délais de livraison" },
           { href: "/documents", label: "Historique documents", exact: true },
         ],
       },
@@ -143,12 +146,28 @@ const sections: { title: string; links: NavLink[] }[] = [
         href: "/transferts",
         label: "Transferts de stock",
         icon: ArrowLeftRight,
+        matchPrefixes: ["/transferts"],
+        children: [
+          { href: "/transferts", label: "Transferts", exact: true },
+          { href: "/transferts/historique", label: "Historique par article" },
+        ],
       },
       {
         href: "/fabrication",
         label: "Fabrication",
         icon: Factory,
         matchPrefixes: ["/fabrication"],
+        children: [
+          { href: "/fabrication", label: "Ordres de fabrication", exact: true },
+          {
+            href: "/fabrication/transferts-matiere",
+            label: "Transferts matière OF",
+          },
+          {
+            href: "/fabrication/sorties-atelier",
+            label: "Sorties atelier",
+          },
+        ],
       },
       {
         href: "/missions",
@@ -249,6 +268,25 @@ const sections: { title: string; links: NavLink[] }[] = [
     ],
   },
   {
+    title: "Trésorerie",
+    links: [
+      {
+        href: "/tresorerie",
+        label: "Trésorerie",
+        icon: CreditCard,
+        matchPrefixes: ["/tresorerie"],
+        anyOf: ["factures.encaisser", "achats.lire", "comptabilite.lire"],
+        children: [
+          { href: "/tresorerie", label: "Soldes", exact: true },
+          { href: "/tresorerie/echeancier", label: "Échéancier" },
+          { href: "/tresorerie/cheques-proches", label: "Chèques à échéance proche" },
+          { href: "/tresorerie/mouvements", label: "Mouvements" },
+          { href: "/tresorerie/rapprochement", label: "Rapprochement" },
+        ],
+      },
+    ],
+  },
+  {
     title: "Comptabilité",
     links: [
       {
@@ -270,6 +308,10 @@ const sections: { title: string; links: NavLink[] }[] = [
           {
             href: "/comptabilite/transfert",
             label: "Transfert",
+          },
+          {
+            href: "/comptabilite/produits-sans-compte",
+            label: "Produits sans compte",
           },
         ],
       },
@@ -343,6 +385,8 @@ const sections: { title: string; links: NavLink[] }[] = [
     ],
   },
 ];
+
+export const NAV_SECTIONS = sections;
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -617,20 +661,16 @@ export function Sidebar() {
                 if (children?.length) {
                   const groupActive = isGroupActive(pathname, link);
                   const isOpen = openMenus[href] ?? false;
-                  const parentExact =
-                    href === "/" ? pathname === "/" : pathname === href;
 
                   return (
                     <div key={href}>
                       <div className="flex items-center gap-0.5">
                         <Link
                           href={href}
-                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                            parentExact
-                              ? "bg-sea-700 text-white"
-                              : groupActive
-                                ? "text-white"
-                                : "text-sea-200 hover:bg-white/5 hover:text-white"
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                            groupActive
+                              ? "bg-sea-700 text-white shadow-sm"
+                              : "text-sea-200 hover:bg-white/5 hover:text-white"
                           }`}
                         >
                           <Icon className="h-4 w-4 shrink-0 opacity-80" />
@@ -662,7 +702,7 @@ export function Sidebar() {
                         </button>
                       </div>
                       {isOpen && (
-                        <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                        <div className="ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-white/15 pl-2">
                           {children.map((child) => {
                             const childExact = child.exact
                               ? pathname === child.href
@@ -673,18 +713,18 @@ export function Sidebar() {
                               <div key={`${child.href}-${child.label}`}>
                                 <Link
                                   href={child.href}
-                                  className={`block rounded-lg px-3 py-1.5 text-[13px] font-medium leading-snug transition-colors ${
+                                  className={`block px-2 py-1 text-[12px] leading-snug transition-colors ${
                                     childExact
-                                      ? "bg-sea-700 text-white"
+                                      ? "font-semibold text-white underline decoration-sea-400 underline-offset-4"
                                       : childActive
-                                        ? "text-white"
-                                        : "text-sea-300 hover:bg-white/5 hover:text-white"
+                                        ? "font-medium text-white"
+                                        : "text-sea-300 hover:text-white"
                                   }`}
                                 >
                                   {child.label}
                                 </Link>
                                 {nested.length > 0 && childActive && (
-                                  <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                                  <div className="ml-3 mt-0.5 flex flex-col gap-px pl-2">
                                     {nested.map((n) => {
                                       const nestedExact = n.exact
                                         ? pathname === n.href
@@ -698,18 +738,18 @@ export function Sidebar() {
                                         <div key={`${n.href}-${n.label}`}>
                                           <Link
                                             href={n.href}
-                                            className={`block rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
+                                            className={`block py-0.5 pl-1 text-[11px] leading-snug transition-colors ${
                                               nestedExact
-                                                ? "bg-sea-700 text-white"
+                                                ? "font-medium text-sea-100"
                                                 : nestedActive
-                                                  ? "text-white"
-                                                  : "text-sea-400 hover:bg-white/5 hover:text-white"
+                                                  ? "text-sea-100"
+                                                  : "text-sea-400 hover:text-sea-100"
                                             }`}
                                           >
                                             {n.label}
                                           </Link>
                                           {deep.length > 0 && nestedActive && (
-                                            <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                                            <div className="ml-2 mt-0.5 flex flex-col gap-px pl-2">
                                               {deep.map((d) => {
                                                 const deepActive = d.exact
                                                   ? pathname === d.href
@@ -718,10 +758,10 @@ export function Sidebar() {
                                                   <Link
                                                     key={`${d.href}-${d.label}`}
                                                     href={d.href}
-                                                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium leading-snug transition-colors ${
+                                                    className={`py-0.5 text-[11px] leading-snug transition-colors ${
                                                       deepActive
-                                                        ? "bg-sea-700 text-white"
-                                                        : "text-sea-400 hover:bg-white/5 hover:text-white"
+                                                        ? "text-sea-100"
+                                                        : "text-sea-500 hover:text-sea-200"
                                                     }`}
                                                   >
                                                     {d.label}
@@ -751,9 +791,9 @@ export function Sidebar() {
                     <div key={href} className="flex items-center gap-0.5">
                       <Link
                         href={href}
-                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                           active
-                            ? "bg-sea-700 text-white"
+                            ? "bg-sea-700 text-white shadow-sm"
                             : "text-sea-200 hover:bg-white/5 hover:text-white"
                         }`}
                       >
@@ -768,9 +808,9 @@ export function Sidebar() {
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                       active
-                        ? "bg-sea-700 text-white"
+                        ? "bg-sea-700 text-white shadow-sm"
                         : "text-sea-200 hover:bg-white/5 hover:text-white"
                     }`}
                   >

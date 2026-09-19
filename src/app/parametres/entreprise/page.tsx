@@ -180,7 +180,7 @@ export default function ParametresEntreprisePage() {
   function saveEntreprise(e: FormEvent) {
     e.preventDefault();
     updateParametres({
-      nomEntreprise: entreprise.nomEntreprise.trim() || "STWR Poissonnerie",
+      nomEntreprise: entreprise.nomEntreprise.trim() || "Négoo",
       formeJuridique: entreprise.formeJuridique.trim(),
       capital: Number(entreprise.capital) || 0,
       devise: "Ar",
@@ -457,7 +457,7 @@ export default function ParametresEntreprisePage() {
                         signatureNom: e.target.value,
                       })
                     }
-                    placeholder="Ex. Le Gérant — EDEN Poissonnerie"
+                    placeholder="Ex. Le Gérant — Atelier Vinyle & Bâches"
                   />
                 </label>
               </div>

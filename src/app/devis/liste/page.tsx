@@ -434,6 +434,8 @@ export default function ListeDevisPage() {
                   date: new Date(`${meta.date}T12:00:00`).toISOString(),
                   montantTTC: acompteMontantEdition,
                   modePaiement: acompte.modePaiement,
+                  compteTresorerieId: acompte.compteTresorerieId || undefined,
+                  reference: acompte.reference || undefined,
                   devisId: editId,
                   refDocument: editDoc.numero,
                   genererFactureAcompte: acompte.genererFacture,

@@ -25,7 +25,7 @@ import type {
 } from "./types";
 
 export const TIERS_DIVERS_MARCHE_ID = "frn-divers-marche";
-export const TIERS_DIVERS_MARCHE_NOM = "Divers / Marché";
+export const TIERS_DIVERS_MARCHE_NOM = "Divers / Fournitures";
 
 export const MISSION_STATUT_LABELS: Record<MissionAchatStatut, string> = {
   brouillon: "Brouillon",
@@ -233,7 +233,7 @@ export function ficheTiersDiversMarche(): Tiers {
     roles: ["fournisseur"],
     systeme: true,
     type: "autre",
-    specialite: "Vendeurs informels / marché",
+    specialite: "Achats divers atelier",
   };
 }
 
@@ -605,7 +605,7 @@ export function depensesValides(lignes: MissionDepenseDiverse[]) {
 export function motifDepenseDiverseInvalide(d: MissionDepenseDiverse) {
   if (!(d.montant > 0) && !d.nature.trim()) return null;
   if (!d.fournisseurId?.trim()) {
-    return "Chaque dépense diverse doit avoir un fournisseur (fiche Tiers ou Divers / Marché).";
+    return "Chaque dépense diverse doit avoir un fournisseur (fiche Tiers ou Divers / Fournitures).";
   }
   if (d.montant > 0 && !d.nature.trim()) {
     return "Indiquez la nature de la dépense diverse.";

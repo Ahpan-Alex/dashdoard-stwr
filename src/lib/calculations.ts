@@ -763,13 +763,17 @@ export function stockRestantPourSaisie(
   }[],
   excludeKey?: string,
   inventaires: Inventaire[] = [],
+  quantiteReserveeOf = 0,
 ) {
-  const dispo = stockDisponible(
-    produitId,
-    pointDeVenteId,
-    entrees,
-    ventes,
-    inventaires,
+  const dispo = Math.max(
+    0,
+    stockDisponible(
+      produitId,
+      pointDeVenteId,
+      entrees,
+      ventes,
+      inventaires,
+    ) - Math.max(0, quantiteReserveeOf),
   );
   const reserve = lignesEnCours
     .filter(
@@ -1028,8 +1032,8 @@ export function beneficesSerieTemporelle(
 }
 
 export const CATEGORIE_LABELS: Record<string, string> = {
-  poisson: "Poisson",
-  crustace: "Crustacé",
-  coquillage: "Coquillage",
-  autre: "Autre",
+  poisson: "Vinyle/Bâche",
+  crustace: "Profilés aluminium",
+  coquillage: "Consommables",
+  autre: "Panneaux/Supports rigides",
 };

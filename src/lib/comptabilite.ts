@@ -24,6 +24,7 @@ import type {
   Produit,
   RoleCompteComptable,
   RoleTiers,
+  SortieAtelier,
   Tiers,
   TypeAchat,
 } from "./types";
@@ -34,6 +35,7 @@ import {
   natureCatalogueDepense,
 } from "./natures-depense-mission";
 import {
+  TYPE_ACHAT_COMPTE_CHARGE_PREFIX,
   TYPE_ACHAT_LABELS,
   TYPES_ACHAT_LIBRES,
   TYPES_ACHAT_PRODUIT,
@@ -99,8 +101,30 @@ export function appliquerSeedComptesDefaut(
   return { comptes, ajoutes: [] };
 }
 
+export function compteParPrefixe(comptes: CompteComptable[], prefix: string) {
+  const p = chiffresNumeroCompte(prefix);
+  if (!p) return undefined;
+  const matches = comptes.filter((c) =>
+    chiffresNumeroCompte(c.numero).startsWith(p),
+  );
+  if (matches.length === 0) return undefined;
+  return [...matches].sort(
+    (a, b) =>
+      chiffresNumeroCompte(a.numero).length -
+      chiffresNumeroCompte(b.numero).length,
+  )[0];
+}
+
+export function compteChargeDefautPourType(
+  type: TypeAchat | undefined,
+  comptes: CompteComptable[],
+) {
+  const prefix = TYPE_ACHAT_COMPTE_CHARGE_PREFIX[type ?? "marchandises"];
+  return compteParPrefixe(comptes, prefix);
+}
+
 export function compteChargeProduit(
-  produit: Pick<Produit, "compteChargeId" | "compteComptableId">,
+  produit: Pick<Produit, "compteChargeId" | "compteComptableId" | "typeAchat">,
   comptes: CompteComptable[],
 ) {
   if (produit.compteChargeId) {
@@ -112,6 +136,9 @@ export function compteChargeProduit(
   if (produit.compteComptableId) {
     const legacy = comptes.find((c) => c.id === produit.compteComptableId);
     if (legacy && classeNumeroCompte(legacy.numero) === "6") return legacy;
+  }
+  if (produit.typeAchat === "outillage") {
+    return compteChargeDefautPourType("outillage", comptes);
   }
   return undefined;
 }
@@ -203,6 +230,7 @@ export function produitSansCompteComptable(
     | "compteComptableId"
     | "natureStock"
     | "usageCommercial"
+    | "typeAchat"
   >,
   comptes: CompteComptable[],
 ) {
@@ -223,6 +251,7 @@ export function produitSansComptePourNature(
     | "compteComptableId"
     | "natureStock"
     | "usageCommercial"
+    | "typeAchat"
   >,
   comptes: CompteComptable[],
   nature: "charge" | "vente",
@@ -1209,6 +1238,40 @@ export function ecritureEstTransferee(e: Pick<EcritureComptable, "transferee">) 
   return Boolean(e.transferee);
 }
 
+export function ecritureDepuisSortieAtelier(opts: {
+  sortie: SortieAtelier;
+  produits: Produit[];
+  comptes: CompteComptable[];
+}): EcritureComptable | null {
+  const { sortie, produits, comptes } = opts;
+  const montant = Math.round(Math.abs(sortie.valeur) || 0);
+  if (montant <= 0) return null;
+  const produit = produits.find((p) => p.id === sortie.produitId);
+  const charge =
+    (produit ? compteChargeProduit(produit, comptes) : undefined) ??
+    compteChargeDefautPourType(produit?.typeAchat ?? "outillage", comptes);
+  const contrepartie =
+    compteParPrefixe(comptes, "603") ?? compteParPrefixe(comptes, "32");
+  if (!compteProduitEstRenseigne(charge) || !compteProduitEstRenseigne(contrepartie)) {
+    return null;
+  }
+  const prefix = `ecr-sat-${sortie.id}`;
+  const lignes = [
+    ligneEcriture(`${prefix}-ch`, charge, charge.libelle, montant, 0),
+    ligneEcriture(`${prefix}-st`, contrepartie, contrepartie.libelle, 0, montant),
+  ];
+  return {
+    id: prefix,
+    date: sortie.date,
+    libelle: `Sortie atelier — ${sortie.motif}`,
+    piece: sortie.id,
+    journal: "achat",
+    sourceType: "sortie_atelier",
+    sourceId: sortie.id,
+    lignes,
+  };
+}
+
 export function regenererEcrituresComptables(opts: {
   factures: Facture[];
   achats: Achat[];
@@ -1220,6 +1283,7 @@ export function regenererEcrituresComptables(opts: {
   tiers?: Tiers[];
   missionsAchat?: MissionAchat[];
   naturesDepenseMission?: NatureDepenseMission[];
+  sortiesAtelier?: SortieAtelier[];
   existantes?: EcritureComptable[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
@@ -1271,6 +1335,14 @@ export function regenererEcrituresComptables(opts: {
     })) {
       generees.push(e);
     }
+  }
+  for (const sortie of opts.sortiesAtelier ?? []) {
+    const e = ecritureDepuisSortieAtelier({
+      sortie,
+      produits: opts.produits,
+      comptes: opts.comptesComptables,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
   }
   const prevById = new Map((opts.existantes ?? []).map((e) => [e.id, e]));
   const used = new Set<string>();

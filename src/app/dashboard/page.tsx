@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { DashboardSubnav } from "@/components/dashboard-subnav";
 import { IndicateurInfo } from "@/components/indicateur-info";
+import { KpiBatCards } from "@/components/kpi-bat-cards";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAuthStore } from "@/lib/auth-store";
@@ -12,6 +13,7 @@ import {
   balanceAgeeGlobale,
   caMoisEtAnnee,
   delaiMoyenPaiementClient,
+  indicateurPlafondCredit,
 } from "@/lib/dashboard-indicateurs";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { syntheseRentabiliteDeuxPaliers } from "@/lib/rentabilite";
@@ -33,6 +35,9 @@ export default function DashboardGeneralPage() {
     clients,
     acomptes,
     journalAudit,
+    bonsATirer,
+    commandes,
+    parametresAlertes,
   } = useStore();
 
   const { mois, annee } = caMoisEtAnnee(
@@ -61,6 +66,11 @@ export default function DashboardGeneralPage() {
     range,
   );
   const achatsHt = achatsHtPeriode(achats, pointDeVenteActifId, range);
+  const plafondKpi = indicateurPlafondCredit(
+    clients,
+    { factures, acomptes, parametres },
+    parametresAlertes.ventePlafondCredit?.seuilPercent ?? 80,
+  );
 
   return (
     <div>
@@ -69,6 +79,12 @@ export default function DashboardGeneralPage() {
         description="Vue d'ensemble : CA facturé, rentabilité, créances. Filtre site en en-tête, période ci-dessous."
       />
       <DashboardSubnav />
+
+      <KpiBatCards
+        bats={bonsATirer ?? []}
+        commandes={commandes}
+        delaiRelanceJours={parametresAlertes.batRelance?.delaiJours ?? 7}
+      />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -88,10 +104,8 @@ export default function DashboardGeneralPage() {
                 }
           }
           info={
-            <IndicateurInfo>
-              Factures fiscales validées (hors brouillon, proforma, acompte),
-              CA HT du mois civil de la date de fin de filtre. N-1 = même mois
-              de l&apos;année précédente. Courbes détaillées :{" "}
+            <IndicateurInfo indicateur="ca_mois">
+              Courbes détaillées :{" "}
               <Link href="/tableau-de-bord/ca-mensuel" className="underline">
                 CA mensuel
               </Link>{" "}
@@ -116,10 +130,7 @@ export default function DashboardGeneralPage() {
                 }
           }
           info={
-            <IndicateurInfo>
-              Même base que le CA du mois, cumulé sur l&apos;année civile de la
-              date de fin de filtre, comparé à N-1.
-            </IndicateurInfo>
+            <IndicateurInfo indicateur="ca_annuel" />
           }
         />
         {peutRentab ? (
@@ -129,10 +140,8 @@ export default function DashboardGeneralPage() {
               value={formatCurrency(syn.resultat)}
               hint={`${formatPercent(syn.tauxPalier2 / 100)} du CA — factures − achats`}
               info={
-                <IndicateurInfo>
-                  Factures validées HT moins achats validés HT (tous types :
-                  marchandises, matières, services, immobilisations) sur la
-                  période filtrée. Même formule que{" "}
+                <IndicateurInfo indicateur="rentabilite_globale">
+                  Même formule que{" "}
                   <Link href="/tableau-de-bord/rentabilite" className="underline">
                     Rentabilité palier 2
                   </Link>
@@ -145,10 +154,7 @@ export default function DashboardGeneralPage() {
               value={formatCurrency(syn.margeBrute)}
               hint={`${formatPercent(syn.tauxPalier1 / 100)} du CA — CA − CMV`}
               info={
-                <IndicateurInfo>
-                  CA HT facturé moins coût des marchandises vendues (CUMP).
-                  Palier 1 de rentabilité.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="marge_brute" />
               }
             />
           </>
@@ -159,20 +165,14 @@ export default function DashboardGeneralPage() {
               value={dso == null ? "—" : `${dso} j`}
               hint="Factures soldées de la période"
               info={
-                <IndicateurInfo>
-                  Moyenne des jours entre la date de facture et le dernier
-                  règlement (journal d&apos;audit), factures soldées uniquement.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="delai_moyen_paiement" />
               }
             />
             <StatCard
               label="Achats HT (période)"
               value={formatCurrency(achatsHt)}
               info={
-                <IndicateurInfo>
-                  Achats fournisseur validés, toutes natures de ligne, nets
-                  d&apos;avoirs.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="achats_ht_periode" />
               }
             />
           </>
@@ -186,11 +186,7 @@ export default function DashboardGeneralPage() {
             value={dso == null ? "—" : `${dso} j`}
             hint="Factures soldées de la période"
             info={
-              <IndicateurInfo>
-                Moyenne des jours entre la date de facture et le dernier
-                règlement enregistré (journal d&apos;audit), uniquement pour les
-                factures dont le reste à payer est nul.
-              </IndicateurInfo>
+              <IndicateurInfo indicateur="delai_moyen_paiement" />
             }
           />
           <StatCard
@@ -198,24 +194,17 @@ export default function DashboardGeneralPage() {
             value={formatCurrency(achatsHt)}
             hint="Tous types, statut validé"
             info={
-              <IndicateurInfo>
-                Achats fournisseur au statut validé, toutes natures de ligne,
-                nets d&apos;avoirs, sur la période et le site.
-              </IndicateurInfo>
+              <IndicateurInfo indicateur="achats_ht_periode" />
             }
           />
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
             Balance âgée clients
-            <IndicateurInfo>
-              Somme des restes à payer clients, ventilés selon les tranches
-              Paramètres → Tiers → Balance âgée. Créances actuelles (non
-              filtrées par la période).
-            </IndicateurInfo>
+            <IndicateurInfo indicateur="balance_agee_clients" />
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
             {agee.map((t) => (
@@ -225,6 +214,25 @@ export default function DashboardGeneralPage() {
               </li>
             ))}
           </ul>
+        </div>
+        <div className="rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+            Alerte plafond de crédit
+            <IndicateurInfo indicateur="plafond_credit_alerte" />
+          </h2>
+          <p className="mt-3 text-2xl font-semibold">
+            {plafondKpi.tauxAlerte == null
+              ? "—"
+              : formatPercent(plafondKpi.tauxAlerte / 100)}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {plafondKpi.enAlerte} client{plafondKpi.enAlerte > 1 ? "s" : ""} sur{" "}
+            {plafondKpi.avecPlafond} avec plafond
+            {plafondKpi.depasses
+              ? ` · ${plafondKpi.depasses} en dépassement (blocage)`
+              : ""}
+            .
+          </p>
         </div>
         <div className="rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-1 font-display text-lg font-semibold">Liens</h2>

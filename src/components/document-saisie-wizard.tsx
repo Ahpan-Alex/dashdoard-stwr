@@ -29,6 +29,7 @@ import {
   stockRestantPourSaisie,
 } from "@/lib/calculations";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import { quantiteReserveeProduitSite } from "@/lib/repartition-achat-of";
 import type {
   CategorieProduit,
   Client,
@@ -187,6 +188,39 @@ export function DocumentSaisieWizard({
   acomptesDetail = [],
 }: Props) {
   const inventaires = useStore((s) => s.inventaires);
+  const achats = useStore((s) => s.achats);
+  const ofs = useStore((s) => s.ordresFabrication);
+  const transfertsMatiereOf = useStore((s) => s.transfertsMatiereOf ?? []);
+  const ctxReservation = {
+    achats,
+    ordresFabrication: ofs,
+    transfertsMatiereOf,
+  };
+  const reserveOf = (produitId: string) =>
+    pointDeVenteId
+      ? quantiteReserveeProduitSite(produitId, pointDeVenteId, ctxReservation)
+      : 0;
+  const stockLibreAffiche = (produitId: string) =>
+    Math.max(
+      0,
+      stockDisponible(produitId, pointDeVenteId, entrees, ventes, inventaires) -
+        reserveOf(produitId),
+    );
+  const stockSaisie = (
+    produitId: string,
+    lignesEnCours: DraftLigne[],
+    excludeKey?: string,
+  ) =>
+    stockRestantPourSaisie(
+      produitId,
+      pointDeVenteId,
+      entrees,
+      ventes,
+      lignesEnCours,
+      excludeKey,
+      inventaires,
+      reserveOf(produitId),
+    );
   const produitsDispo = produitsVendablesActifs(produits, categoriesProduits);
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
   const previewSheetRef = useRef<HTMLDivElement>(null);
@@ -280,15 +314,7 @@ export function DocumentSaisieWizard({
       );
       return;
     }
-    const dispo = stockRestantPourSaisie(
-      produitId,
-      pointDeVenteId,
-      entrees,
-      ventes,
-      lignes,
-      undefined,
-      inventaires,
-    );
+    const dispo = stockSaisie(produitId, lignes);
     if (dispo <= 0) {
       setStockError(
         `Stock insuffisant pour « ${prod.libelleCourt} » (disponible : 0 ${prod.unite}).`,
@@ -379,15 +405,7 @@ export function DocumentSaisieWizard({
           merged.produitId &&
           patch.quantite !== undefined
         ) {
-          const max = stockRestantPourSaisie(
-            merged.produitId,
-            pointDeVenteId,
-            entrees,
-            ventes,
-            prev,
-            key,
-            inventaires,
-          );
+          const max = stockSaisie(merged.produitId, prev, key);
           merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
         }
         return merged;
@@ -406,15 +424,7 @@ export function DocumentSaisieWizard({
     }
     for (const l of lignes) {
       if (!isLigneProduit(l) || !l.produitId) continue;
-      const max = stockRestantPourSaisie(
-        l.produitId,
-        pointDeVenteId,
-        entrees,
-        ventes,
-        lignes,
-        l.key,
-        inventaires,
-      );
+      const max = stockSaisie(l.produitId, lignes, l.key);
       if (l.quantite <= 0) {
         return `Quantité invalide pour « ${l.designation} ».`;
       }
@@ -600,22 +610,8 @@ export function DocumentSaisieWizard({
                   ) : (
                     catalogueFiltre.map((p) => {
                       const nbLignes = lignesProduitParId.counts.get(p.id) ?? 0;
-                      const stock = stockDisponible(
-                        p.id,
-                        pointDeVenteId,
-                        entrees,
-                        ventes,
-                        inventaires,
-                      );
-                      const restant = stockRestantPourSaisie(
-                        p.id,
-                        pointDeVenteId,
-                        entrees,
-                        ventes,
-                        lignes,
-                        undefined,
-                        inventaires,
-                      );
+                      const stock = stockLibreAffiche(p.id);
+                      const restant = stockSaisie(p.id, lignes);
                       const indispo = restant <= 0;
                       const prix = resolvePrixVenteHT(p, {
                         clientId,
@@ -862,25 +858,9 @@ export function DocumentSaisieWizard({
                         </tr>
                       );
                     }
-                    const stockLigne = l.produitId
-                      ? stockDisponible(
-                          l.produitId,
-                          pointDeVenteId,
-                          entrees,
-                          ventes,
-                          inventaires,
-                        )
-                      : 0;
+                    const stockLigne = l.produitId ? stockLibreAffiche(l.produitId) : 0;
                     const maxLigne = l.produitId
-                      ? stockRestantPourSaisie(
-                          l.produitId,
-                          pointDeVenteId,
-                          entrees,
-                          ventes,
-                          lignes,
-                          l.key,
-                          inventaires,
-                        )
+                      ? stockSaisie(l.produitId, lignes, l.key)
                       : 0;
                     return (
                       <tr key={l.key} className={rowClass} {...dropProps}>

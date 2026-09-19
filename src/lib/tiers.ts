@@ -431,6 +431,44 @@ export type ControlePlafond = {
   depasse: boolean;
 };
 
+export function tauxUtilisationPlafond(
+  client: { id: string; plafondCredit?: number },
+  ctx: {
+    factures: Facture[];
+    acomptes: Acompte[];
+    parametres: Parametres;
+  },
+): {
+  plafond: number;
+  solde: number;
+  usagePercent: number | null;
+  depasse: boolean;
+} {
+  const plafond = Math.max(0, Number(client.plafondCredit) || 0);
+  const solde = soldeClientTiers(client.id, ctx).solde;
+  if (!(plafond > 0)) {
+    return { plafond: 0, solde, usagePercent: null, depasse: false };
+  }
+  return {
+    plafond,
+    solde,
+    usagePercent: (solde / plafond) * 100,
+    depasse: solde > plafond + 1e-6,
+  };
+}
+
+export function avertissementPlafond(
+  usagePercent: number | null,
+  seuilPercent: number,
+  depasse: boolean,
+) {
+  if (depasse) return "depasse" as const;
+  if (usagePercent != null && usagePercent + 1e-6 >= seuilPercent) {
+    return "avertissement" as const;
+  }
+  return "ok" as const;
+}
+
 export function controlerPlafondCredit(
   client: Pick<Client, "id" | "nom" | "plafondCredit"> | undefined,
   ctx: {

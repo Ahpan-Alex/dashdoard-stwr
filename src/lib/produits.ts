@@ -452,43 +452,64 @@ export function seedCategoriesProduits(): CategorieProduit[] {
   return [
     {
       id: "cat-mer",
-      code: "MER",
-      libelle: "Produits de la mer",
+      code: "SUPPORTS",
+      libelle: "Supports & matières",
       ordre: 1,
       actif: true,
     },
     {
       id: "cat-poisson",
-      code: "POISSON",
-      libelle: "Poissons",
+      code: "VINYLE",
+      libelle: "Vinyle/Bâche",
       parentId: "cat-mer",
       ordre: 1,
       actif: true,
     },
     {
       id: "cat-crustace",
-      code: "CRUSTACE",
-      libelle: "Crustacés",
+      code: "PROFIL",
+      libelle: "Profilés aluminium",
       parentId: "cat-mer",
       ordre: 2,
       actif: true,
     },
     {
       id: "cat-coquillage",
-      code: "COQUILLAGE",
-      libelle: "Coquillages",
+      code: "CONSO",
+      libelle: "Consommables (peinture, colle, mélaminé)",
       parentId: "cat-mer",
       ordre: 3,
       actif: true,
     },
     {
       id: "cat-autre",
-      code: "AUTRE",
-      libelle: "Autre",
+      code: "PANNEAUX",
+      libelle: "Panneaux/Supports rigides",
       ordre: 99,
       actif: true,
     },
   ];
+}
+
+const RENOMMAGE_CATEGORIES: Record<string, { code: string; libelle: string }> = {
+  "Produits de la mer": { code: "SUPPORTS", libelle: "Supports & matières" },
+  Poissons: { code: "VINYLE", libelle: "Vinyle/Bâche" },
+  Crustacés: { code: "PROFIL", libelle: "Profilés aluminium" },
+  Coquillages: {
+    code: "CONSO",
+    libelle: "Consommables (peinture, colle, mélaminé)",
+  },
+};
+
+export function normaliserCategoriesProduits(
+  existing?: CategorieProduit[] | null,
+): CategorieProduit[] {
+  if (!existing || existing.length === 0) return seedCategoriesProduits();
+  return existing.map((c) => {
+    const next = RENOMMAGE_CATEGORIES[c.libelle];
+    if (!next) return c;
+    return { ...c, code: next.code, libelle: next.libelle };
+  });
 }
 
 export const LEGACY_CATEGORIE_MAP: Record<string, string> = {

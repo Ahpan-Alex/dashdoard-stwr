@@ -12,15 +12,19 @@ import {
   Scale,
   ScrollText,
   SlidersHorizontal,
+  Stamp,
 } from "lucide-react";
 import { ClientContactsPanel } from "@/components/client-contacts-panel";
 import { EmptyState } from "@/components/empty-state";
+import { KpiBatCards } from "@/components/kpi-bat-cards";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { TiersAdressePanel } from "@/components/tiers-adresse-panel";
+import { TiersBatPanel } from "@/components/tiers-bat-panel";
 import { TiersDashboardPanel } from "@/components/tiers-dashboard-panel";
 import { TiersFacturesPanel } from "@/components/tiers-factures-panel";
+import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { couleurStatutDocument } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { FORMES_JURIDIQUES_MG } from "@/lib/madagascar";
@@ -36,6 +40,8 @@ import {
   libelleRolesTiers,
   soldeClientTiers,
   soldeFournisseurTiers,
+  tauxUtilisationPlafond,
+  avertissementPlafond,
   type StatutMouvementTiers,
 } from "@/lib/tiers";
 import type { ClientContact } from "@/lib/types";
@@ -47,7 +53,8 @@ type Onglet =
   | "solde"
   | "historique"
   | "conditions"
-  | "contacts";
+  | "contacts"
+  | "bat";
 
 export default function TiersDetailPage() {
   const params = useParams();
@@ -63,6 +70,8 @@ export default function TiersDetailPage() {
     commandes,
     bonsDeLivraison,
     parametres,
+    parametresAlertes,
+    bonsATirer,
     ventes,
     produits,
     categoriesProduits,
@@ -140,6 +149,9 @@ export default function TiersDetailPage() {
     { id: "historique", label: "Historique", icon: ScrollText },
     { id: "conditions", label: "Conditions", icon: SlidersHorizontal },
     { id: "contacts", label: "Contacts", icon: Contact },
+    ...(estClient(tiersActif)
+      ? [{ id: "bat" as const, label: "BAT", icon: Stamp }]
+      : []),
   ];
   const ongletAffiche: Onglet =
     onglet === "dashboard" && !estClient(tiersActif) ? "adresse" : onglet;
@@ -157,7 +169,17 @@ export default function TiersDetailPage() {
     ? balanceAgeeFournisseur(tiersActif.id, achats, parametres)
     : [];
   const plafond = tiersActif.plafondCredit ?? 0;
-  const depasse = Boolean(soldeC && plafond > 0 && soldeC.solde > plafond);
+  const usagePlafond = estClient(tiersActif)
+    ? tauxUtilisationPlafond(tiersActif, { factures, acomptes, parametres })
+    : null;
+  const nivPlafond = usagePlafond
+    ? avertissementPlafond(
+        usagePlafond.usagePercent,
+        parametresAlertes.ventePlafondCredit?.seuilPercent ?? 80,
+        usagePlafond.depasse,
+      )
+    : "ok";
+  const depasse = nivPlafond === "depasse";
   const forme = FORMES_JURIDIQUES_MG.find(
     (f) => f.id === tiersActif.formeJuridique,
   )?.label;
@@ -196,6 +218,11 @@ export default function TiersDetailPage() {
               {tiersActif.actif ? "Actif" : "Inactif"}
             </span>
             {depasse && <span className="badge badge-danger">Plafond dépassé</span>}
+            {nivPlafond === "avertissement" && (
+              <span className="badge badge-sand">
+                Alerte plafond {Math.round(usagePlafond?.usagePercent ?? 0)} %
+              </span>
+            )}
           </div>
         }
       />
@@ -249,13 +276,21 @@ export default function TiersDetailPage() {
       </nav>
 
       {ongletAffiche === "dashboard" && estClient(tiersActif) && (
-        <TiersDashboardPanel
-          clientId={tiersActif.id}
-          ventes={ventes}
-          produits={produits}
-          categories={categoriesProduits}
-          pointsDeVente={pointsDeVente}
-        />
+        <>
+          <KpiBatCards
+            bats={bonsATirer ?? []}
+            commandes={commandes}
+            delaiRelanceJours={parametresAlertes.batRelance?.delaiJours ?? 7}
+            clientId={tiersActif.id}
+          />
+          <TiersDashboardPanel
+            clientId={tiersActif.id}
+            ventes={ventes}
+            produits={produits}
+            categories={categoriesProduits}
+            pointsDeVente={pointsDeVente}
+          />
+        </>
       )}
 
       {ongletAffiche === "adresse" && (
@@ -282,7 +317,15 @@ export default function TiersDetailPage() {
                 <StatCard
                   label="Encours"
                   value={formatCurrency(soldeC.solde)}
-                  hint={plafond > 0 ? `Plafond ${formatCurrency(plafond)}` : "Sans plafond"}
+                  hint={
+                    plafond > 0
+                      ? `Plafond ${formatCurrency(plafond)}${
+                          usagePlafond?.usagePercent != null
+                            ? ` · ${Math.round(usagePlafond.usagePercent)} %`
+                            : ""
+                        }`
+                      : "Sans plafond"
+                  }
                 />
               </div>
               <h3 className="mb-2 mt-6 text-sm font-semibold">Balance âgée — client</h3>
@@ -310,6 +353,18 @@ export default function TiersDetailPage() {
 
       {ongletAffiche === "historique" && (
         <div>
+          {estFournisseur(tiersActif) && (
+            <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+              <h2 className="mb-2 font-display text-lg font-semibold">
+                Historique des prix par article
+              </h2>
+              <p className="mb-3 text-xs text-muted">
+                Prix proposés en demande de prix et prix d&apos;achat réalisés avec
+                ce fournisseur.
+              </p>
+              <HistoriquePrixFournisseur fournisseurId={tiersActif.id} />
+            </section>
+          )}
           <div className="mb-4 grid gap-3 sm:grid-cols-4">
             <label className="text-xs font-semibold text-muted">
               Du
@@ -501,6 +556,10 @@ export default function TiersDetailPage() {
             updateTiers(tiersActif.id, { contacts })
           }
         />
+      )}
+
+      {ongletAffiche === "bat" && estClient(tiersActif) && (
+        <TiersBatPanel clientId={tiersActif.id} />
       )}
     </RequirePermission>
   );

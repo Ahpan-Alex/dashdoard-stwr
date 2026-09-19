@@ -22,7 +22,7 @@ type CleRegle = keyof ParametresAlertes;
 type ItemRegle = {
   cle: CleRegle;
   titre: string;
-  champ?: "delai" | "percent";
+  champ?: "delai" | "percent" | "percent_montant";
   unite?: string;
 };
 
@@ -44,6 +44,12 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
       unite: "Jours sans vente ni transfert",
     },
     {
+      cle: "transfertEnAttente",
+      titre: "Transfert inter-sites en attente de validation",
+      champ: "delai",
+      unite: "Jours depuis la dernière action",
+    },
+    {
       cle: "stockCumpAnormal",
       titre: "Écart de valorisation CUMP",
       champ: "percent",
@@ -53,9 +59,15 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
   production: [
     {
       cle: "productionOfRetard",
-      titre: "OF en retard",
+      titre: "OF en retard (date prévue)",
       champ: "delai",
       unite: "Jours après la date prévue (0 = dès le dépassement)",
+    },
+    {
+      cle: "ofNonCloture",
+      titre: "OF non clôturé (inaction)",
+      champ: "delai",
+      unite: "Jours depuis la dernière action",
     },
     {
       cle: "productionEcartFabrication",
@@ -85,6 +97,22 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
       titre: "Avance de mission non rapprochée",
       champ: "delai",
       unite: "Jours sans clôture / rapprochement",
+    },
+    {
+      cle: "missionOuverte",
+      titre: "Mission ouverte sans clôture ni justificatif",
+      champ: "delai",
+      unite: "Jours depuis la dernière action",
+    },
+    {
+      cle: "missionEcartAcheteur",
+      titre: "Écart moyen par acheteur",
+      champ: "percent_montant",
+      unite: "Seuil % / montant (Ar)",
+    },
+    {
+      cle: "dpFournisseurAtypique",
+      titre: "Fournisseur retenu ni moins cher ni au dernier prix",
     },
     {
       cle: "achatCompte471",
@@ -119,6 +147,12 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
       champ: "percent",
       unite: "Anticipation (% du plafond)",
     },
+    {
+      cle: "batRelance",
+      titre: "BAT en attente de validation (relance client)",
+      champ: "delai",
+      unite: "Jours en attente avant alerte",
+    },
   ],
 };
 
@@ -128,8 +162,10 @@ const TYPE_PAR_CLE: Partial<Record<CleRegle, keyof typeof LABEL_TYPE_ALERTE>> = 
   stockSurstock: "stock_surstock",
   stockPeremption: "stock_peremption",
   stockDormant: "stock_dormant",
+  transfertEnAttente: "transfert_en_attente",
   stockCumpAnormal: "stock_cump_anormal",
   productionOfRetard: "of_retard",
+  ofNonCloture: "of_non_cloture",
   productionEcartFabrication: "of_ecart_matiere",
   productionRuptureComposant: "of_rupture_composant",
   productionSurchargeAtelier: "atelier_surcharge",
@@ -137,12 +173,16 @@ const TYPE_PAR_CLE: Partial<Record<CleRegle, keyof typeof LABEL_TYPE_ALERTE>> = 
   achatEcheanceDepassee: "achat_echeance_depassee",
   achatLivraisonPartielle: "achat_livraison_partielle",
   achatMissionAvance: "mission_avance_non_rapprochee",
+  missionOuverte: "mission_ouverte",
+  missionEcartAcheteur: "mission_ecart_acheteur",
+  dpFournisseurAtypique: "dp_fournisseur_atypique",
   achatCompte471: "mission_471_non_reclasse",
   achatDpSansReponse: "dp_sans_reponse",
   venteEcheanceApproche: "vente_echeance_approche",
   venteImpayee: "vente_impayee",
   ventePartielleSansMouvement: "vente_partielle_sans_mouvement",
   ventePlafondCredit: "vente_plafond_credit",
+  batRelance: "bat_relance",
 };
 
 export function ParametresAlertesForm({
@@ -208,13 +248,48 @@ export function ParametresAlertesForm({
                   ) : null}
                 </span>
               </label>
-              {item.champ && (
+              {item.champ === "percent_montant" ? (
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-56">
+                  <label className="text-xs font-semibold text-muted">
+                    Seuil (%)
+                    <input
+                      type="number"
+                      min={0}
+                      className="input mt-1"
+                      disabled={!regle.actif}
+                      value={regle.seuilPercent ?? ""}
+                      onChange={(e) =>
+                        patcher(item.cle, {
+                          seuilPercent:
+                            e.target.value === "" ? 0 : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-muted">
+                    Seuil montant (Ar, 0 = ignoré)
+                    <input
+                      type="number"
+                      min={0}
+                      className="input mt-1"
+                      disabled={!regle.actif}
+                      value={regle.seuilMontant ?? ""}
+                      onChange={(e) =>
+                        patcher(item.cle, {
+                          seuilMontant:
+                            e.target.value === "" ? 0 : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              ) : item.champ ? (
                 <label className="w-full shrink-0 text-xs font-semibold text-muted sm:w-56">
                   {item.unite}
                   <input
                     type="number"
                     min={0}
-                    step={item.champ === "percent" ? 1 : 1}
+                    step={1}
                     className="input mt-1"
                     disabled={!regle.actif}
                     value={
@@ -238,7 +313,7 @@ export function ParametresAlertesForm({
                     }
                   />
                 </label>
-              )}
+              ) : null}
             </div>
           );
         })}

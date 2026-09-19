@@ -160,7 +160,7 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
     href: "/parametres/achats",
     label: "Achats",
     description:
-      "Demandes de prix, types d'achat, natures de dépenses de mission et numérotation des factures fournisseur.",
+      "Demandes de prix, types d'achat, natures de dépenses de mission, délai des missions ouvertes et numérotation des factures fournisseur.",
     anyOf: ["achats.lire", "achats.gerer", "parametres.lire"],
     items: [
       {
@@ -174,7 +174,7 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
     id: "stock",
     href: "/parametres/stock",
     label: "Stock",
-    description: "Ouverture des stocks par site et par article.",
+    description: "Ouverture des stocks et délai d'alerte des transferts inter-sites.",
     items: [
       {
         href: "/parametres/stock-initial",
@@ -187,8 +187,14 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
     id: "fabrication",
     href: "/parametres/fabrication",
     label: "Fabrication",
-    description: "Nomenclatures, ateliers et règles de clôture des OF.",
-    items: [],
+    description: "Nomenclatures, ateliers, BAT, délai des OF non clôturés et règles de clôture.",
+    items: [
+      {
+        href: "/parametres/bat",
+        label: "Bons à tirer",
+        description: "Délai de relance et rôle habilité à valider.",
+      },
+    ],
   },
   {
     id: "tiers",
@@ -237,9 +243,30 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
           "Mise en page, pied de page, mention TVA optionnelle, signature.",
       },
       {
+        href: "/parametres/bat",
+        label: "Bons à tirer",
+        description: "Délai de relance et rôle habilité à valider un BAT.",
+      },
+      {
         href: "/parametres/affichage",
         label: "Types d'affichage",
         description: "Colonnes des tableaux, types d'affichage et export A4.",
+      },
+    ],
+  },
+  {
+    id: "tresorerie",
+    href: "/parametres/tresorerie",
+    label: "Trésorerie",
+    description:
+      "Comptes de caisse, banque et mobile monnaie, et modes de paiement paramétrables.",
+    permission: "parametres.gerer",
+    items: [
+      {
+        href: "/parametres/tresorerie",
+        label: "Comptes et modes",
+        description: "Comptes de trésorerie par site et catalogue des modes.",
+        exact: true,
       },
     ],
   },
@@ -273,6 +300,12 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
         href: "/comptabilite/transfert",
         label: "Transfert",
         description: "Transfert des pièces vers la comptabilité.",
+        permission: "comptabilite.lire",
+      },
+      {
+        href: "/comptabilite/produits-sans-compte",
+        label: "Produits sans compte",
+        description: "Articles sans compte de charge (classe 6) et/ou de vente (classe 7).",
         permission: "comptabilite.lire",
       },
     ],

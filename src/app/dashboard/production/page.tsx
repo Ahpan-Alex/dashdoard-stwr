@@ -25,13 +25,14 @@ function DashboardProductionContent() {
   const ofs = useStore((s) => s.ordresFabrication);
   const sites = useStore((s) => s.pointsDeVente);
   const siteId = useStore((s) => s.pointDeVenteActifId);
-  const ind = indicateursProduction(ofs, sites, siteId, range);
+  const sortiesAtelier = useStore((s) => s.sortiesAtelier);
+  const ind = indicateursProduction(ofs, sites, siteId, range, sortiesAtelier);
 
   return (
     <div>
       <PageHeader
         title="Dashboard — Production"
-        description="OF, écarts, pertes matières, cycle, charge et coût MOD par atelier."
+        description="OF, écarts, pertes matières, cycle, charge, coût MOD et consommables / entretien par atelier."
       />
       <DashboardSubnav />
 
@@ -49,11 +50,7 @@ function DashboardProductionContent() {
               : "Aucun OF clôturé avec date prévue"
           }
           info={
-            <IndicateurInfo>
-              OF clôturés (ou clôturés-annulés) de la période dont la date de
-              clôture réelle est ≤ date de clôture prévue. Les OF sans date
-              prévue sont exclus.
-            </IndicateurInfo>
+            <IndicateurInfo indicateur="production_respect_delais" />
           }
         />
       </div>
@@ -69,43 +66,39 @@ function DashboardProductionContent() {
               <th>OF</th>
               <th>
                 Écarts{" "}
-                <IndicateurInfo>
-                  Somme des montants d&apos;écart de clôture OF de l&apos;atelier
-                  sur la période.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="production_ecarts" />
               </th>
               <th>
                 Perte matière{" "}
-                <IndicateurInfo>
-                  Reliquat non retourné ÷ quantités sorties de l&apos;atelier.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="production_perte_matiere" />
+              </th>
+              <th>
+                Rendement matière{" "}
+                <IndicateurInfo indicateur="production_rendement_matiere" />
               </th>
               <th>
                 Cycle moyen{" "}
-                <IndicateurInfo>
-                  Jours entre création et clôture réelle des OF de l&apos;atelier.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="production_cycle" />
               </th>
               <th>
                 Charge{" "}
-                <IndicateurInfo>
-                  Part des heures MOD de l&apos;atelier dans le total (aucune
-                  capacité nominale n&apos;est paramétrée).
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="production_charge" />
               </th>
               <th>Heures MOD</th>
               <th>
                 Coût MOD{" "}
-                <IndicateurInfo>
-                  Lignes MOD saisies sur les OF, taux horaire figé à la saisie.
-                </IndicateurInfo>
+                <IndicateurInfo indicateur="production_cout_mod" />
+              </th>
+              <th>
+                Consommables / entretien{" "}
+                <IndicateurInfo indicateur="production_consommables" />
               </th>
             </tr>
           </thead>
           <tbody>
             {ind.parAtelier.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted">
+                <td colSpan={10} className="text-muted">
                   Aucun atelier / OF sur la période.
                 </td>
               </tr>
@@ -121,6 +114,11 @@ function DashboardProductionContent() {
                       : formatPercent(a.tauxPerte / 100)}
                   </td>
                   <td>
+                    {a.rendementMatiere == null
+                      ? "—"
+                      : formatPercent(a.rendementMatiere / 100)}
+                  </td>
+                  <td>
                     {a.cycleMoyenJours == null
                       ? "—"
                       : `${formatNumber(a.cycleMoyenJours, 1)} j`}
@@ -132,6 +130,7 @@ function DashboardProductionContent() {
                   </td>
                   <td>{formatNumber(a.heuresMod, 1)} h</td>
                   <td>{formatCurrency(a.coutMod)}</td>
+                  <td>{formatCurrency(a.coutConsommables)}</td>
                 </tr>
               ))
             )}

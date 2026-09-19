@@ -23,6 +23,8 @@ import {
   libelleRolesTiers,
   soldeClientTiers,
   soldeFournisseurTiers,
+  tauxUtilisationPlafond,
+  avertissementPlafond,
 } from "@/lib/tiers";
 import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import {
@@ -56,6 +58,7 @@ function TiersListe() {
     comptesComptables,
     ecrituresComptables,
     typesClients,
+    journalActivites,
   } = useStore();
   const liste = useMemo(
     () => assurerTiers({ clients, fournisseurs, tiers }),
@@ -68,9 +71,17 @@ function TiersListe() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(TIERS_FORM_VIDE);
 
+  const parametresAlertes = useStore((s) => s.parametresAlertes);
   const ctxFiltres = useMemo(
-    () => ({ factures, acomptes, achats, parametres }),
-    [factures, acomptes, achats, parametres],
+    () => ({
+      factures,
+      acomptes,
+      achats,
+      parametres,
+      journalActivites,
+      seuilPlafondPercent: parametresAlertes.ventePlafondCredit?.seuilPercent ?? 80,
+    }),
+    [factures, acomptes, achats, parametres, journalActivites, parametresAlertes],
   );
 
   const visibles = useMemo(
@@ -246,6 +257,23 @@ function TiersListe() {
           </select>
         </label>
         <label className="text-xs font-semibold text-muted">
+          Alerte plafond (seuil intermédiaire)
+          <select
+            className="select mt-1"
+            value={filtres.prochePlafond}
+            onChange={(e) =>
+              patchFiltre(
+                "prochePlafond",
+                e.target.value as FiltresListeTiers["prochePlafond"],
+              )
+            }
+          >
+            <option value="tous">Tous</option>
+            <option value="oui">Oui</option>
+            <option value="non">Non</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
           Site de rattachement
           <select
             className="select mt-1"
@@ -302,6 +330,24 @@ function TiersListe() {
             <option value="actif">Actif</option>
             <option value="inactif">Inactif</option>
           </select>
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Créé du
+          <input
+            type="date"
+            className="input mt-1"
+            value={filtres.dateCreationDebut}
+            onChange={(e) => patchFiltre("dateCreationDebut", e.target.value)}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Créé au
+          <input
+            type="date"
+            className="input mt-1"
+            value={filtres.dateCreationFin}
+            onChange={(e) => patchFiltre("dateCreationFin", e.target.value)}
+          />
         </label>
         <div className="flex items-end">
           <button
@@ -363,6 +409,16 @@ function TiersListe() {
                 const sf = estFournisseur(t)
                   ? soldeFournisseurTiers(t.id, achats)
                   : null;
+                const plafond = estClient(t)
+                  ? tauxUtilisationPlafond(t, { factures, acomptes, parametres })
+                  : null;
+                const niv = plafond
+                  ? avertissementPlafond(
+                      plafond.usagePercent,
+                      parametresAlertes.ventePlafondCredit?.seuilPercent ?? 80,
+                      plafond.depasse,
+                    )
+                  : "ok";
                 return (
                   <tr key={t.id}>
                     <td className="font-medium">
@@ -381,6 +437,14 @@ function TiersListe() {
                       >
                         {t.actif ? "Actif" : "Inactif"}
                       </span>
+                      {niv === "depasse" && (
+                        <span className="badge badge-danger ml-1">Plafond dépassé</span>
+                      )}
+                      {niv === "avertissement" && (
+                        <span className="badge badge-sand ml-1">
+                          Plafond {Math.round(plafond!.usagePercent ?? 0)} %
+                        </span>
+                      )}
                     </td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">

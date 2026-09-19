@@ -1,38 +1,33 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DemandePrixDocument } from "@/components/demande-prix-document";
 import { DocumentPrintActions } from "@/components/document-print-actions";
+import { DpComparatif } from "@/components/dp-comparatif";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { SelecteurApercuCommandesFournisseur } from "@/components/apercu-bon-commande-fournisseur";
 import { TransformerDpAchat } from "@/components/transformer-dp-achat";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { createId } from "@/lib/id";
 import {
-  DP_STATUT_LABELS,
+  badgeClasseDp,
+  consultationsDp,
+  DP_CONSULTATION_STATUT_LABELS,
   dpEstVerrouillee,
-  offreLigneFournisseur,
-  prixMiniLigne,
-  rangsPrixParFournisseur,
-  trierOffresParPrix,
+  libelleStatutGlobalDp,
+  statutConsultationEffective,
+  statutGlobalDp,
 } from "@/lib/demandes-prix";
 import { produitEstAchetable } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
 import { TIERS_DIVERS_MARCHE_ID } from "@/lib/missions";
 import { assurerTiers, estFournisseur } from "@/lib/tiers";
 import { useStore } from "@/lib/store";
-import type { DemandePrixOffre, DemandePrixStatut } from "@/lib/types";
-
-function badgeDp(statut: DemandePrixStatut) {
-  if (statut === "cloturee") return "badge-success";
-  if (statut === "en_cours") return "badge-sand";
-  if (statut === "annulee") return "badge-danger";
-  return "badge-sea";
-}
+import type { DemandePrixConsultationStatut } from "@/lib/types";
 
 export default function DemandePrixDetailPage() {
   const params = useParams();
@@ -45,12 +40,13 @@ export default function DemandePrixDetailPage() {
   const tiers = useStore((s) => s.tiers);
   const modifierDemandePrix = useStore((s) => s.modifierDemandePrix);
   const changerStatutDemandePrix = useStore((s) => s.changerStatutDemandePrix);
-  const patchOffreDemandePrix = useStore((s) => s.patchOffreDemandePrix);
+  const majConsultationDemandePrix = useStore((s) => s.majConsultationDemandePrix);
   const parametres = useStore((s) => s.parametres);
   const achats = useStore((s) => s.achats);
-  const [triPrix, setTriPrix] = useState<"asc" | "desc">("asc");
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
   const [nouvelArticleId, setNouvelArticleId] = useState("");
   const [nouvelleQte, setNouvelleQte] = useState("1");
+  const [nouvellesSpecs, setNouvellesSpecs] = useState("");
   const [frnDocument, setFrnDocument] = useState("");
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -110,15 +106,7 @@ export default function DemandePrixDetailPage() {
 
   const verrouille = dpEstVerrouillee(dp);
   const brouillon = dp.statut === "brouillon";
-
-  function majOffre(
-    ligneId: string,
-    fournisseurId: string,
-    patch: Partial<Pick<DemandePrixOffre, "prixUnitaire" | "delaiJours">>,
-  ) {
-    const res = patchOffreDemandePrix(dp!.id, ligneId, fournisseurId, patch);
-    if (!res.ok) alert(res.reason);
-  }
+  const global = statutGlobalDp(dp);
 
   function ajouterArticle() {
     if (!nouvelArticleId) {
@@ -137,7 +125,7 @@ export default function DemandePrixDetailPage() {
     const res = modifierDemandePrix(dp!.id, {
       lignes: [
         ...(dp!.lignes ?? []),
-        { id: createId("dpl"), produitId: nouvelArticleId, quantite: qte },
+        { id: createId("dpl"), produitId: nouvelArticleId, quantite: qte, specifications: nouvellesSpecs.trim() || undefined },
       ],
     });
     if (!res.ok) {
@@ -146,6 +134,7 @@ export default function DemandePrixDetailPage() {
     }
     setNouvelArticleId("");
     setNouvelleQte("1");
+    setNouvellesSpecs("");
   }
 
   function retirerArticle(ligneId: string) {
@@ -164,12 +153,8 @@ export default function DemandePrixDetailPage() {
     if (!res.ok) alert(res.reason);
   }
 
-  function toggleRetenu(fid: string) {
-    const actuel = dp!.fournisseurIdsRetenus ?? [];
-    const next = actuel.includes(fid)
-      ? actuel.filter((x) => x !== fid)
-      : [...actuel, fid];
-    const res = modifierDemandePrix(dp!.id, { fournisseurIdsRetenus: next });
+  function setConsultation(fid: string, statut: DemandePrixConsultationStatut) {
+    const res = majConsultationDemandePrix(dp!.id, fid, statut);
     if (!res.ok) alert(res.reason);
   }
 
@@ -177,7 +162,7 @@ export default function DemandePrixDetailPage() {
     <div>
       <PageHeader
         title={dp.numero}
-        description="Tableau comparatif article par article : rang automatique selon le prix proposé, mise en évidence du plus bas."
+        description="Une DP par consultation fournisseur : mêmes articles, réponses et statuts distincts. Comparatif ligne à ligne, puis commande(s)."
         showPosSelector={false}
         actions={
           <Link href="/demandes-prix" className="btn btn-secondary">
@@ -188,8 +173,11 @@ export default function DemandePrixDetailPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <span className={`badge ${badgeDp(dp.statut)}`}>{DP_STATUT_LABELS[dp.statut]}</span>
+        <span className={`badge ${badgeClasseDp(global)}`}>{libelleStatutGlobalDp(dp)}</span>
         <span className="text-sm text-muted">{formatDate(dp.date)}</span>
+        {dp.origine === "alerte_stock" && (
+          <span className="badge badge-sand">Depuis alerte stock</span>
+        )}
         <label className="flex items-center gap-2 text-xs font-semibold text-muted">
           Validité (jours)
           <input
@@ -201,6 +189,40 @@ export default function DemandePrixDetailPage() {
             onChange={(e) => {
               const res = modifierDemandePrix(dp.id, {
                 validiteJours: Number(e.target.value) || 15,
+              });
+              if (!res.ok) alert(res.reason);
+            }}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+          Site destinataire
+          <select
+            className="select w-48"
+            value={dp.pointDeVenteId ?? ""}
+            disabled={verrouille}
+            onChange={(e) => {
+              const res = modifierDemandePrix(dp.id, { pointDeVenteId: e.target.value });
+              if (!res.ok) alert(res.reason);
+            }}
+          >
+            <option value="">—</option>
+            {pointsDeVente.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+          Livraison souhaitée
+          <input
+            type="date"
+            className="input"
+            value={(dp.dateLivraisonSouhaitee ?? "").slice(0, 10)}
+            disabled={verrouille}
+            onChange={(e) => {
+              const res = modifierDemandePrix(dp.id, {
+                dateLivraisonSouhaitee: e.target.value,
               });
               if (!res.ok) alert(res.reason);
             }}
@@ -223,16 +245,29 @@ export default function DemandePrixDetailPage() {
             </button>
           )}
           {dp.statut === "en_cours" && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                const res = changerStatutDemandePrix(dp.id, "cloturee");
-                if (!res.ok) alert(res.reason);
-              }}
-            >
-              Clôturer
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const res = changerStatutDemandePrix(dp.id, "cloturee");
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                Clôturer
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  if (!confirm("Clôturer cette DP sans suite (aucun fournisseur retenu) ?")) return;
+                  const res = changerStatutDemandePrix(dp.id, "cloturee_sans_suite");
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                Clôturer sans suite
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -257,6 +292,7 @@ export default function DemandePrixDetailPage() {
                 <div key={ligne.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span>
                     {p ? `${p.code} — ${libelleProduit(p)}` : "Article"} · qté {ligne.quantite}
+                    {ligne.specifications ? ` · ${ligne.specifications}` : ""}
                   </span>
                   {brouillon && (
                     <button
@@ -275,7 +311,7 @@ export default function DemandePrixDetailPage() {
             )}
           </div>
           {brouillon && (
-            <div className="grid gap-3 lg:grid-cols-[1fr_8rem_auto]">
+            <div className="grid gap-3 lg:grid-cols-[1fr_8rem_1fr_auto]">
               <SelecteurArticle
                 produits={articles}
                 value={nouvelArticleId}
@@ -292,6 +328,14 @@ export default function DemandePrixDetailPage() {
                   className="input mt-1"
                   value={nouvelleQte}
                   onChange={(e) => setNouvelleQte(e.target.value)}
+                />
+              </label>
+              <label className="block text-xs font-semibold text-muted">
+                Spécifications
+                <input
+                  className="input mt-1"
+                  value={nouvellesSpecs}
+                  onChange={(e) => setNouvellesSpecs(e.target.value)}
                 />
               </label>
               <button type="button" className="btn btn-secondary self-end" onClick={ajouterArticle}>
@@ -328,162 +372,77 @@ export default function DemandePrixDetailPage() {
         </section>
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold">Comparatif article par article</h2>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setTriPrix(triPrix === "asc" ? "desc" : "asc")}
-          >
-            {triPrix === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-            Prix {triPrix === "asc" ? "croissant" : "décroissant"}
-          </button>
-        </div>
-        <p className="mb-4 text-xs text-muted">
-          Le rang (1, 2, 3…) est calculé automatiquement d&apos;après le prix proposé pour chaque
-          article. Le prix le plus bas est mis en évidence.
+        <h2 className="mb-2 font-display text-lg font-semibold">
+          Suivi des fournisseurs consultés
+        </h2>
+        <p className="mb-3 text-xs text-muted">
+          La DP est dupliquée virtuellement : mêmes lignes, statut et réponse propres à
+          chaque fournisseur. Le statut global se calcule à partir de ces suivis.
         </p>
-
-        {(dp.lignes ?? []).length === 0 || (dp.fournisseurIds ?? []).length === 0 ? (
-          <p className="text-sm text-muted">
-            Ajoutez au moins un article et un fournisseur (en brouillon) pour saisir les prix.
-          </p>
+        {(dp.fournisseurIds ?? []).length === 0 ? (
+          <p className="text-sm text-muted">Aucun fournisseur consulté.</p>
         ) : (
-          <div className="space-y-6">
-            {(dp.lignes ?? []).map((ligne) => {
-              const p = produits.find((x) => x.id === ligne.produitId);
-              const rows: DemandePrixOffre[] = (dp.fournisseurIds ?? []).map((fid) => {
-                const exist = offreLigneFournisseur(dp, ligne.id, fid);
-                return (
-                  exist ?? {
-                    id: `tmp-${ligne.id}-${fid}`,
-                    ligneId: ligne.id,
-                    fournisseurId: fid,
-                    prixUnitaire: 0,
-                  }
-                );
-              });
-              const triées = trierOffresParPrix(rows, triPrix);
-              const rangs = rangsPrixParFournisseur(triées);
-              const mini = prixMiniLigne(triées, ligne.id);
-              return (
-                <div key={ligne.id}>
-                  <h3 className="mb-2 text-sm font-semibold">
-                    {p ? `${p.code} — ${libelleProduit(p)}` : "Article"}{" "}
-                    <span className="font-normal text-muted">· qté {ligne.quantite}</span>
-                  </h3>
-                  <div className="table-shell">
-                    <table className="data">
-                      <thead>
-                        <tr>
-                          <th>Rang</th>
-                          <th>Fournisseur</th>
-                          <th>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 font-semibold"
-                              onClick={() => setTriPrix(triPrix === "asc" ? "desc" : "asc")}
-                            >
-                              Prix
-                              {triPrix === "asc" ? (
-                                <ArrowUp className="h-3.5 w-3.5" />
-                              ) : (
-                                <ArrowDown className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </th>
-                          <th>Délai (j)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {triées.map((o) => {
-                          const rang = rangs.get(o.fournisseurId);
-                          const bas = mini != null && o.prixUnitaire > 0 && o.prixUnitaire === mini;
-                          return (
-                            <tr key={`${o.ligneId}-${o.fournisseurId}`} className={bas ? "bg-emerald-50" : undefined}>
-                              <td className="font-semibold">{rang ?? "—"}</td>
-                              <td>{nomFrn(o.fournisseurId)}</td>
-                              <td>
-                                {verrouille ? (
-                                  o.prixUnitaire > 0 ? (
-                                    <span className={bas ? "font-semibold text-emerald-800" : undefined}>
-                                      {formatCurrency(o.prixUnitaire)}
-                                      {bas ? " · plus bas" : ""}
-                                    </span>
-                                  ) : (
-                                    "—"
-                                  )
-                                ) : (
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    className={`input w-32 ${bas ? "border-emerald-400" : ""}`}
-                                    value={o.prixUnitaire || ""}
-                                    onChange={(e) =>
-                                      majOffre(ligne.id, o.fournisseurId, {
-                                        prixUnitaire: Number(e.target.value) || 0,
-                                      })
-                                    }
-                                  />
-                                )}
-                              </td>
-                              <td>
-                                {verrouille ? (
-                                  o.delaiJours ?? "—"
-                                ) : (
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    className="input w-20"
-                                    value={o.delaiJours ?? ""}
-                                    onChange={(e) =>
-                                      majOffre(ligne.id, o.fournisseurId, {
-                                        delaiJours:
-                                          e.target.value === "" ? undefined : Number(e.target.value),
-                                      })
-                                    }
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="table-shell">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Fournisseur</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {consultationsDp(dp).map((c) => {
+                  const effectif = statutConsultationEffective(dp, c.fournisseurId);
+                  return (
+                    <tr key={c.fournisseurId}>
+                      <td className="font-medium">{nomFrn(c.fournisseurId)}</td>
+                      <td>
+                        <span className="badge badge-sea">
+                          {DP_CONSULTATION_STATUT_LABELS[effectif]}
+                        </span>
+                      </td>
+                      <td>
+                        {!verrouille && (
+                          <div className="flex flex-wrap gap-1">
+                            {(
+                              [
+                                "envoyee",
+                                "en_attente",
+                                "relancee",
+                                "sans_reponse",
+                              ] as DemandePrixConsultationStatut[]
+                            ).map((st) => (
+                              <button
+                                key={st}
+                                type="button"
+                                className={`btn !px-2 !py-1 text-xs ${
+                                  effectif === st ? "btn-primary" : "btn-secondary"
+                                }`}
+                                onClick={() => setConsultation(c.fournisseurId, st)}
+                              >
+                                {DP_CONSULTATION_STATUT_LABELS[st]}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-        <h2 className="mb-2 font-display text-lg font-semibold">Fournisseur(s) retenu(s)</h2>
-        <p className="mb-3 text-xs text-muted">
-          Cochez le ou les fournisseurs retenus après comparatif. Vous pouvez le faire même
-          après clôture.
+        <h2 className="mb-2 font-display text-lg font-semibold">Comparatif article par article</h2>
+        <p className="mb-4 text-xs text-muted">
+          Prix et délai côte à côte. Le plus bas est mis en évidence. Une alerte apparaît
+          si le prix net dépasse le dernier achat connu. Retenez un fournisseur par ligne.
         </p>
-        {(dp.fournisseurIds ?? []).length === 0 ? (
-          <p className="text-sm text-muted">Aucun fournisseur consulté.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {(dp.fournisseurIds ?? []).map((fid) => (
-              <label
-                key={fid}
-                className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={(dp.fournisseurIdsRetenus ?? []).includes(fid)}
-                  disabled={dp.statut === "annulee"}
-                  onChange={() => toggleRetenu(fid)}
-                />
-                {nomFrn(fid)}
-              </label>
-            ))}
-          </div>
-        )}
+        <DpComparatif dp={dp} nomFrn={nomFrn} verrouille={verrouille} />
       </section>
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
@@ -525,15 +484,14 @@ export default function DemandePrixDetailPage() {
         )}
       </section>
 
-      {dp.statut !== "annulee" && (
+      {dp.statut !== "annulee" && dp.statut !== "cloturee_sans_suite" && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-2 font-display text-lg font-semibold">
             Transformer en commande(s) fournisseur
           </h2>
           <p className="mb-3 text-xs text-muted">
-            Un même article peut être partagé entre plusieurs fournisseurs. Chaque
-            fournisseur reçoit sa propre commande brouillon : prévisualisez et
-            téléchargez le bon, puis validez.
+            Retenez un fournisseur par ligne, puis confirmez la transformation. Une
+            commande brouillon est créée par fournisseur, avec le lien DP → commande.
           </p>
           <TransformerDpAchat dp={dp} nomFrn={nomFrn} />
         </section>

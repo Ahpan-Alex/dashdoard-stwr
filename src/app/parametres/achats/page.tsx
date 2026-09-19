@@ -4,14 +4,23 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { ParametresSectionFrame } from "@/components/parametres-subnav";
+import { RegleDelaiParametres } from "@/components/regle-delai-parametres";
 import { RowCrudActions } from "@/components/row-crud-actions";
 import { useAuthStore } from "@/lib/auth-store";
-import { comptesParClasse } from "@/lib/comptabilite";
+import { compteChargeDefautPourType, comptesParClasse } from "@/lib/comptabilite";
 import {
   nbDepensesParNature,
   naturesDepenseTriees,
 } from "@/lib/natures-depense-mission";
-import { TYPE_ACHAT_LABELS, TYPES_ACHAT_LIBRES, TYPES_ACHAT_PRODUIT } from "@/lib/type-achat";
+import {
+  motifsSortieAtelierTries,
+} from "@/lib/sorties-atelier";
+import {
+  TYPE_ACHAT_COMPTE_CHARGE_PREFIX,
+  TYPE_ACHAT_LABELS,
+  TYPES_ACHAT_LIBRES,
+  TYPES_ACHAT_PRODUIT,
+} from "@/lib/type-achat";
 import { useStore } from "@/lib/store";
 import type { NatureDepenseMission } from "@/lib/types";
 import {
@@ -22,6 +31,7 @@ import {
 export default function ParametresAchatsPage() {
   const parametres = useStore((s) => s.parametres);
   const updateParametres = useStore((s) => s.updateParametres);
+  const comptesComptables = useStore((s) => s.comptesComptables);
   const actuel = validiteJoursDefautAchats(parametres);
   const [saisie, setSaisie] = useState(String(actuel));
   const [message, setMessage] = useState<string | null>(null);
@@ -36,6 +46,7 @@ export default function ParametresAchatsPage() {
 
   return (
     <ParametresSectionFrame sectionId="achats">
+      <RegleDelaiParametres type="mission_achat" />
       <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="font-display text-lg font-semibold">
           Demandes de prix et commandes fournisseurs
@@ -68,12 +79,13 @@ export default function ParametresAchatsPage() {
       </section>
 
       <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
-        <h2 className="font-display text-lg font-semibold">Types d&apos;achat</h2>
+          <h2 className="font-display text-lg font-semibold">Types d&apos;achat</h2>
         <p className="mt-2 text-sm text-muted">
           Types utilisés sur les fiches articles et les lignes de commande
           fournisseur. Le type d&apos;une ligne catalogue se choisit sur la
           fiche produit ; les types libres (service général, immobilisation) se
-          saisissent à la ligne.
+          saisissent à la ligne. Les services généraux (EPI, restauration,
+          etc.) ne transitent pas par le stock.
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -81,9 +93,18 @@ export default function ParametresAchatsPage() {
               Sur fiche produit
             </p>
             <ul className="mt-2 space-y-1 text-sm text-ink">
-              {TYPES_ACHAT_PRODUIT.map((t) => (
-                <li key={t}>{TYPE_ACHAT_LABELS[t]}</li>
-              ))}
+              {TYPES_ACHAT_PRODUIT.map((t) => {
+                const defaut = compteChargeDefautPourType(t, comptesComptables);
+                return (
+                  <li key={t}>
+                    {TYPE_ACHAT_LABELS[t]}
+                    <span className="ml-1 text-xs text-muted">
+                      (compte {TYPE_ACHAT_COMPTE_CHARGE_PREFIX[t]}
+                      {defaut ? ` · ${defaut.numero} ${defaut.libelle}` : ""})
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
           <div>
@@ -92,7 +113,12 @@ export default function ParametresAchatsPage() {
             </p>
             <ul className="mt-2 space-y-1 text-sm text-ink">
               {TYPES_ACHAT_LIBRES.map((t) => (
-                <li key={t}>{TYPE_ACHAT_LABELS[t]}</li>
+                <li key={t}>
+                  {TYPE_ACHAT_LABELS[t]}
+                  <span className="ml-1 text-xs text-muted">
+                    (classe {TYPE_ACHAT_COMPTE_CHARGE_PREFIX[t]})
+                  </span>
+                </li>
               ))}
             </ul>
           </div>
@@ -100,6 +126,7 @@ export default function ParametresAchatsPage() {
       </section>
 
       <NaturesDepenseMissionSection />
+      <MotifsSortieAtelierSection />
     </ParametresSectionFrame>
   );
 }
@@ -276,3 +303,99 @@ function NaturesDepenseMissionSection() {
     </section>
   );
 }
+
+function MotifsSortieAtelierSection() {
+  const motifs = useStore((s) => s.motifsSortieAtelier ?? []);
+  const sorties = useStore((s) => s.sortiesAtelier ?? []);
+  const addMotifSortieAtelier = useStore((s) => s.addMotifSortieAtelier);
+  const updateMotifSortieAtelier = useStore((s) => s.updateMotifSortieAtelier);
+  const deleteMotifSortieAtelier = useStore((s) => s.deleteMotifSortieAtelier);
+  const peutGerer = useAuthStore((s) => s.hasPermission("parametres.gerer"));
+  const liste = useMemo(() => motifsSortieAtelierTries(motifs), [motifs]);
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [libelle, setLibelle] = useState("");
+
+  function demarrer(id?: string, actuel?: string) {
+    setEditingId(id ?? null);
+    setLibelle(actuel ?? "");
+    setError(null);
+    setOpen(true);
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const res = editingId
+      ? updateMotifSortieAtelier(editingId, { libelle })
+      : addMotifSortieAtelier({ libelle });
+    if (!res.ok) {
+      setError(res.reason ?? "Enregistrement impossible.");
+      return;
+    }
+    setOpen(false);
+    setEditingId(null);
+    setLibelle("");
+  }
+
+  return (
+    <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-lg font-semibold">
+            Motifs de sortie atelier
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Liste proposée lors d&apos;une sortie de pièces d&apos;usure /
+            consommables vers un atelier (hors OF).
+          </p>
+        </div>
+        {peutGerer && (
+          <button type="button" className="btn btn-secondary" onClick={() => demarrer()}>
+            <Plus className="h-4 w-4" />
+            Motif
+          </button>
+        )}
+      </div>
+      {open && (
+        <form onSubmit={onSubmit} className="mb-4 flex flex-wrap items-end gap-3">
+          <label className="text-xs font-semibold text-muted">
+            Libellé
+            <input
+              className="input mt-1"
+              value={libelle}
+              onChange={(e) => setLibelle(e.target.value)}
+              required
+            />
+          </label>
+          <button type="submit" className="btn btn-primary">
+            Enregistrer
+          </button>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </form>
+      )}
+      <ul className="space-y-2 text-sm">
+        {liste.map((m) => (
+          <li key={m.id} className="flex items-center justify-between gap-2">
+            <span>{m.libelle}</span>
+            {peutGerer && (
+              <RowCrudActions
+                onView={() => demarrer(m.id, m.libelle)}
+                onEdit={() => demarrer(m.id, m.libelle)}
+                onDelete={() => {
+                  if (sorties.some((s) => s.motifId === m.id)) {
+                    alert("Ce motif est déjà utilisé.");
+                    return;
+                  }
+                  const res = deleteMotifSortieAtelier(m.id);
+                  if (!res.ok) alert(res.reason);
+                }}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+

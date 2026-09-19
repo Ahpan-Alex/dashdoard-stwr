@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { ParametresSectionFrame } from "@/components/parametres-subnav";
+import { RegleDelaiParametres } from "@/components/regle-delai-parametres";
 import { useAuthStore } from "@/lib/auth-store";
 import { atelierSansTauxMod, tauxHoraireModAtelier } from "@/lib/fabrication";
 import { formatCurrency } from "@/lib/format";
@@ -60,6 +61,7 @@ export default function ParametresFabricationPage() {
 
   return (
     <ParametresSectionFrame sectionId="fabrication">
+      <RegleDelaiParametres type="of" />
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <Link
           href="/parametres/produits"

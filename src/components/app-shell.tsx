@@ -6,6 +6,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { rebuildVentesDepuisFactures } from "@/lib/commercial";
 import { useStore } from "@/lib/store";
 import { HydrationGate } from "./hydration-gate";
+import { FilAriane } from "./fil-ariane";
 import { Sidebar } from "./sidebar";
 
 const AUTH_PUBLIC = new Set([
@@ -124,6 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Sidebar />
             <main className="flex-1 overflow-auto">
               <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
+                <FilAriane />
                 {children}
               </div>
             </main>

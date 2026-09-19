@@ -12,6 +12,7 @@ import {
   coutsNonAffectes,
   depassementNomenclature,
   lignesMainOeuvre,
+  motifLancementOfDimension,
   OF_STATUT_LABELS,
   ofEstVerrouille,
   ofPeutMouvementer,
@@ -19,13 +20,19 @@ import {
   quantiteSortieComposant,
   quantiteTheoriqueComposantOf,
   reliquatsMatieres,
-  stockDisponibleComposant,
   tauxHoraireModAtelier,
 } from "@/lib/fabrication";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { natureStockDuProduit, produitEstAchetable } from "@/lib/nature-stock";
+import {
+  dimensionDepuisCommande,
+  TYPE_CALCUL_NOMENCLATURE_LABELS,
+  typeCalculNomenclature,
+  perimetreVenteM,
+  surfaceVenteM2,
+} from "@/lib/nomenclature-formules";
 import { libelleProduit } from "@/lib/produits";
 import { siteEstAtelier, sitesMagasin } from "@/lib/sites";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
@@ -38,11 +45,28 @@ import {
   motifBatOfManquant,
 } from "@/lib/bat";
 import { fournisseurPrioritaireId } from "@/lib/classement-fournisseurs";
+import {
+  achatsReservantOf,
+  matieresReserveesPourOf,
+  quantiteReserveeOf,
+  stockDisponiblePourOf,
+  stockLibreDisponible,
+} from "@/lib/repartition-achat-of";
+import {
+  badgeClasseBesoin,
+  BESOIN_ACHAT_STATUT_LABELS,
+  besoinsPourOf,
+  couvertureBesoin,
+  statutBesoinAchat,
+} from "@/lib/besoins-achat";
 import type {
   NatureStock,
   OfNomenclatureLigne,
+  OrdreFabrication,
   OrdreFabricationStatut,
   PointDeVente,
+  Produit,
+  TransfertMatiereOf,
 } from "@/lib/types";
 
 function badgeOf(statut: OrdreFabricationStatut) {
@@ -68,11 +92,15 @@ export default function OrdreFabricationDetailPage() {
   const produits = useStore((s) => s.produits);
   const commandes = useStore((s) => s.commandes);
   const bats = useStore((s) => s.bonsATirer ?? []);
-  const achats = useStore((s) => s.achats.filter((a) => a.ofId === id));
+  const tousAchats = useStore((s) => s.achats);
+  const tousBesoins = useStore((s) => s.besoinsAchat ?? []);
+  const achats = achatsReservantOf(tousAchats, id);
   const fournisseurs = useStore((s) => s.fournisseurs);
   const entrees = useStore((s) => s.entrees);
   const ventes = useStore((s) => s.ventes);
   const inventaires = useStore((s) => s.inventaires);
+  const ofs = useStore((s) => s.ordresFabrication);
+  const transfertsMatiereOf = useStore((s) => s.transfertsMatiereOf ?? []);
   const {
     demarrerOrdreFabrication,
     modifierOrdreFabrication,
@@ -86,6 +114,7 @@ export default function OrdreFabricationDetailPage() {
     cloturerOrdreFabrication,
     annulerOrdreFabrication,
     creerDemandeAchatDepuisOf,
+    creerBesoinAchat,
   } = useStore();
   const { visibles, rattache } = useSitesVisibles();
   const tousSites = useStore((s) => s.pointsDeVente);
@@ -222,10 +251,71 @@ export default function OrdreFabricationDetailPage() {
             {" / "}
             {of.dateClotureReelle ? formatDateTime(of.dateClotureReelle) : "—"}
           </p>
+          {(() => {
+            const dimCmd = of.commandeId
+              ? dimensionDepuisCommande(commande, of.produitId)
+              : null;
+            const dimEditable = brouillon && !dimCmd;
+            const L = of.dimensionLargeur;
+            const H = of.dimensionHauteur;
+            return (
+              <div className="sm:col-span-2 lg:col-span-3 grid gap-3 sm:grid-cols-2">
+                {dimEditable ? (
+                  <>
+                    <label className="block text-xs font-semibold text-muted">
+                      Largeur (m)
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        className="input mt-1"
+                        value={L ?? ""}
+                        onChange={(e) =>
+                          modifierOrdreFabrication(of.id, {
+                            dimensionLargeur: Number(e.target.value) || undefined,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-muted">
+                      Hauteur (m)
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        className="input mt-1"
+                        value={H ?? ""}
+                        onChange={(e) =>
+                          modifierOrdreFabrication(of.id, {
+                            dimensionHauteur: Number(e.target.value) || undefined,
+                          })
+                        }
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <p>
+                    <span className="text-xs font-semibold uppercase text-muted">
+                      Dimension {dimCmd ? "(commande)" : ""}
+                    </span>
+                    <br />
+                    {L && H
+                      ? `${formatNumber(L)} × ${formatNumber(H)} m · ${formatNumber(surfaceVenteM2(L, H))} m² · pér. ${formatNumber(perimetreVenteM(L, H))} m`
+                      : "—"}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
-        {brouillon && motifBatOfManquant(of, bats) && (
+        {brouillon && motifLancementOfDimension(of) && (
           <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            {motifBatOfManquant(of, bats)}{" "}
+            {motifLancementOfDimension(of)}
+          </p>
+        )}
+        {brouillon && motifBatOfManquant(of, bats, commandes) && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {motifBatOfManquant(of, bats, commandes)}{" "}
             <Link href="/commandes/bat" className="underline">
               Ouvrir les BAT
             </Link>
@@ -259,9 +349,13 @@ export default function OrdreFabricationDetailPage() {
         <h2 className="mb-3 font-display text-lg font-semibold">Nomenclature de cet OF</h2>
         <p className="mb-3 text-xs text-muted">
           Éditable pour cet OF uniquement — la fiche produit n&apos;est pas modifiée.
+          Les quantités surface / périmètre / ratio sont calculées à la création (et
+          si la dimension change en brouillon). Le besoin OF = qté unitaire × quantité
+          prévue.
         </p>
         <NomenclatureOf
           lignes={of.nomenclatureLignes}
+          quantitePrevue={of.quantitePrevue}
           disabled={verrouille}
           produits={produits.filter((p) => p.id !== of.produitId && p.actif)}
           onChange={(nomenclatureLignes) =>
@@ -302,6 +396,7 @@ export default function OrdreFabricationDetailPage() {
         <h2 className="mb-3 font-display text-lg font-semibold">Sorties de matières</h2>
         {enCours && (
           <FormSortie
+            ofId={of.id}
             composants={produits.filter(
               (p) =>
                 p.actif &&
@@ -371,7 +466,7 @@ export default function OrdreFabricationDetailPage() {
           </table>
         </div>
 
-        {enCours && (
+        {(enCours || brouillon) && (
           <div className="mt-4 space-y-2">
             {of.nomenclatureLignes.map((l) => {
               const c = produits.find((p) => p.id === l.composantId);
@@ -379,13 +474,19 @@ export default function OrdreFabricationDetailPage() {
               const besoin = quantiteTheoriqueComposantOf(of, l.composantId);
               const sorti = quantiteSortieComposant(of, l.composantId);
               const manquant = Math.max(0, besoin - sorti);
-              const dispo = stockDisponibleComposant({
-                produitId: l.composantId,
-                siteId: of.atelierId,
+              const dispo = stockDisponiblePourOf(
+                l.composantId,
+                of.atelierId,
+                of.id,
                 entrees,
                 ventes,
                 inventaires,
-              });
+                {
+                  achats: tousAchats,
+                  ordresFabrication: ofs,
+                  transfertsMatiereOf,
+                },
+              );
               if (dispo + 1e-9 >= manquant || manquant <= 0) return null;
               return (
                 <div
@@ -396,7 +497,8 @@ export default function OrdreFabricationDetailPage() {
                     Stock insuffisant pour {c.code} (besoin restant {formatNumber(manquant)},
                     dispo atelier {formatNumber(dispo)}).
                   </span>
-                  {produitEstAchetable(c) ? (
+                      {produitEstAchetable(c) ? (
+                    <>
                     <button
                       type="button"
                       className="btn btn-secondary"
@@ -404,6 +506,33 @@ export default function OrdreFabricationDetailPage() {
                     >
                       Créer une demande d&apos;achat
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const res = creerBesoinAchat({
+                          produitId: c.id,
+                          quantiteNecessaire: manquant,
+                          pointDeVenteId: magasins[0]?.id ?? of.atelierId,
+                          repartitionsOf: [
+                            {
+                              id: createId("bao"),
+                              ofId: of.id,
+                              quantite: manquant,
+                              pointDeVenteId: of.atelierId,
+                            },
+                          ],
+                        });
+                        if (!res.ok) {
+                          alert(res.reason);
+                          return;
+                        }
+                        router.push(`/besoins-achat/${res.id}`);
+                      }}
+                    >
+                      Besoin multi-fournisseurs
+                    </button>
+                    </>
                   ) : (
                     <span className="text-xs text-muted">
                       Semi-fini : créez un OF amont ou un transfert.
@@ -587,15 +716,61 @@ export default function OrdreFabricationDetailPage() {
           <ul className="text-sm">
             {achats.map((a) => (
               <li key={a.id}>
-                <Link href="/achats" className="text-sea-800">
+                <Link href={`/achats?id=${a.id}`} className="text-sea-800">
                   {a.numero}
                 </Link>{" "}
-                — {a.statut}
+                — {fournisseurs.find((f) => f.id === a.fournisseurId)?.nom ?? "Fournisseur"} —{" "}
+                {a.statut}
               </li>
             ))}
           </ul>
         </section>
       )}
+
+      {besoinsPourOf(tousBesoins, id).length > 0 && (
+        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-3 font-display text-lg font-semibold">Besoins d&apos;achat</h2>
+          <ul className="space-y-2 text-sm">
+            {besoinsPourOf(tousBesoins, id).map((b) => {
+              const p = produits.find((x) => x.id === b.produitId);
+              const cov = couvertureBesoin(b, tousAchats);
+              const st = statutBesoinAchat(b, tousAchats);
+              const frns = [
+                ...new Set(
+                  tousAchats
+                    .filter((a) => a.besoinAchatId === b.id || a.lignes.some((l) => l.besoinAchatId === b.id))
+                    .map((a) => a.fournisseurId),
+                ),
+              ];
+              return (
+                <li key={b.id}>
+                  <Link href={`/besoins-achat/${b.id}`} className="font-semibold text-sea-800 hover:underline">
+                    {b.numero}
+                  </Link>
+                  {" — "}
+                  {p?.code ?? "Article"} · {formatNumber(cov.commandee)}/{formatNumber(cov.necessaire)}{" "}
+                  {p?.unite ?? ""}
+                  {frns.length > 1 ? " · multi-fournisseurs" : ""}
+                  {" "}
+                  <span className={`badge ${badgeClasseBesoin(st)}`}>
+                    {BESOIN_ACHAT_STATUT_LABELS[st]}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <MatièresReserveesOf
+        ofId={id}
+        achats={tousAchats}
+        ofs={ofs}
+        transferts={transfertsMatiereOf}
+        produits={produits}
+        fournisseurs={fournisseurs}
+        sites={tousSites}
+      />
 
       {of.validations.length > 0 && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
@@ -666,11 +841,13 @@ export default function OrdreFabricationDetailPage() {
 
 function NomenclatureOf({
   lignes,
+  quantitePrevue,
   disabled,
   produits,
   onChange,
 }: {
   lignes: OfNomenclatureLigne[];
+  quantitePrevue: number;
   disabled: boolean;
   produits: {
     id: string;
@@ -691,12 +868,17 @@ function NomenclatureOf({
         <thead>
           <tr>
             <th>Composant</th>
-            <th>Qté / unité fabriquée</th>
+            <th>Type</th>
+            <th>Formule</th>
+            <th>Qté / unité</th>
+            <th>Besoin OF</th>
             <th />
           </tr>
         </thead>
         <tbody>
-          {lignes.map((l) => (
+          {lignes.map((l) => {
+            const type = typeCalculNomenclature(l);
+            return (
             <tr key={l.id}>
               <td>
                 <select
@@ -713,6 +895,12 @@ function NomenclatureOf({
                     </option>
                   ))}
                 </select>
+              </td>
+              <td className="text-xs text-muted">
+                {TYPE_CALCUL_NOMENCLATURE_LABELS[type]}
+              </td>
+              <td className="text-xs text-muted">
+                {l.formuleLibelle ?? "—"}
               </td>
               <td>
                 <input
@@ -731,6 +919,7 @@ function NomenclatureOf({
                   }
                 />
               </td>
+              <td>{formatNumber(l.quantiteUnitaire * quantitePrevue)}</td>
               <td>
                 {!disabled && (
                   <button
@@ -743,7 +932,8 @@ function NomenclatureOf({
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       {!disabled && (
@@ -768,6 +958,7 @@ function NomenclatureOf({
 }
 
 function FormSortie({
+  ofId,
   composants,
   sites,
   ateliers,
@@ -775,6 +966,7 @@ function FormSortie({
   defaultAtelier,
   onAjouter,
 }: {
+  ofId: string;
   composants: { id: string; code: string; libelleCourt: string; libelleLong: string }[];
   sites: PointDeVente[];
   ateliers: PointDeVente[];
@@ -795,6 +987,17 @@ function FormSortie({
   const [heures, setHeures] = useState("");
   const [atelierId, setAtelierId] = useState(defaultAtelier);
   const [date, setDate] = useState(jourLocalISO());
+  const entrees = useStore((s) => s.entrees);
+  const ventes = useStore((s) => s.ventes);
+  const inventaires = useStore((s) => s.inventaires);
+  const achats = useStore((s) => s.achats);
+  const ofs = useStore((s) => s.ordresFabrication);
+  const transfertsMatiereOf = useStore((s) => s.transfertsMatiereOf ?? []);
+  const ctxReservation = {
+    achats,
+    ordresFabrication: ofs,
+    transfertsMatiereOf,
+  };
 
   const siteSource = sites.find((s) => s.id === siteSourceId);
   const atelierEffectifId =
@@ -803,6 +1006,33 @@ function FormSortie({
   const taux = tauxHoraireModAtelier(atelier);
   const heuresNum = Number(heures) || 0;
   const manqueTaux = heuresNum > 0 && atelierSansTauxMod(atelier);
+  const dispoOf =
+    composantId && siteSourceId
+      ? stockDisponiblePourOf(
+          composantId,
+          siteSourceId,
+          ofId,
+          entrees,
+          ventes,
+          inventaires,
+          ctxReservation,
+        )
+      : 0;
+  const reserveOf =
+    composantId && siteSourceId
+      ? quantiteReserveeOf(composantId, siteSourceId, ofId, ctxReservation)
+      : 0;
+  const libre =
+    composantId && siteSourceId
+      ? stockLibreDisponible(
+          composantId,
+          siteSourceId,
+          entrees,
+          ventes,
+          inventaires,
+          ctxReservation,
+        )
+      : 0;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -866,6 +1096,10 @@ function FormSortie({
           placeholder="0"
         />
       </label>
+      <p className="text-xs text-muted">
+        Dispo OF {formatNumber(dispoOf)} (réservé {formatNumber(reserveOf)} · libre{" "}
+        {formatNumber(libre)})
+      </p>
       {!(siteSource && siteEstAtelier(siteSource)) && ateliers.length > 1 && (
         <label className="text-xs font-semibold text-muted">
           Atelier MOD
@@ -1355,5 +1589,109 @@ function DemandeAchatModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function MatièresReserveesOf({
+  ofId,
+  achats,
+  ofs,
+  transferts,
+  produits,
+  fournisseurs,
+  sites,
+}: {
+  ofId: string;
+  achats: import("@/lib/types").Achat[];
+  ofs: OrdreFabrication[];
+  transferts: TransfertMatiereOf[];
+  produits: Produit[];
+  fournisseurs: { id: string; nom: string }[];
+  sites: { id: string; nom: string }[];
+}) {
+  const lignes = matieresReserveesPourOf(ofId, {
+    achats,
+    ordresFabrication: ofs,
+    transfertsMatiereOf: transferts,
+  });
+  if (lignes.length === 0) return null;
+  return (
+    <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+      <h2 className="mb-1 font-display text-lg font-semibold">Matières réservées</h2>
+      <p className="mb-3 text-xs text-muted">
+        Quantités achetées affectées à cet OF, non consommables par un autre OF tant
+        qu&apos;elles n&apos;ont pas été transférées.
+      </p>
+      <div className="table-shell">
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Article</th>
+              <th>Site</th>
+              <th>Réservé</th>
+              <th>Origine</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lignes.map((l) => {
+              const p = produits.find((x) => x.id === l.produitId);
+              return (
+                <tr key={`${l.produitId}-${l.pointDeVenteId}`}>
+                  <td className="font-medium">
+                    {p ? `${p.code} — ${libelleProduit(p)}` : "Article"}
+                  </td>
+                  <td>{sites.find((s) => s.id === l.pointDeVenteId)?.nom ?? "Site"}</td>
+                  <td>
+                    {formatNumber(l.quantite)} {p?.unite ?? ""}
+                  </td>
+                  <td className="text-sm">
+                    {l.origines.length > 1 && (
+                      <span className="badge badge-sand mb-1 mr-2">Multi-fournisseurs</span>
+                    )}
+                    {l.origines.map((o) => {
+                      const achat = achats.find((a) => a.id === o.achatId);
+                      const besoinId = achat?.besoinAchatId;
+                      return (
+                      <span key={o.achatId} className="mr-2">
+                        <Link
+                          href={`/achats?id=${o.achatId}`}
+                          className="text-sea-800 hover:underline"
+                        >
+                          {o.achatNumero}
+                        </Link>
+                        {" · "}
+                        {fournisseurs.find((f) => f.id === o.fournisseurId)?.nom ??
+                          "Fournisseur"}
+                        {besoinId && (
+                          <>
+                            {" · "}
+                            <Link
+                              href={`/besoins-achat/${besoinId}`}
+                              className="text-sea-800 hover:underline"
+                            >
+                              besoin
+                            </Link>
+                          </>
+                        )}
+                      </span>
+                    );
+                    })}
+                    {l.origines.length === 0 && (
+                      <span className="text-muted">Transfert d&apos;un autre OF</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Link
+        href={`/fabrication/transferts-matiere?of=${ofId}`}
+        className="mt-3 inline-block text-sm text-sea-800 hover:underline"
+      >
+        Demander un transfert vers un autre OF
+      </Link>
+    </section>
   );
 }

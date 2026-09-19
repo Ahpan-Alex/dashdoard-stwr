@@ -161,6 +161,8 @@ export default function DevisPage() {
                   date: dateIso,
                   montantTTC: acompteMontant,
                   modePaiement: acompte.modePaiement,
+                  compteTresorerieId: acompte.compteTresorerieId || undefined,
+                  reference: acompte.reference || undefined,
                   devisId,
                   refDocument: numero,
                   genererFactureAcompte: acompte.genererFacture,

@@ -1,5 +1,10 @@
 import { createId } from "./id";
 import { natureStockDuProduit, produitEstFabrique } from "./nature-stock";
+import {
+  champsFormuleNomenclature,
+  motifNomenclatureFormules,
+  typeCalculNomenclature,
+} from "./nomenclature-formules";
 import type {
   NomenclatureLigne,
   NomenclatureProduit,
@@ -64,16 +69,40 @@ export function normaliserNomenclatures(
 
 function nettoyerLignes(lignes: NomenclatureLigne[]): NomenclatureLigne[] {
   const seen = new Set<string>();
-  const out: NomenclatureLigne[] = [];
+  const independantes: NomenclatureLigne[] = [];
+  const ratios: NomenclatureLigne[] = [];
   for (const l of lignes) {
-    if (!l.composantId || l.quantite <= 0) continue;
+    if (!l.composantId) continue;
     if (seen.has(l.composantId)) continue;
+    const t = typeCalculNomenclature(l);
+    if (t === "fixe" && !(l.quantite > 0)) continue;
+    if ((t === "surface" || t === "perimetre") && !(Number(l.taux) > 0)) continue;
+    if (t === "ratio_pivot") {
+      if (!(Number(l.pourcentage) > 0) || !l.lignePivotId) continue;
+      seen.add(l.composantId);
+      ratios.push({
+        id: l.id || createId("nl"),
+        composantId: l.composantId,
+        quantite: Number(l.quantite) || 0,
+        ...champsFormuleNomenclature({ ...l, typeCalcul: t }),
+      });
+      continue;
+    }
     seen.add(l.composantId);
-    out.push({
+    independantes.push({
       id: l.id || createId("nl"),
       composantId: l.composantId,
-      quantite: l.quantite,
+      quantite: t === "fixe" ? l.quantite : Number(l.quantite) || 0,
+      ...champsFormuleNomenclature({ ...l, typeCalcul: t }),
     });
+  }
+  const ratiosOk = ratios.filter((l) => {
+    const pivot = independantes.find((p) => p.id === l.lignePivotId);
+    return pivot && typeCalculNomenclature(pivot) !== "ratio_pivot";
+  });
+  const out = [...independantes, ...ratiosOk];
+  if (motifNomenclatureFormules(out)) {
+    return independantes;
   }
   return out;
 }

@@ -26,6 +26,7 @@ import { useStore } from "@/lib/store";
 import { appliqueTVA, libelleClient } from "@/lib/commercial";
 import {
   compteChargeProduit,
+  compteChargeDefautPourType,
   compteUtiliseEnEcriture,
   compteVenteProduit,
   comptesParClasse,
@@ -43,6 +44,7 @@ import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeA
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
+import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { AideSurfaceProduit } from "@/components/ligne-dimensions-saisie";
 import {
   contraindreUsageParFamille,
@@ -629,7 +631,7 @@ export default function ParametresProduitsPage() {
             Code *
             <input
               className="input mt-1 font-mono uppercase"
-              placeholder="ex. POI"
+              placeholder="ex. VIN"
               value={catForm.code}
               onChange={(e) => setCatForm({ ...catForm, code: e.target.value })}
               disabled={structureFamilleVerrouillee}
@@ -640,7 +642,7 @@ export default function ParametresProduitsPage() {
             Libellé *
             <input
               className="input mt-1"
-              placeholder="ex. Poissons frais"
+              placeholder="ex. Vinyle adhésif"
               value={catForm.libelle}
               onChange={(e) =>
                 setCatForm({ ...catForm, libelle: e.target.value })
@@ -952,12 +954,19 @@ export default function ParametresProduitsPage() {
               <select
                 className="select mt-1"
                 value={form.typeAchat}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const typeAchat = e.target.value as TypeAchat;
+                  const defaut = compteChargeDefautPourType(
+                    typeAchat,
+                    comptesComptables,
+                  );
                   setForm({
                     ...form,
-                    typeAchat: e.target.value as TypeAchat,
-                  })
-                }
+                    typeAchat,
+                    compteChargeId:
+                      form.compteChargeId || defaut?.id || "",
+                  });
+                }}
               >
                 {TYPES_ACHAT_PRODUIT.map((t) => (
                   <option key={t} value={t}>
@@ -1595,10 +1604,11 @@ export default function ParametresProduitsPage() {
               )}
 
               {ficheOnglet === "historique" && (
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
-                  Historique des prix
-                </p>
+              <div className="space-y-6">
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+                    Historique catalogue
+                  </p>
                 {histSelected.length === 0 ? (
                   <p className="text-sm text-muted">Aucune modification.</p>
                 ) : (
@@ -1615,6 +1625,15 @@ export default function ParametresProduitsPage() {
                       </li>
                     ))}
                   </ul>
+                )}
+                </div>
+                {produitEstAchetable(selected, categoriesProduits) && (
+                  <div>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+                      Historique fournisseur / article
+                    </p>
+                    <HistoriquePrixFournisseur produitId={selected.id} />
+                  </div>
                 )}
               </div>
               )}
@@ -1695,9 +1714,16 @@ function ComptaProduitPanel({
         <select
           className="select mt-1"
           value={type}
-          onChange={(e) =>
-            onChange({ typeAchat: e.target.value as TypeAchat })
-          }
+          onChange={(e) => {
+            const typeAchat = e.target.value as TypeAchat;
+            const defaut = compteChargeDefautPourType(typeAchat, comptes);
+            onChange({
+              typeAchat,
+              ...(!produit.compteChargeId && defaut
+                ? { compteChargeId: defaut.id }
+                : {}),
+            });
+          }}
         >
           {TYPES_ACHAT_PRODUIT.map((t) => (
             <option key={t} value={t}>

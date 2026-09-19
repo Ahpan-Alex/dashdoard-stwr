@@ -16,10 +16,19 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { produitEstFabrique } from "@/lib/nature-stock";
 import { nomenclatureParType } from "@/lib/nomenclature";
+import {
+  dimensionDepuisCommande,
+  motifDimensionNomenclatureManquante,
+  nomenclatureExigeDimension,
+  perimetreVenteM,
+  surfaceVenteM2,
+} from "@/lib/nomenclature-formules";
 import { libelleProduit } from "@/lib/produits";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
 import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
+import { BadgeDelai } from "@/components/badge-delai";
+import { etatDelaiOf } from "@/lib/delais-alerte";
 import type { OrdreFabricationStatut, TypeNomenclature } from "@/lib/types";
 
 function badgeOf(statut: OrdreFabricationStatut) {
@@ -31,7 +40,7 @@ function badgeOf(statut: OrdreFabricationStatut) {
 
 export default function FabricationPage() {
   const router = useRouter();
-  const { ordresFabrication, produits, commandes, creerOrdreFabrication, bonsATirer } = useStore();
+  const { ordresFabrication, produits, commandes, creerOrdreFabrication, bonsATirer, parametresAlertes } = useStore();
   const { visibles, rattache, actif } = useSitesVisibles();
   const ateliers = ateliersVisibles(visibles, rattache);
   const [creer, setCreer] = useState(false);
@@ -158,7 +167,8 @@ export default function FabricationPage() {
                     <td>
                       <span className={`badge ${badgeOf(o.statut)}`}>
                         {OF_STATUT_LABELS[o.statut]}
-                      </span>
+                      </span>{" "}
+                      <BadgeDelai etat={etatDelaiOf(o, parametresAlertes)} />
                     </td>
                     <td>{formatDate(o.dateCreation)}</td>
                   </tr>
@@ -188,6 +198,8 @@ function FormulaireOf({
     nomenclatureSource?: TypeNomenclature;
     commandeId?: string;
     dateCloturePrevue?: string;
+    dimensionLargeur?: number;
+    dimensionHauteur?: number;
   }) => void;
 }) {
   const catalogue = useStore((s) => s.produits);
@@ -207,13 +219,31 @@ function FormulaireOf({
   const [source, setSource] = useState<TypeNomenclature>("automatique");
   const [commandeId, setCommandeId] = useState("");
   const [cloturePrevue, setCloturePrevue] = useState("");
+  const [largeur, setLargeur] = useState("");
+  const [hauteur, setHauteur] = useState("");
 
   const produit = produits.find((p) => p.id === produitId);
   const alt = produit ? nomenclatureParType(produit, "alternative") : undefined;
+  const nomenc = produit ? nomenclatureParType(produit, source) : undefined;
+  const exigeDim = nomenclatureExigeDimension(nomenc?.lignes ?? []);
+  const commande = commandes.find((c) => c.id === commandeId);
+  const dimCmd =
+    commandeId && produitId
+      ? dimensionDepuisCommande(commande, produitId)
+      : null;
+  const L = dimCmd?.largeur ?? (Number(largeur) || 0);
+  const H = dimCmd?.hauteur ?? (Number(hauteur) || 0);
+  const motifDim = exigeDim
+    ? motifDimensionNomenclatureManquante(nomenc?.lignes ?? [], L, H)
+    : null;
 
   function onForm(e: FormEvent) {
     e.preventDefault();
     if (!atelierId || !produitId) return;
+    if (motifDim) {
+      alert(motifDim);
+      return;
+    }
     onSubmit({
       atelierId,
       produitId,
@@ -221,6 +251,8 @@ function FormulaireOf({
       nomenclatureSource: source,
       commandeId: commandeId || undefined,
       dateCloturePrevue: cloturePrevue ? isoMidiDepuisJour(cloturePrevue) : undefined,
+      dimensionLargeur: L > 0 ? L : undefined,
+      dimensionHauteur: H > 0 ? H : undefined,
     });
   }
 
@@ -319,9 +351,61 @@ function FormulaireOf({
             min={jourLocalISO()}
           />
         </label>
+        {dimCmd ? (
+          <p className="sm:col-span-2 rounded-lg bg-sea-50 px-3 py-2 text-sm text-sea-950">
+            Dimension reprise de la commande {commande?.numero} :{" "}
+            {L.toLocaleString("fr-FR")} × {H.toLocaleString("fr-FR")} m
+            {exigeDim && (
+              <>
+                {" "}
+                (surface {surfaceVenteM2(L, H).toLocaleString("fr-FR")} m², périmètre{" "}
+                {perimetreVenteM(L, H).toLocaleString("fr-FR")} m)
+              </>
+            )}
+            . Pas de ressaisie.
+          </p>
+        ) : (
+          <>
+            <label className="block text-xs font-semibold text-muted">
+              Largeur (m){exigeDim ? " — obligatoire" : " — si besoin matière"}
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={largeur}
+                onChange={(e) => setLargeur(e.target.value)}
+                required={exigeDim}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Hauteur (m){exigeDim ? " — obligatoire" : ""}
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="input mt-1"
+                value={hauteur}
+                onChange={(e) => setHauteur(e.target.value)}
+                required={exigeDim}
+              />
+            </label>
+          </>
+        )}
+        {motifDim && (
+          <p className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {motifDim}
+          </p>
+        )}
+        {commandeId && !dimCmd && exigeDim && (
+          <p className="sm:col-span-2 text-xs text-muted">
+            La commande liée n&apos;a pas de largeur × hauteur sur une ligne de ce
+            produit : saisissez la dimension manuellement.
+          </p>
+        )}
       </div>
       <div className="mt-4 flex gap-2">
-        <button type="submit" className="btn btn-primary" disabled={ateliers.length === 0}>
+        <button type="submit" className="btn btn-primary" disabled={ateliers.length === 0 || Boolean(motifDim)}>
           Créer le brouillon
         </button>
         <button type="button" className="btn btn-secondary" onClick={onClose}>

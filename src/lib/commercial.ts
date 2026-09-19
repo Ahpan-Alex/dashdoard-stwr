@@ -798,7 +798,7 @@ export function ensureCodesClients(clients: Client[]): Client[] {
   return changed ? out : clients;
 }
 
-/** Libellé d'un client avec son code (ex. « CLI-0001 — Restaurant Le Récif »). */
+/** Libellé d'un client avec son code (ex. « CLI-0001 — Agence Media Plus »). */
 export function libelleClient(c: Pick<Client, "code" | "nom">) {
   return c.code ? `${c.code} — ${c.nom}` : c.nom;
 }
@@ -1085,13 +1085,17 @@ export const MODES_PAIEMENT: Record<string, string> = {
   especes: "Espèces",
   virement: "Virement",
   cheque: "Chèque",
-  mobile_money: "Mobile Money",
+  cheque_comptant: "Chèque au comptant",
+  cheque_differe: "Chèque à paiement différé",
+  prelevement: "Prélèvement bancaire",
+  carte: "Carte bancaire",
+  mobile_money: "Mobile monnaie",
   autre: "Autre",
 };
 
 export const IMMO_CATEGORIES: Record<string, string> = {
   materiel: "Matériel",
-  materiel_froid: "Matériel froid",
+  materiel_froid: "Matériel atelier",
   vehicule: "Véhicule",
   amenagement: "Aménagement",
   informatique: "Informatique",

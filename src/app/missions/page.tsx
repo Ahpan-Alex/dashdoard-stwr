@@ -27,6 +27,8 @@ import { produitEstAchetable } from "@/lib/nature-stock";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
+import { BadgeDelai } from "@/components/badge-delai";
+import { etatDelaiMission } from "@/lib/delais-alerte";
 import type { MissionAchatStatut } from "@/lib/types";
 
 function badgeMission(statut: MissionAchatStatut) {
@@ -55,6 +57,7 @@ export default function MissionsPage() {
 function MissionsContent() {
   const router = useRouter();
   const missionsAchat = useStore((s) => s.missionsAchat ?? []);
+  const parametresAlertes = useStore((s) => s.parametresAlertes);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const creerMissionAchat = useStore((s) => s.creerMissionAchat);
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -246,7 +249,8 @@ function MissionsContent() {
                     <TdCol id="statut" show={visible}>
                       <span className={`badge ${badgeMission(m.statut)}`}>
                         {MISSION_STATUT_LABELS[m.statut]}
-                      </span>
+                      </span>{" "}
+                      <BadgeDelai etat={etatDelaiMission(m, parametresAlertes)} />
                     </TdCol>
                     <TdCol id="reglement" show={visible}>
                       {MISSION_REGLEMENT_LABELS[m.statutReglement]}

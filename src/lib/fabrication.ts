@@ -3,6 +3,11 @@ import { etatCumpProduit, quantiteStockChronologique } from "./cump";
 import { createId } from "./id";
 import { produitEstAchetable, produitEstFabrique } from "./nature-stock";
 import { NOM_NOMENCLATURE_STANDARD } from "./nomenclature";
+import {
+  motifDimensionNomenclatureManquante,
+  resoudreLignesNomenclatureOf,
+  type DimensionOf,
+} from "./nomenclature-formules";
 import { siteEstAtelier } from "./sites";
 import type {
   EntreeStock,
@@ -60,18 +65,44 @@ export function ateliersVisibles(
 export function copierNomenclatureVersOf(
   produit: Produit,
   source: TypeNomenclature,
+  dims: DimensionOf = {},
+  nomComposant?: (id: string) => string,
 ): { nom: string; lignes: OfNomenclatureLigne[] } {
   const nomenc = (produit.nomenclatures ?? []).find((n) => n.type === source);
   const fallback = (produit.nomenclatures ?? []).find((n) => n.type === "automatique");
   const used = nomenc ?? fallback;
-  return {
-    nom: used?.nom ?? NOM_NOMENCLATURE_STANDARD,
-    lignes: (used?.lignes ?? []).map((l) => ({
-      id: createId("ofnl"),
+  const idMap = new Map<string, string>();
+  const brutes: OfNomenclatureLigne[] = (used?.lignes ?? []).map((l) => {
+    const id = createId("ofnl");
+    idMap.set(l.id, id);
+    return {
+      id,
       composantId: l.composantId,
       quantiteUnitaire: l.quantite,
-    })),
+      typeCalcul: l.typeCalcul,
+      taux: l.taux,
+      pourcentage: l.pourcentage,
+      lignePivotId: l.lignePivotId,
+    };
+  });
+  const avecPivots = brutes.map((l) => ({
+    ...l,
+    lignePivotId: l.lignePivotId ? idMap.get(l.lignePivotId) : undefined,
+  }));
+  return {
+    nom: used?.nom ?? NOM_NOMENCLATURE_STANDARD,
+    lignes: resoudreLignesNomenclatureOf(avecPivots, dims, nomComposant),
   };
+}
+
+export function motifLancementOfDimension(
+  of: Pick<OrdreFabrication, "nomenclatureLignes" | "dimensionLargeur" | "dimensionHauteur">,
+) {
+  return motifDimensionNomenclatureManquante(
+    of.nomenclatureLignes,
+    of.dimensionLargeur,
+    of.dimensionHauteur,
+  );
 }
 
 export function lignesMainOeuvre(of: Pick<OrdreFabrication, "mainOeuvre">) {

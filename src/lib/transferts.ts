@@ -134,3 +134,48 @@ export function figerCumpLignesTransfert(
     return { ...l, cumpSource: etat.cump };
   });
 }
+
+export type MouvementTransfertCump = {
+  id: string;
+  date: string;
+  produitId: string;
+  siteId: string;
+  origine: "transfert_sortie" | "transfert_entree";
+  quantite: number;
+  prixUnitaire: number;
+  transfertId?: string;
+};
+
+export function historiqueTransfertsCump(
+  entrees: EntreeStock[],
+  filtre: {
+    produitId?: string;
+    siteId?: string;
+    debut?: string;
+    fin?: string;
+  } = {},
+): MouvementTransfertCump[] {
+  return entrees
+    .filter((e) => {
+      if (e.origine !== "transfert_sortie" && e.origine !== "transfert_entree") {
+        return false;
+      }
+      if (filtre.produitId && e.produitId !== filtre.produitId) return false;
+      if (filtre.siteId && e.pointDeVenteId !== filtre.siteId) return false;
+      const jour = e.date.slice(0, 10);
+      if (filtre.debut && jour < filtre.debut) return false;
+      if (filtre.fin && jour > filtre.fin) return false;
+      return true;
+    })
+    .map((e) => ({
+      id: e.id,
+      date: e.date,
+      produitId: e.produitId,
+      siteId: e.pointDeVenteId,
+      origine: e.origine as "transfert_sortie" | "transfert_entree",
+      quantite: e.quantite,
+      prixUnitaire: e.prixAchatUnitaire,
+      transfertId: e.transfertId,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+}

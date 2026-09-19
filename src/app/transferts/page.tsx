@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -10,6 +11,8 @@ import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { etatCumpProduit } from "@/lib/cump";
 import { libelleProduit } from "@/lib/produits";
 import { STATUT_TRANSFERT_LABELS } from "@/lib/transferts";
+import { BadgeDelai } from "@/components/badge-delai";
+import { etatDelaiTransfert } from "@/lib/delais-alerte";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
 import type {
@@ -42,6 +45,7 @@ export default function TransfertsPage() {
   } = useStore();
   const { visibles, rattache, actif } = useSitesVisibles();
   const tousSites = useStore((s) => s.pointsDeVente);
+  const parametresAlertes = useStore((s) => s.parametresAlertes);
   const nomSite = (id: string) =>
     visibles.find((s) => s.id === id)?.nom ??
     useStore.getState().pointsDeVente.find((s) => s.id === id)?.nom ??
@@ -94,10 +98,15 @@ export default function TransfertsPage() {
         title="Transferts de stock"
         description="Mouvements entre sites après réception : demande, expédition, puis validation au destinataire. Le stock arrive au CUMP du site source."
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => setCreer(true)}>
-            <Plus className="h-4 w-4" />
-            Nouveau transfert
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/transferts/historique" className="btn btn-secondary">
+              Historique par article
+            </Link>
+            <button type="button" className="btn btn-primary" onClick={() => setCreer(true)}>
+              <Plus className="h-4 w-4" />
+              Nouveau transfert
+            </button>
+          </div>
         }
       />
 
@@ -168,7 +177,8 @@ export default function TransfertsPage() {
                   <td>
                     <span className={`badge ${badgeTransfert(t.statut)}`}>
                       {STATUT_TRANSFERT_LABELS[t.statut]}
-                    </span>
+                    </span>{" "}
+                    <BadgeDelai etat={etatDelaiTransfert(t, parametresAlertes)} />
                   </td>
                   <td className="text-right">
                     <button

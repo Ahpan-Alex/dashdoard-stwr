@@ -1,5 +1,6 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { livraisonsActives } from "./achats";
+import { prixNetOffre, fournisseurRetenuLigne, offreLigneFournisseur, prixMiniLigne } from "./demandes-prix";
 import { TIERS_DIVERS_MARCHE_ID } from "./missions";
 import type {
   Achat,
@@ -11,7 +12,7 @@ import type {
 
 export const CRITERE_CLASSEMENT_LABELS: Record<CritereClassementFournisseur, string> = {
   prix: "Prix le plus bas",
-  delai: "Délai le plus court",
+  delai: "Délai de livraison réel le plus court",
 };
 
 export function critereClassementProduit(
@@ -53,7 +54,8 @@ export function historiqueFournisseursProduit(
     fournisseurId: string;
     dernierPrix: number | null;
     dateDernierPrix?: string;
-    delais: number[];
+    delaisReels: number[];
+    delaisPromis: number[];
   };
   const map = new Map<string, Acc>();
 
@@ -61,7 +63,7 @@ export function historiqueFournisseursProduit(
     if (!estFournisseurClassable(fournisseurId)) return undefined;
     let row = map.get(fournisseurId);
     if (!row) {
-      row = { fournisseurId, dernierPrix: null, delais: [] };
+      row = { fournisseurId, dernierPrix: null, delaisReels: [], delaisPromis: [] };
       map.set(fournisseurId, row);
     }
     return row;
@@ -87,7 +89,7 @@ export function historiqueFournisseursProduit(
     const premiere = livs[0];
     if (premiere) {
       const j = joursEntre(a.date, premiere.date);
-      if (j != null && j >= 0) upsert(a.fournisseurId)?.delais.push(j);
+      if (j != null && j >= 0) upsert(a.fournisseurId)?.delaisReels.push(j);
     }
   }
 
@@ -97,24 +99,27 @@ export function historiqueFournisseursProduit(
       if (ligne.produitId !== produitId) continue;
       for (const o of dp.offres) {
         if (o.ligneId !== ligne.id) continue;
-        noterPrix(o.fournisseurId, o.prixUnitaire, dp.date);
+        noterPrix(o.fournisseurId, prixNetOffre(o) || o.prixUnitaire, dp.date);
         if (o.delaiJours != null && o.delaiJours >= 0) {
-          upsert(o.fournisseurId)?.delais.push(o.delaiJours);
+          upsert(o.fournisseurId)?.delaisPromis.push(o.delaiJours);
         }
       }
     }
   }
 
-  return [...map.values()].map((r) => ({
-    fournisseurId: r.fournisseurId,
-    dernierPrix: r.dernierPrix,
-    dateDernierPrix: r.dateDernierPrix,
-    delaiMoyenJours:
-      r.delais.length === 0
-        ? null
-        : Math.round(r.delais.reduce((s, n) => s + n, 0) / r.delais.length),
-    nbDelais: r.delais.length,
-  }));
+  return [...map.values()].map((r) => {
+    const source = r.delaisReels.length > 0 ? r.delaisReels : r.delaisPromis;
+    return {
+      fournisseurId: r.fournisseurId,
+      dernierPrix: r.dernierPrix,
+      dateDernierPrix: r.dateDernierPrix,
+      delaiMoyenJours:
+        source.length === 0
+          ? null
+          : Math.round(source.reduce((s, n) => s + n, 0) / source.length),
+      nbDelais: source.length,
+    };
+  });
 }
 
 function valeurTri(
@@ -194,4 +199,167 @@ export function appliquerRangManuel(
   const n = Math.max(1, Math.floor(rang));
   const rest = (priorites ?? []).filter((p) => p.fournisseurId !== fournisseurId);
   return [...rest, { fournisseurId, rang: n, manuel: true }];
+}
+
+/** Dernier prix d'achat réel (commande/facture d'achat), hors DP. */
+export function dernierPrixAchatConnu(
+  produitId: string,
+  achats: Achat[],
+): { prix: number; date: string; fournisseurId: string } | null {
+  let best: { prix: number; date: string; fournisseurId: string } | null = null;
+  for (const a of achats) {
+    if (a.statut === "annule") continue;
+    const ligne = a.lignes.find((l) => l.produitId === produitId);
+    if (!ligne || !(ligne.prixAchatUnitaire > 0)) continue;
+    const date = a.dateValidation ?? a.date;
+    if (!best || date >= best.date) {
+      best = { prix: ligne.prixAchatUnitaire, date, fournisseurId: a.fournisseurId };
+    }
+  }
+  return best;
+}
+
+export type EvenementPrixFournisseur = {
+  date: string;
+  produitId: string;
+  fournisseurId: string;
+  prixUnitaire: number;
+  source: "achat" | "dp";
+  documentId: string;
+  documentNumero: string;
+  delaiJours?: number;
+};
+
+export function historiquePrixFournisseurArticle(
+  ctx: { achats: Achat[]; demandesPrix?: DemandePrix[] },
+  filtre: { produitId?: string; fournisseurId?: string },
+): EvenementPrixFournisseur[] {
+  const out: EvenementPrixFournisseur[] = [];
+  for (const a of ctx.achats) {
+    if (a.statut === "annule") continue;
+    if (filtre.fournisseurId && a.fournisseurId !== filtre.fournisseurId) continue;
+    for (const l of a.lignes) {
+      const produitId = l.produitId;
+      if (!produitId) continue;
+      if (filtre.produitId && produitId !== filtre.produitId) continue;
+      if (!(l.prixAchatUnitaire > 0)) continue;
+      out.push({
+        date: a.dateValidation ?? a.date,
+        produitId,
+        fournisseurId: a.fournisseurId,
+        prixUnitaire: l.prixAchatUnitaire,
+        source: "achat",
+        documentId: a.id,
+        documentNumero: a.numero,
+      });
+    }
+  }
+  for (const dp of ctx.demandesPrix ?? []) {
+    if (dp.statut === "annulee") continue;
+    for (const ligne of dp.lignes ?? []) {
+      if (filtre.produitId && ligne.produitId !== filtre.produitId) continue;
+      for (const o of dp.offres ?? []) {
+        if (o.ligneId !== ligne.id || !(o.prixUnitaire > 0)) continue;
+        if (filtre.fournisseurId && o.fournisseurId !== filtre.fournisseurId) continue;
+        out.push({
+          date: dp.date,
+          produitId: ligne.produitId,
+          fournisseurId: o.fournisseurId,
+          prixUnitaire: prixNetOffre(o) || o.prixUnitaire,
+          source: "dp",
+          documentId: dp.id,
+          documentNumero: dp.numero,
+          delaiJours: o.delaiJours,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date) || b.documentNumero.localeCompare(a.documentNumero));
+}
+
+export type EvenementDelaiLivraison = {
+  dateCommande: string;
+  dateReception: string;
+  jours: number;
+  produitId: string;
+  fournisseurId: string;
+  achatId: string;
+  achatNumero: string;
+  livraisonId: string;
+  quantite: number;
+};
+
+/** Délais réels commande → réception, couple fournisseur / article. */
+export function historiqueDelaisLivraison(
+  achats: Achat[],
+  filtre: { produitId?: string; fournisseurId?: string } = {},
+): EvenementDelaiLivraison[] {
+  const out: EvenementDelaiLivraison[] = [];
+  for (const a of achats) {
+    if (a.statut === "annule") continue;
+    if (filtre.fournisseurId && a.fournisseurId !== filtre.fournisseurId) continue;
+    for (const liv of livraisonsActives(a)) {
+      for (const l of liv.lignes) {
+        if (!(l.quantiteLivree > 0) || !l.produitId) continue;
+        if (filtre.produitId && l.produitId !== filtre.produitId) continue;
+        const j = joursEntre(a.date, liv.date);
+        if (j == null || j < 0) continue;
+        out.push({
+          dateCommande: a.date,
+          dateReception: liv.date,
+          jours: j,
+          produitId: l.produitId,
+          fournisseurId: a.fournisseurId,
+          achatId: a.id,
+          achatNumero: a.numero,
+          livraisonId: liv.id,
+          quantite: l.quantiteLivree,
+        });
+      }
+    }
+  }
+  return out.sort(
+    (a, b) =>
+      b.dateReception.localeCompare(a.dateReception) ||
+      b.achatNumero.localeCompare(a.achatNumero),
+  );
+}
+
+export type AnomalieFournisseurRetenu = {
+  ligneId: string;
+  produitId: string;
+  fournisseurId: string;
+  prixNet: number;
+  prixMini: number | null;
+  dernierPrix: number | null;
+};
+
+/** Retenu ni moins cher du comparatif, ni conforme au dernier prix connu. */
+export function anomaliesFournisseurRetenu(
+  dp: DemandePrix,
+  achats: Achat[],
+): AnomalieFournisseurRetenu[] {
+  const out: AnomalieFournisseurRetenu[] = [];
+  for (const ligne of dp.lignes ?? []) {
+    const fid = fournisseurRetenuLigne(dp, ligne.id);
+    if (!fid) continue;
+    const offre = offreLigneFournisseur(dp, ligne.id, fid);
+    if (!offre || !(offre.prixUnitaire > 0)) continue;
+    const net = prixNetOffre(offre);
+    const mini = prixMiniLigne(dp.offres ?? [], ligne.id);
+    const dernier = dernierPrixAchatConnu(ligne.produitId, achats);
+    const estMoinsCher = mini != null && net <= mini + 1e-6;
+    const conformeDernier =
+      dernier != null && Math.abs(net - dernier.prix) <= 1;
+    if (estMoinsCher || conformeDernier) continue;
+    out.push({
+      ligneId: ligne.id,
+      produitId: ligne.produitId,
+      fournisseurId: fid,
+      prixNet: net,
+      prixMini: mini,
+      dernierPrix: dernier?.prix ?? null,
+    });
+  }
+  return out;
 }

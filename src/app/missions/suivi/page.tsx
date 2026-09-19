@@ -130,7 +130,7 @@ function SuiviContent() {
     <div>
       <PageHeader
         title="Suivi des avances par acheteur"
-        description="Situation dans le temps des avances de caisse. Le solde est informatif : aucun mouvement de trésorerie n'est généré."
+        description="Situation dans le temps des avances de caisse. Sans compte de trésorerie renseigné à la remise, le solde reste informatif. Sinon, le mouvement est porté au journal de trésorerie."
         actions={
           <Link href="/missions" className="btn btn-secondary">
             Missions

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { formatCurrency } from "@/lib/format";
 import {
   CRITERE_CLASSEMENT_LABELS,
@@ -8,6 +9,7 @@ import {
   critereClassementProduit,
   fichesFournisseursProduit,
 } from "@/lib/classement-fournisseurs";
+import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { useStore } from "@/lib/store";
 import type { CritereClassementFournisseur, Produit } from "@/lib/types";
 
@@ -44,8 +46,12 @@ export function FournisseursProduitPanel({ produit }: { produit: Produit }) {
       </p>
       <p className="mb-3 text-xs text-muted">
         Fournisseurs ayant déjà vendu cet article (achats ou demandes de prix). Le rang 1 est
-        proposé par défaut à la création d&apos;un achat classique. Vous pouvez le modifier à la
-        main (qualité, relation…) sans changer le critère.
+        proposé par défaut à la création d&apos;un achat classique. Le critère « délai » s&apos;appuie
+        sur les délais de livraison réels (commande → réception), consultables aussi dans{" "}
+        <Link href="/achats/delais-livraison" className="underline">
+          Achats → Délais de livraison
+        </Link>
+        .
       </p>
       <label className="mb-3 block text-xs font-semibold text-muted">
         Critère de classement (cette fiche uniquement)
@@ -61,7 +67,7 @@ export function FournisseursProduitPanel({ produit }: { produit: Produit }) {
           ))}
         </select>
       </label>
-      {fiches.length === 0 ? (
+        {fiches.length === 0 ? (
         <p className="text-sm text-muted">Aucun historique fournisseur pour cet article.</p>
       ) : (
         <div className="table-shell">
@@ -102,6 +108,22 @@ export function FournisseursProduitPanel({ produit }: { produit: Produit }) {
           </table>
         </div>
       )}
+      <div className="mt-6">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-sea-700">
+          Historique des prix
+        </p>
+        <HistoriquePrixFournisseur produitId={produit.id} />
+      </div>
+      <p className="mt-4 text-xs text-muted">
+        Transferts inter-sites de cet article :{" "}
+        <Link
+          href={`/transferts/historique?produit=${encodeURIComponent(produit.id)}`}
+          className="underline"
+        >
+          historique par site
+        </Link>
+        .
+      </p>
     </div>
   );
 }

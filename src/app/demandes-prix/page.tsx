@@ -1,38 +1,47 @@
 "use client";
 
-import { Component, FormEvent, useMemo, useState, type ReactNode } from "react";
+import { Component, FormEvent, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Plus, Scale } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { StatCard } from "@/components/stat-card";
 import { formatDate } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
-import { DP_STATUT_LABELS } from "@/lib/demandes-prix";
+import {
+  badgeClasseDp,
+  libelleStatutGlobalDp,
+  statutGlobalDp,
+} from "@/lib/demandes-prix";
 import { produitEstAchetable } from "@/lib/nature-stock";
 import { TIERS_DIVERS_MARCHE_ID } from "@/lib/missions";
 import { assurerTiers, estFournisseur } from "@/lib/tiers";
 import { useStore } from "@/lib/store";
 import { validiteJoursDefautAchats, normaliserValiditeJours } from "@/lib/validite-document";
-import type { DemandePrixStatut } from "@/lib/types";
-
-function badgeDp(statut: DemandePrixStatut) {
-  if (statut === "cloturee") return "badge-success";
-  if (statut === "en_cours") return "badge-sand";
-  if (statut === "annulee") return "badge-danger";
-  return "badge-sea";
-}
 
 export default function DemandesPrixPage() {
+  return (
+    <Suspense fallback={null}>
+      <DemandesPrixListe />
+    </Suspense>
+  );
+}
+
+function DemandesPrixListe() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const demandesPrix = useStore((s) => s.demandesPrix ?? []);
   const clients = useStore((s) => s.clients);
   const fournisseursLegacy = useStore((s) => s.fournisseurs);
   const tiers = useStore((s) => s.tiers);
   const creerDemandePrix = useStore((s) => s.creerDemandePrix);
   const [creer, setCreer] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("nouveau") === "1") setCreer(true);
+  }, [searchParams]);
 
   const fournisseurs = useMemo(
     () =>
@@ -87,9 +96,12 @@ export default function DemandesPrixPage() {
       )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <StatCard label="Brouillons" value={String(liste.filter((d) => d.statut === "brouillon").length)} />
-        <StatCard label="En cours" value={String(liste.filter((d) => d.statut === "en_cours").length)} />
-        <StatCard label="Clôturées" value={String(liste.filter((d) => d.statut === "cloturee").length)} />
+        <StatCard label="Brouillons" value={String(liste.filter((d) => statutGlobalDp(d) === "brouillon").length)} />
+        <StatCard label="En cours" value={String(liste.filter((d) => statutGlobalDp(d) === "en_cours").length)} />
+        <StatCard
+          label="Clôturées"
+          value={String(liste.filter((d) => d.statut === "cloturee" || d.statut === "cloturee_sans_suite").length)}
+        />
         <StatCard label="Annulées" value={String(liste.filter((d) => d.statut === "annulee").length)} />
       </div>
 
@@ -132,7 +144,9 @@ export default function DemandesPrixPage() {
                       : "—"}
                   </td>
                   <td>
-                    <span className={`badge ${badgeDp(d.statut)}`}>{DP_STATUT_LABELS[d.statut]}</span>
+                    <span className={`badge ${badgeClasseDp(statutGlobalDp(d))}`}>
+                      {libelleStatutGlobalDp(d)}
+                    </span>
                   </td>
                   <td>
                     <Link href={`/demandes-prix/${d.id}`} className="text-sm text-sea-800">
@@ -198,13 +212,26 @@ function FormulaireDp({
   onClose: () => void;
   onSubmit: (data: {
     date: string;
-    lignes: { produitId: string; quantite: number }[];
+    lignes: {
+      produitId: string;
+      quantite: number;
+      dateLivraisonSouhaitee?: string;
+      pointDeVenteId?: string;
+      specifications?: string;
+    }[];
     fournisseurIds: string[];
     validiteJours?: number;
+    pointDeVenteId?: string;
+    dateLivraisonSouhaitee?: string;
+    note?: string;
+    origine?: "libre" | "alerte_stock";
+    alerteId?: string;
   }) => void;
 }) {
+  const searchParams = useSearchParams();
   const produits = useStore((s) => s.produits);
   const parametres = useStore((s) => s.parametres);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
   const validiteDefaut = validiteJoursDefautAchats(parametres);
   const categoriesProduits = useStore((s) => s.categoriesProduits);
   const articles = useMemo(
@@ -216,9 +243,32 @@ function FormulaireDp({
   );
   const [date, setDate] = useState(jourLocalISO());
   const [validiteJours, setValiditeJours] = useState(String(validiteDefaut));
-  const [lignes, setLignes] = useState([{ produitId: "", quantite: "1" }]);
+  const [siteId, setSiteId] = useState("");
+  const [dateLivraison, setDateLivraison] = useState("");
+  const [note, setNote] = useState("");
+  const [lignes, setLignes] = useState([
+    { produitId: "", quantite: "1", specifications: "", dateLivraisonSouhaitee: "" },
+  ]);
   const [frns, setFrns] = useState<string[]>([]);
   const [rechercheFrn, setRechercheFrn] = useState("");
+  const origineAlerte = searchParams.get("alerte") || undefined;
+
+  useEffect(() => {
+    const produit = searchParams.get("produit") ?? "";
+    const pdv = searchParams.get("pdv") ?? "";
+    const qte = searchParams.get("qte") ?? "";
+    if (pdv) setSiteId(pdv);
+    if (produit) {
+      setLignes([
+        {
+          produitId: produit,
+          quantite: qte && Number(qte) > 0 ? qte : "1",
+          specifications: "",
+          dateLivraisonSouhaitee: "",
+        },
+      ]);
+    }
+  }, [searchParams]);
 
   const frnsFiltres = useMemo(() => {
     const q = rechercheFrn.trim().toLowerCase();
@@ -240,16 +290,32 @@ function FormulaireDp({
       date: isoMidiDepuisJour(date),
       lignes: lignes
         .filter((l) => l.produitId)
-        .map((l) => ({ produitId: l.produitId, quantite: Number(l.quantite) || 0 })),
+        .map((l) => ({
+          produitId: l.produitId,
+          quantite: Number(l.quantite) || 0,
+          specifications: l.specifications.trim() || undefined,
+          dateLivraisonSouhaitee: l.dateLivraisonSouhaitee || dateLivraison || undefined,
+          pointDeVenteId: siteId || undefined,
+        })),
       fournisseurIds: frns,
       validiteJours: normaliserValiditeJours(validiteJours, validiteDefaut),
+      pointDeVenteId: siteId || undefined,
+      dateLivraisonSouhaitee: dateLivraison || undefined,
+      note: note.trim() || undefined,
+      origine: origineAlerte ? "alerte_stock" : "libre",
+      alerteId: origineAlerte,
     });
   }
 
   return (
     <form onSubmit={onForm} className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
       <h2 className="mb-4 font-display text-lg font-semibold">Nouvelle demande de prix</h2>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 max-w-xl">
+      {origineAlerte && (
+        <p className="mb-3 text-xs text-amber-800">
+          Générée depuis une alerte stock (seuil atteint).
+        </p>
+      )}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 max-w-4xl">
         <label className="block text-xs font-semibold text-muted">
           Date
           <input type="date" className="input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -262,6 +328,26 @@ function FormulaireDp({
             className="input mt-1"
             value={validiteJours}
             onChange={(e) => setValiditeJours(e.target.value)}
+          />
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Site destinataire
+          <select className="select mt-1" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+            <option value="">— Choisir —</option>
+            {pointsDeVente.filter((p) => p.actif !== false).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-muted">
+          Livraison souhaitée
+          <input
+            type="date"
+            className="input mt-1"
+            value={dateLivraison}
+            onChange={(e) => setDateLivraison(e.target.value)}
           />
         </label>
       </div>
@@ -298,6 +384,21 @@ function FormulaireDp({
                     }
                   />
                 </label>
+                <label className="block text-xs font-semibold text-muted">
+                  Livraison souhaitée
+                  <input
+                    type="date"
+                    className="input mt-1"
+                    value={l.dateLivraisonSouhaitee}
+                    onChange={(e) =>
+                      setLignes(
+                        lignes.map((x, j) =>
+                          j === i ? { ...x, dateLivraisonSouhaitee: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                </label>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -306,6 +407,21 @@ function FormulaireDp({
                   Retirer
                 </button>
               </div>
+              <label className="mt-2 block text-xs font-semibold text-muted">
+                Spécifications / notes
+                <input
+                  className="input mt-1"
+                  value={l.specifications}
+                  onChange={(e) =>
+                    setLignes(
+                      lignes.map((x, j) =>
+                        j === i ? { ...x, specifications: e.target.value } : x,
+                      ),
+                    )
+                  }
+                  placeholder="Cotes, matière, conditionnement…"
+                />
+              </label>
             </div>
           ))}
         </div>
@@ -313,7 +429,12 @@ function FormulaireDp({
       <button
         type="button"
         className="btn btn-secondary mt-2"
-        onClick={() => setLignes([...lignes, { produitId: "", quantite: "1" }])}
+        onClick={() =>
+          setLignes([
+            ...lignes,
+            { produitId: "", quantite: "1", specifications: "", dateLivraisonSouhaitee: "" },
+          ])
+        }
         disabled={articles.length === 0}
       >
         Ajouter un article
@@ -341,6 +462,14 @@ function FormulaireDp({
           </div>
         </>
       )}
+      <label className="mt-5 block max-w-2xl text-xs font-semibold text-muted">
+        Note
+        <textarea
+          className="input mt-1 min-h-[4rem]"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </label>
       <div className="mt-4 flex gap-2">
         <button type="submit" className="btn btn-primary">
           Créer

@@ -244,6 +244,8 @@ export default function CommandesPage() {
                   date: dateIso,
                   montantTTC: acompteMontant,
                   modePaiement: acompte.modePaiement,
+                  compteTresorerieId: acompte.compteTresorerieId || undefined,
+                  reference: acompte.reference || undefined,
                   devisId: meta.devisId || undefined,
                   commandeId,
                   refDocument: numero,
