@@ -1,9 +1,11 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { createId } from "@/lib/id";
 import { motifComposantBomInvalide, NOM_NOMENCLATURE_STANDARD } from "@/lib/nomenclature";
 import {
+  NATURES_STOCK,
   NATURE_STOCK_LABELS,
   produitEstFabrique,
 } from "@/lib/nature-stock";
@@ -27,6 +29,7 @@ export function NomenclatureEditor({
   produits,
   onNatureChange,
   onNomenclaturesChange,
+  afterNature,
 }: {
   natureStock: NatureStock;
   nomenclatures: NomenclatureProduit[];
@@ -34,6 +37,7 @@ export function NomenclatureEditor({
   produits: Produit[];
   onNatureChange: (n: NatureStock) => void;
   onNomenclaturesChange: (n: NomenclatureProduit[]) => void;
+  afterNature?: ReactNode;
 }) {
   const fabrique = produitEstFabrique({ natureStock });
   const auto =
@@ -65,7 +69,7 @@ export function NomenclatureEditor({
           value={natureStock}
           onChange={(e) => onNatureChange(e.target.value as NatureStock)}
         >
-          {(Object.keys(NATURE_STOCK_LABELS) as NatureStock[]).map((n) => (
+          {(NATURES_STOCK).map((n) => (
             <option key={n} value={n}>
               {NATURE_STOCK_LABELS[n]}
             </option>
@@ -73,10 +77,12 @@ export function NomenclatureEditor({
         </select>
       </label>
       <p className="text-xs text-muted">
-        Indépendant du type d&apos;achat (rattachement comptable classe 6). Semi-fini et
-        fini sont vendables de la même façon ; seul un semi-fini peut aussi servir de
-        composant à un OF aval.
+        Indépendant du type d&apos;achat (rattachement comptable classe 6). Un
+        semi-fini ou un fini entre normalement par OF ; le type d&apos;achat
+        n&apos;est demandé que s&apos;il peut aussi être acheté (sous-traitance).
+        Seul un semi-fini peut aussi servir de composant à un OF aval.
       </p>
+      {afterNature}
       {fabrique && (
         <div className="space-y-4 rounded-[var(--radius)] border border-line p-3">
           <p className="text-xs font-bold uppercase tracking-wider text-sea-700">

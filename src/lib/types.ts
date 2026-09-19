@@ -285,6 +285,11 @@ export type Produit = {
    */
   natureStock?: NatureStock;
   /**
+   * Semi-fini / fini aussi acheté en sous-traitance (entrée directe fournisseur).
+   * Ignoré pour matière première et marchandise standard.
+   */
+  achatSousTraitance?: boolean;
+  /**
    * Circuit commercial : acheté, vendu, ou les deux.
    * Absent = déduit de la nature (MP = achat+vente, fabriqué = vente).
    */
@@ -322,7 +327,11 @@ export type ProduitFournisseurRang = {
 };
 
 /** Classification logistique du produit — distincte du type d'achat (classe 6). */
-export type NatureStock = "matiere_premiere" | "semi_fini" | "fini";
+export type NatureStock =
+  | "matiere_premiere"
+  | "marchandise"
+  | "semi_fini"
+  | "fini";
 
 export type TypeNomenclature = "automatique" | "alternative";
 

@@ -1,7 +1,7 @@
 import { nextNumero } from "./commercial";
 import { quantiteStockChronologique } from "./cump";
 import { createId } from "./id";
-import { produitEstAchetable } from "./nature-stock";
+import { motifProduitNonAchetable, produitEstAchetable } from "./nature-stock";
 import type {
   EntreeStock,
   Facture,
@@ -451,7 +451,7 @@ export function motifLigneMissionInvalide(
   const p = produits.find((x) => x.id === ligne.produitId);
   if (!p) return "Article introuvable.";
   if (!produitEstAchetable(p, categories)) {
-    return `« ${p.libelleCourt || p.code} » n'est pas un article achetable.`;
+    return motifProduitNonAchetable(p);
   }
   if (ligne.quantite < 0) return "La quantité ne peut pas être négative.";
   if (ligne.quantite > 0 && ligne.prixUnitaire < 0) {

@@ -1091,7 +1091,7 @@ function CommandePanel({
     const p = produits.find((x) => x.id === produitId);
     if (p && !produitEstAchetable(p, categoriesProduits)) {
       alert(
-        "Les semi-finis et finis n'entrent pas par achat : utilisez un ordre de fabrication.",
+        "Cet article n'est pas achetable. Un semi-fini ou un fini sans sous-traitance entre par OF.",
       );
       return;
     }

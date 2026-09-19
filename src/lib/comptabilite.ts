@@ -28,7 +28,10 @@ import type {
   Tiers,
   TypeAchat,
 } from "./types";
-import { produitEstAchetable, produitEstVendable } from "./nature-stock";
+import {
+  produitEstVendable,
+  typeAchatEstAttendu,
+} from "./nature-stock";
 import { montantLigneRealisee, TIERS_DIVERS_MARCHE_NOM } from "./missions";
 import {
   libelleNatureDepense,
@@ -230,12 +233,13 @@ export function produitSansCompteComptable(
     | "compteComptableId"
     | "natureStock"
     | "usageCommercial"
+    | "achatSousTraitance"
     | "typeAchat"
   >,
   comptes: CompteComptable[],
 ) {
   const manqueCharge =
-    produitEstAchetable(produit) &&
+    typeAchatEstAttendu(produit) &&
     !compteProduitEstRenseigne(compteChargeProduit(produit, comptes));
   const manqueVente =
     produitEstVendable(produit) &&
@@ -251,13 +255,14 @@ export function produitSansComptePourNature(
     | "compteComptableId"
     | "natureStock"
     | "usageCommercial"
+    | "achatSousTraitance"
     | "typeAchat"
   >,
   comptes: CompteComptable[],
   nature: "charge" | "vente",
 ) {
   if (nature === "vente" && !produitEstVendable(produit)) return false;
-  if (nature === "charge" && !produitEstAchetable(produit)) return false;
+  if (nature === "charge" && !typeAchatEstAttendu(produit)) return false;
   const compte =
     nature === "vente"
       ? compteVenteProduit(produit, comptes)
@@ -295,11 +300,12 @@ export function motifComptesProduitInvalides(
     | "compteComptableId"
     | "natureStock"
     | "usageCommercial"
+    | "achatSousTraitance"
   >,
   comptes: CompteComptable[],
 ) {
   const manquants: string[] = [];
-  if (produitEstAchetable(produit)) {
+  if (typeAchatEstAttendu(produit)) {
     const charge = compteChargeProduit(produit, comptes);
     if (!compteProduitEstRenseigne(charge)) {
       manquants.push("le compte de charge (achat)");
@@ -1524,9 +1530,11 @@ export function migrerProduitComptes(
   let venteId = produit.compteVenteId;
   if (!chargeId && classeLegacy === "6" && legacy) chargeId = legacy.id;
   if (!venteId && classeLegacy === "7" && legacy) venteId = legacy.id;
-  if (!produitEstAchetable(produit)) chargeId = undefined;
+  if (!typeAchatEstAttendu(produit)) chargeId = undefined;
   if (!produitEstVendable(produit)) venteId = undefined;
-  const typeAchat = produit.typeAchat ?? "marchandises";
+  const typeAchat = typeAchatEstAttendu(produit)
+    ? (produit.typeAchat ?? "marchandises")
+    : produit.typeAchat;
 
   if (
     chargeId === produit.compteChargeId &&

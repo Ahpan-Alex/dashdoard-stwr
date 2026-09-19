@@ -354,8 +354,9 @@ function FormulaireDp({
       <h3 className="mb-2 text-sm font-semibold">Articles à consulter</h3>
       {articles.length === 0 ? (
         <p className="mb-4 text-sm text-muted">
-          Aucun article achetable dans le catalogue. Sur la fiche produit,
-          choisissez « Peut être acheté » ou « Acheté et vendu ».
+          Aucun article achetable dans le catalogue. Pour un semi-fini ou un
+          fini, cochez « Peut aussi être acheté (sous-traitance) » sur la fiche.
+          Pour les autres, choisissez « Peut être acheté » ou « Acheté et vendu ».
         </p>
       ) : (
         <div className="space-y-4">

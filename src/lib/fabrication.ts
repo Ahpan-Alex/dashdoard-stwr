@@ -1,7 +1,11 @@
 import { nextNumero } from "./commercial";
 import { etatCumpProduit, quantiteStockChronologique } from "./cump";
 import { createId } from "./id";
-import { produitEstAchetable, produitEstFabrique } from "./nature-stock";
+import {
+  motifProduitNonAchetable,
+  produitEstAchetable,
+  produitEstFabrique,
+} from "./nature-stock";
 import { NOM_NOMENCLATURE_STANDARD } from "./nomenclature";
 import {
   motifDimensionNomenclatureManquante,
@@ -562,7 +566,7 @@ export function motifAchatNatureInterdite(
     if (!l.produitId) continue;
     const p = produits.find((x) => x.id === l.produitId);
     if (p && !produitEstAchetable(p, categories)) {
-      return `« ${p.libelleCourt || p.code} » n'est pas achetable : il n'apparaît pas sur les commandes fournisseur ni les demandes de prix.`;
+      return motifProduitNonAchetable(p);
     }
   }
   return null;

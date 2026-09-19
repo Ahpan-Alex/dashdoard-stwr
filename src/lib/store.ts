@@ -235,6 +235,7 @@ import {
 } from "./nomenclature-formules";
 import {
   estUsageCommercial,
+  motifProduitNonAchetable,
   natureStockDuProduit,
   produitEstAchetable,
   produitEstFabrique,
@@ -2489,6 +2490,12 @@ export const useStore = create<Store>()((set, get) => ({
           if (motifRep) return { ok: false, reason: motifRep };
           const motifOf = motifRepartitionOfInvalide(data.lignes);
           if (motifOf) return { ok: false, reason: motifOf };
+          const motifNat = motifAchatNatureInterdite(
+            state.produits,
+            data.lignes,
+            state.categoriesProduits,
+          );
+          if (motifNat) return { ok: false, reason: motifNat };
         }
         set((s) => ({
           achats: s.achats.map((a) => (a.id === id ? { ...a, ...data } : a)),
@@ -3714,7 +3721,7 @@ export const useStore = create<Store>()((set, get) => ({
         if (!produitEstAchetable(produit, state.categoriesProduits)) {
           return {
             ok: false,
-            reason: "Cet article ne s'achète pas (semi-fini ou fini).",
+            reason: motifProduitNonAchetable(produit),
           };
         }
         const site = state.pointsDeVente.find((s) => s.id === data.pointDeVenteId);
@@ -5741,6 +5748,12 @@ export const useStore = create<Store>()((set, get) => ({
           }
         }
         const state = get();
+        const motifNat = motifAchatNatureInterdite(
+          state.produits,
+          data.lignes,
+          state.categoriesProduits,
+        );
+        if (motifNat) return { ok: false, reason: motifNat };
         const lignes: DemandePrixLigne[] = data.lignes.map((l) => ({
           id: uid("dpl"),
           produitId: l.produitId,
@@ -5823,6 +5836,12 @@ export const useStore = create<Store>()((set, get) => ({
           if (fournisseurIds.length === 0) {
             return { ok: false, reason: "Sélectionnez au moins un fournisseur." };
           }
+          const motifNat = motifAchatNatureInterdite(
+            state.produits,
+            lignes,
+            state.categoriesProduits,
+          );
+          if (motifNat) return { ok: false, reason: motifNat };
           const nextOffres: DemandePrixOffre[] = [];
           for (const ligne of lignes) {
             for (const fournisseurId of fournisseurIds) {
@@ -6221,29 +6240,14 @@ export const useStore = create<Store>()((set, get) => ({
         if (!prev) return { ok: false, reason: "Produit introuvable." };
         const natureCible = data.natureStock ?? natureStockDuProduit(prev);
         if (natureCible !== natureStockDuProduit(prev)) {
-          const achete = state.entrees.some(
-            (e) =>
-              e.produitId === id &&
-              (e.origine === "livraison_achat" ||
-                e.origine === "achat" ||
-                e.origine === "retour_fournisseur" ||
-                !e.origine),
-          );
           const fabrique = state.entrees.some(
             (e) => e.produitId === id && e.origine === "of_entree",
           );
-          if (produitEstFabrique({ natureStock: natureCible }) && achete) {
+          if (!produitEstFabrique({ natureStock: natureCible }) && fabrique) {
             return {
               ok: false,
               reason:
-                "Ce produit a déjà été acheté : il ne peut pas devenir semi-fini ou fini. Créez une nouvelle fiche.",
-            };
-          }
-          if (natureCible === "matiere_premiere" && fabrique) {
-            return {
-              ok: false,
-              reason:
-                "Ce produit a déjà été fabriqué par un OF : il ne peut pas devenir matière première.",
+                "Ce produit a déjà été fabriqué par un OF : il ne peut pas devenir matière première ni marchandise.",
             };
           }
         }

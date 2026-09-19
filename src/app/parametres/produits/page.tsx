@@ -47,6 +47,7 @@ import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-pane
 import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { AideSurfaceProduit } from "@/components/ligne-dimensions-saisie";
 import {
+  achatSousTraitanceDuProduit,
   contraindreUsageParFamille,
   estUsageCommercial,
   natureStockDuProduit,
@@ -54,7 +55,9 @@ import {
   prixAchatEstObligatoire,
   prixVenteEstObligatoire,
   produitEstAchetable,
+  produitEstFabrique,
   produitEstVendable,
+  typeAchatEstAttendu,
   usageCommercialDeLaFamille,
   usageCommercialDuProduit,
   USAGE_COMMERCIAL_FAMILLE_LABELS,
@@ -87,6 +90,7 @@ type ProduitFormState = {
   compteChargeId: string;
   compteVenteId: string;
   natureStock: NatureStock;
+  achatSousTraitance: boolean;
   usageCommercial: UsageCommercialProduit;
   nomenclatures: NomenclatureProduit[];
   venduAuM2: boolean;
@@ -125,6 +129,7 @@ function formDepuisProduit(
     compteChargeId: p.compteChargeId ?? "",
     compteVenteId: p.compteVenteId ?? "",
     natureStock: natureStockDuProduit(p),
+    achatSousTraitance: achatSousTraitanceDuProduit(p),
     usageCommercial: usageCommercialDuProduit(p, categories),
     nomenclatures: nomenclaturesDuProduit(p),
     venduAuM2: Boolean(p.venduAuM2),
@@ -219,6 +224,7 @@ export default function ParametresProduitsPage() {
       compteChargeId: "",
       compteVenteId: "",
       natureStock: "matiere_premiere",
+      achatSousTraitance: false,
       usageCommercial: usageFamille,
       nomenclatures: [],
       venduAuM2: false,
@@ -303,10 +309,11 @@ export default function ParametresProduitsPage() {
       usageSouhaite ?? next.usageCommercial,
       usageFamille,
     );
+    const attendu = typeAchatEstAttendu({ ...next, usageCommercial: usage });
     return {
       ...next,
       usageCommercial: usage,
-      compteChargeId: usage === "vente" ? "" : next.compteChargeId,
+      compteChargeId: attendu ? next.compteChargeId : "",
       compteVenteId: usage === "achat" ? "" : next.compteVenteId,
     };
   }
@@ -449,6 +456,10 @@ export default function ParametresProduitsPage() {
       alert("Le prix de vente est obligatoire pour un article vendable.");
       return;
     }
+    if (typeAchatEstAttendu(form) && !form.typeAchat) {
+      alert("Le type d'achat est obligatoire pour cet article.");
+      return;
+    }
     const m2Saisi = form.prixVenteM2HT.trim();
     const prixM2 = m2Saisi === "" ? undefined : Number(m2Saisi);
     if (form.venduAuM2 && (prixM2 == null || !Number.isFinite(prixM2) || prixM2 < 0)) {
@@ -496,11 +507,14 @@ export default function ParametresProduitsPage() {
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
       natureStock: form.natureStock,
+      achatSousTraitance: produitEstFabrique(form)
+        ? form.achatSousTraitance
+        : undefined,
       usageCommercial: form.usageCommercial,
       nomenclatures: form.nomenclatures,
       venduAuM2: form.venduAuM2 || undefined,
       prixVenteM2HT: form.venduAuM2 ? prixM2 : undefined,
-      compteChargeId: produitEstAchetable(form, categoriesProduits)
+      compteChargeId: typeAchatEstAttendu(form)
         ? form.compteChargeId || undefined
         : undefined,
       compteVenteId: produitEstVendable(form, categoriesProduits)
@@ -949,32 +963,6 @@ export default function ParametresProduitsPage() {
                 }
               />
             </label>
-            <label className="block text-xs font-semibold text-muted sm:col-span-2">
-              Type d&apos;achat
-              <select
-                className="select mt-1"
-                value={form.typeAchat}
-                onChange={(e) => {
-                  const typeAchat = e.target.value as TypeAchat;
-                  const defaut = compteChargeDefautPourType(
-                    typeAchat,
-                    comptesComptables,
-                  );
-                  setForm({
-                    ...form,
-                    typeAchat,
-                    compteChargeId:
-                      form.compteChargeId || defaut?.id || "",
-                  });
-                }}
-              >
-                {TYPES_ACHAT_PRODUIT.map((t) => (
-                  <option key={t} value={t}>
-                    {TYPE_ACHAT_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-            </label>
             <fieldset className="sm:col-span-2">
               <legend className="mb-2 text-xs font-semibold text-muted">
                 Circuit commercial
@@ -999,7 +987,9 @@ export default function ParametresProduitsPage() {
               <p className="mt-1 text-[11px] font-normal text-muted">
                 {circuitProduitVerrouille
                   ? "Circuit imposé par la famille. Modifiez-le sur la famille pour le changer."
-                  : "Détermine les listes d’achat / vente et les comptes comptables affichés."}
+                  : produitEstFabrique(form)
+                    ? "La vente reste gérée ici. L’achat d’un semi-fini ou fini dépend de la case sous-traitance."
+                    : "Détermine les listes d’achat / vente et les comptes comptables affichés."}
               </p>
             </fieldset>
             <NomenclatureEditor
@@ -1011,16 +1001,74 @@ export default function ParametresProduitsPage() {
                 setForm({
                   ...form,
                   natureStock: n,
-                  nomenclatures: n === "matiere_premiere" ? [] : form.nomenclatures,
+                  nomenclatures: produitEstFabrique({ natureStock: n })
+                    ? form.nomenclatures
+                    : [],
                 })
               }
               onNomenclaturesChange={(nomenclatures) =>
                 setForm({ ...form, nomenclatures })
               }
+              afterNature={
+                <>
+                  {produitEstFabrique(form) && (
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={form.achatSousTraitance}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            achatSousTraitance: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        Peut aussi être acheté (sous-traitance)
+                        <span className="mt-0.5 block text-[11px] font-normal text-muted">
+                          Cochez si ce semi-fini ou fini peut entrer par achat
+                          fournisseur. Sinon, seule une entrée par OF est possible
+                          (sans écriture de classe 6).
+                        </span>
+                      </span>
+                    </label>
+                  )}
+                  {typeAchatEstAttendu(form) && (
+                    <label className="block text-xs font-semibold text-muted">
+                      Type d&apos;achat *
+                      <select
+                        className="select mt-1"
+                        value={form.typeAchat}
+                        required
+                        onChange={(e) => {
+                          const typeAchat = e.target.value as TypeAchat;
+                          const defaut = compteChargeDefautPourType(
+                            typeAchat,
+                            comptesComptables,
+                          );
+                          setForm({
+                            ...form,
+                            typeAchat,
+                            compteChargeId:
+                              form.compteChargeId || defaut?.id || "",
+                          });
+                        }}
+                      >
+                        {TYPES_ACHAT_PRODUIT.map((t) => (
+                          <option key={t} value={t}>
+                            {TYPE_ACHAT_LABELS[t]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </>
+              }
             />
             {moduleCompta && (
               <>
-                {produitEstAchetable(form, categoriesProduits) && (
+                {typeAchatEstAttendu(form) && (
                 <label className="block text-xs font-semibold text-muted">
                   Compte de charge (achat)
                   <select
@@ -1455,7 +1503,13 @@ export default function ParametresProduitsPage() {
                   {selected.libelleLong}
                 </p>
                 <p className="text-xs text-muted">
-                  {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]} ·{" "}
+                  {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]}
+                  {produitEstFabrique(selected)
+                    ? achatSousTraitanceDuProduit(selected)
+                      ? " · Sous-traitance possible"
+                      : " · OF uniquement"
+                    : ""}{" "}
+                  ·{" "}
                   {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(selected, categoriesProduits)]} ·
                   Achat {formatCurrency(selected.prixAchat)} · Détail{" "}
                   {formatCurrency(selected.prixVenteHT)}
@@ -1685,12 +1739,15 @@ function ComptaProduitPanel({
   const venteVerrouille = compteUtiliseEnEcriture(vente?.id, ecritures);
   const type = produit.typeAchat ?? "marchandises";
   const motifMigration = motifComptesProduitInvalides(produit, comptes);
+  const typeAttendu = typeAchatEstAttendu(produit);
+  const sousTraitance = achatSousTraitanceDuProduit(produit);
+  const fabrique = produitEstFabrique(produit);
 
   if (!peutModifier) {
     return (
       <p className="text-sm text-muted">
-        {TYPE_ACHAT_LABELS[type]}.{" "}
-        {produitEstAchetable(produit, categories)
+        {typeAttendu ? `${TYPE_ACHAT_LABELS[type]}. ` : ""}
+        {typeAttendu
           ? `Charge : ${libelleCompte(charge)}. `
           : ""}
         {produitEstVendable(produit, categories)
@@ -1709,6 +1766,26 @@ function ComptaProduitPanel({
           {motifMigration} La fiche reste enregistrable.
         </p>
       )}
+      {fabrique && (
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={sousTraitance}
+            onChange={(e) =>
+              onChange({ achatSousTraitance: e.target.checked })
+            }
+          />
+          <span>
+            Peut aussi être acheté (sous-traitance)
+            <span className="mt-0.5 block text-[11px] font-normal text-muted">
+              Sinon, entrée uniquement par OF, sans type d&apos;achat ni compte
+              de classe 6.
+            </span>
+          </span>
+        </label>
+      )}
+      {typeAttendu && (
       <label className="block text-xs font-semibold text-muted">
         Type d&apos;achat
         <select
@@ -1732,7 +1809,8 @@ function ComptaProduitPanel({
           ))}
         </select>
       </label>
-      {produitEstAchetable(produit, categories) && (
+      )}
+      {typeAttendu && (
       <label className="block text-xs font-semibold text-muted">
         Compte de charge (achat)
         <select
@@ -1752,7 +1830,7 @@ function ComptaProduitPanel({
         </select>
       </label>
       )}
-      {chargeVerrouille && produitEstAchetable(produit, categories) && (
+      {chargeVerrouille && typeAttendu && (
         <p className="text-xs text-amber-800">{MSG_COMPTE_VERROUILLE}</p>
       )}
       {produitEstVendable(produit, categories) && (
