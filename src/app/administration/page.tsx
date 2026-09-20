@@ -14,7 +14,7 @@ export default function AdministrationIndexPage() {
     if (hasPermission("users.gerer")) {
       router.replace("/administration/utilisateurs");
     } else if (hasPermission("audit.lire")) {
-      router.replace("/administration/audit");
+      router.replace("/administration/journal-audit");
     } else if (hasPermission("securite.gerer")) {
       router.replace("/administration/sessions");
     } else {

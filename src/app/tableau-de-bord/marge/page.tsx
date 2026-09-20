@@ -27,10 +27,12 @@ import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
 import {
-  beneficesSerieTemporelle,
-  syntheseBenefices,
   type DateRange,
 } from "@/lib/calculations";
+import {
+  serieRentabiliteTemporelle,
+  syntheseRentabiliteDeuxPaliers,
+} from "@/lib/rentabilite";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -48,9 +50,11 @@ function toInputDate(d: Date) {
 
 export default function MargePage() {
   const {
-    ventes,
+    factures,
+    achats,
     entrees,
     produits,
+    parametres,
     pointDeVenteActifId,
     inventaires,
   } = useStore();
@@ -85,34 +89,69 @@ export default function MargePage() {
     return d <= f ? { debut: d, fin: f } : { debut: f, fin: d };
   }, [debut, fin]);
 
-  const synthese = useMemo(
-    () =>
-      syntheseBenefices(
-        ventes,
-        entrees,
-        produits,
-        pointDeVenteActifId,
-        range,
-        inventaires,
-      ),
-    [ventes, entrees, produits, pointDeVenteActifId, range, inventaires],
-  );
+  const synthese = useMemo(() => {
+    const s = syntheseRentabiliteDeuxPaliers({
+      factures,
+      achats,
+      produits,
+      entrees,
+      inventaires,
+      parametres,
+      pointDeVenteId: pointDeVenteActifId,
+      range,
+    });
+    return {
+      ca: s.caHt,
+      coutAchat: s.cmv,
+      benefice: s.margeBrute,
+      lignes: s.parProduit.map((l) => ({
+        id: l.produitId,
+        nom: l.nom,
+        unite: l.unite,
+        quantite: l.quantite,
+        ca: l.ca,
+        coutAchat: l.cmv,
+        benefice: l.marge,
+      })),
+    };
+  }, [
+    factures,
+    achats,
+    produits,
+    entrees,
+    inventaires,
+    parametres,
+    pointDeVenteActifId,
+    range,
+  ]);
 
   const serieMode =
     preset === "annee" ? "mois" : preset === "personnalise" ? "auto" : "jour";
 
   const serie = useMemo(
     () =>
-      beneficesSerieTemporelle(
-        ventes,
-        entrees,
+      serieRentabiliteTemporelle({
+        factures,
+        achats,
         produits,
-        pointDeVenteActifId,
-        range,
-        serieMode,
+        entrees,
         inventaires,
-      ),
-    [ventes, entrees, produits, pointDeVenteActifId, range, serieMode, inventaires],
+        parametres,
+        pointDeVenteId: pointDeVenteActifId,
+        range,
+        mode: serieMode,
+      }),
+    [
+      factures,
+      achats,
+      produits,
+      entrees,
+      inventaires,
+      parametres,
+      pointDeVenteActifId,
+      range,
+      serieMode,
+    ],
   );
 
   const periodeLabel = useMemo(() => {
@@ -137,7 +176,7 @@ export default function MargePage() {
     <div>
       <PageHeader
         title="Marge"
-        description="Bénéfices réalisés sur les ventes (CA moins coût d'achat), par produit et au total."
+        description="Marge brute palier 1 : CA HT des factures validées moins CMV (date de facture, hors paiement)."
       />
 
       <div className="mb-6 rounded-[var(--radius)] border border-line bg-card p-4">
@@ -236,7 +275,7 @@ export default function MargePage() {
           <div className="h-72">
             {serie.every((p) => p.benefice === 0 && p.ca === 0) ? (
               <p className="flex h-full items-center justify-center text-sm text-muted">
-                Aucune vente sur cette période.
+                Aucune facture validée sur cette période.
               </p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -375,7 +414,7 @@ export default function MargePage() {
             {synthese.lignes.length === 0 ? (
               <tr>
                 <td colSpan={colSpan(false)} className="text-muted">
-                  Aucune vente sur cette période.
+                  Aucune facture validée sur cette période.
                 </td>
               </tr>
             ) : (

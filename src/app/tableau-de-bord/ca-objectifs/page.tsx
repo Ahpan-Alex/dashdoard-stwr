@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
-import { chiffreAffaires } from "@/lib/calculations";
+import { chiffreAffairesFactures } from "@/lib/rentabilite";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -29,7 +29,8 @@ import { useAffichageTable } from "@/lib/use-affichage-table";
 type Horizon = "mois" | "annee";
 
 export default function CaObjectifsPage() {
-  const ventes = useStore((s) => s.ventes);
+  const factures = useStore((s) => s.factures);
+  const parametres = useStore((s) => s.parametres);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const [horizon, setHorizon] = useState<Horizon>("mois");
@@ -46,7 +47,12 @@ export default function CaObjectifsPage() {
   const lignes = useMemo(
     () =>
       pdvVisibles.map((pdv) => {
-        const realise = chiffreAffaires(ventes, pdv.id, horizon);
+        const realise = chiffreAffairesFactures(
+          factures,
+          parametres,
+          pdv.id,
+          horizon,
+        );
         const objectif =
           horizon === "mois"
             ? (pdv.objectifCAMensuel ?? 0)
@@ -55,7 +61,7 @@ export default function CaObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pdvVisibles, ventes, horizon],
+    [pdvVisibles, factures, parametres, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);
@@ -74,7 +80,7 @@ export default function CaObjectifsPage() {
     <div>
       <PageHeader
         title="CA objectif par point de vente"
-        description="Suivi du CA réalisé face aux objectifs mensuels et annuels fixés pour chaque point de vente."
+        description="Suivi du CA facturé (factures validées, date de facture) face aux objectifs mensuels et annuels."
         actions={
           <Link
             href="/parametres/pilotage?onglet=objectifs"

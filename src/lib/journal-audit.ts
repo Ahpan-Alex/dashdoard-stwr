@@ -280,7 +280,7 @@ export async function imprimerPdfJournalAudit(lignes: EntreeJournalAudit[]) {
     )
     .join("");
   idoc.open();
-  idoc.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Journal d'audit</title>
+  idoc.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Journal métier</title>
 <style>
 body{font-family:system-ui,sans-serif;font-size:9pt;color:#0c1f28;margin:0}
 h1{font-size:13pt;margin:0 0 8px}
@@ -289,7 +289,7 @@ th,td{border:0.4pt solid #c5d0d4;padding:3px 5px;text-align:left;vertical-align:
 th{background:#eef4f6}
 @page{size:A4 landscape;margin:10mm}
 </style></head><body>
-<h1>Journal d'audit</h1>
+<h1>Journal métier</h1>
 <p>${lignes.length} entrée(s) — document non modifiable</p>
 <table><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Objet</th><th>Avant → après</th><th>Site</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6">Aucune entrée.</td></tr>`}</tbody></table>

@@ -285,6 +285,8 @@ export default function TiersDetailPage() {
           />
           <TiersDashboardPanel
             clientId={tiersActif.id}
+            factures={factures}
+            parametres={parametres}
             ventes={ventes}
             produits={produits}
             categories={categoriesProduits}

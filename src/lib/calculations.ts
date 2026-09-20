@@ -350,10 +350,9 @@ function construireRapportYoY(
   };
 }
 
-/** CA mensuel Jan→Déc : année N vs N-1 (+ cumulé). */
-export function caRapportMensuelYoY(
-  ventes: Vente[],
-  pointDeVenteId: string | "tous",
+/** Construit un rapport YoY à partir d’une fonction CA (factures, ventes, …). */
+export function caRapportMensuelYoYDepuis(
+  ca: (range: DateRange) => number,
   annee = new Date().getFullYear(),
 ): RapportCaYoY {
   const lignes: LigneCaYoY[] = [];
@@ -362,8 +361,8 @@ export function caRapportMensuelYoY(
     const refP = new Date(annee - 1, month, 15);
     const rangeAnnee = periodToRange("mois", refN);
     const rangeAnneePrec = periodToRange("mois", refP);
-    const caAnnee = chiffreAffaires(ventes, pointDeVenteId, rangeAnnee);
-    const caAnneePrec = chiffreAffaires(ventes, pointDeVenteId, rangeAnneePrec);
+    const caAnnee = ca(rangeAnnee);
+    const caAnneePrec = ca(rangeAnneePrec);
     const { ecart, pct } = ecartPct(caAnnee, caAnneePrec);
     lignes.push({
       key: `m-${month}`,
@@ -379,10 +378,20 @@ export function caRapportMensuelYoY(
   return construireRapportYoY(annee, lignes, "CA mensuel", "CA cumulé");
 }
 
-/** CA hebdomadaire S1→Sn : année N vs N-1 (+ cumulé). */
-export function caRapportHebdomadaireYoY(
+/** CA mensuel Jan→Déc : année N vs N-1 (+ cumulé). */
+export function caRapportMensuelYoY(
   ventes: Vente[],
   pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+): RapportCaYoY {
+  return caRapportMensuelYoYDepuis(
+    (range) => chiffreAffaires(ventes, pointDeVenteId, range),
+    annee,
+  );
+}
+
+export function caRapportHebdomadaireYoYDepuis(
+  ca: (range: DateRange) => number,
   annee = new Date().getFullYear(),
 ): RapportCaYoY {
   const weeks = getISOWeeksInYear(new Date(annee, 5, 1));
@@ -392,8 +401,8 @@ export function caRapportHebdomadaireYoY(
     const refP = setISOWeek(setISOWeekYear(new Date(), annee - 1), week);
     const rangeAnnee = periodToRange("semaine", refN);
     const rangeAnneePrec = periodToRange("semaine", refP);
-    const caAnnee = chiffreAffaires(ventes, pointDeVenteId, rangeAnnee);
-    const caAnneePrec = chiffreAffaires(ventes, pointDeVenteId, rangeAnneePrec);
+    const caAnnee = ca(rangeAnnee);
+    const caAnneePrec = ca(rangeAnneePrec);
     const { ecart, pct } = ecartPct(caAnnee, caAnneePrec);
     lignes.push({
       key: `w-${week}`,
@@ -414,6 +423,18 @@ export function caRapportHebdomadaireYoY(
   );
 }
 
+/** CA hebdomadaire S1→Sn : année N vs N-1 (+ cumulé). */
+export function caRapportHebdomadaireYoY(
+  ventes: Vente[],
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+): RapportCaYoY {
+  return caRapportHebdomadaireYoYDepuis(
+    (range) => chiffreAffaires(ventes, pointDeVenteId, range),
+    annee,
+  );
+}
+
 /** CA annuel sur 3 années (présentation type rapport, sans 2e année en colonnes). */
 export type LigneCaAnnuel = {
   key: string;
@@ -425,42 +446,23 @@ export type LigneCaAnnuel = {
   courant: boolean;
 };
 
-export function caRapportAnnuel(
-  ventes: Vente[],
-  pointDeVenteId: string | "tous",
+export function caRapportAnnuelDepuis(
+  caAnnee: (annee: number) => number,
   annee = new Date().getFullYear(),
 ): { annees: number[]; lignes: LigneCaAnnuel[]; total: Omit<LigneCaAnnuel, "key" | "label" | "courant">; moyenne: Omit<LigneCaAnnuel, "key" | "label" | "courant"> } {
   const annees = [annee - 2, annee - 1, annee];
-  const lignes: LigneCaAnnuel[] = annees.map((y, i) => {
-    const ca = chiffreAffaires(
-      ventes,
-      pointDeVenteId,
-      "annee",
-      new Date(y, 6, 1),
-    );
-    const caPrec =
-      i === 0
-        ? chiffreAffaires(
-            ventes,
-            pointDeVenteId,
-            "annee",
-            new Date(y - 1, 6, 1),
-          )
-        : 0;
-    return { key: `y-${y}`, label: String(y), ca, caPrec, ecart: 0, pct: null, courant: y === annee };
-  });
+  const lignes: LigneCaAnnuel[] = annees.map((y) => ({
+    key: `y-${y}`,
+    label: String(y),
+    ca: caAnnee(y),
+    caPrec: 0,
+    ecart: 0,
+    pct: null,
+    courant: y === annee,
+  }));
 
-  // Fill caPrec / ecart from previous row in series (and year before first)
   for (let i = 0; i < lignes.length; i++) {
-    const caPrec =
-      i === 0
-        ? chiffreAffaires(
-            ventes,
-            pointDeVenteId,
-            "annee",
-            new Date(annees[0] - 1, 6, 1),
-          )
-        : lignes[i - 1].ca;
+    const caPrec = i === 0 ? caAnnee(annees[0] - 1) : lignes[i - 1].ca;
     const { ecart, pct } = ecartPct(lignes[i].ca, caPrec);
     lignes[i].caPrec = caPrec;
     lignes[i].ecart = ecart;
@@ -486,10 +488,19 @@ export function caRapportAnnuel(
   };
 }
 
-/** CA trimestriel année N vs N-1 (+ cumulé) — vue annuelle type rapport. */
-export function caRapportTrimestrielYoY(
+export function caRapportAnnuel(
   ventes: Vente[],
   pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+) {
+  return caRapportAnnuelDepuis(
+    (y) => chiffreAffaires(ventes, pointDeVenteId, "annee", new Date(y, 6, 1)),
+    annee,
+  );
+}
+
+export function caRapportTrimestrielYoYDepuis(
+  ca: (range: DateRange) => number,
   annee = new Date().getFullYear(),
 ): RapportCaYoY {
   const trimestres = [
@@ -507,8 +518,8 @@ export function caRapportTrimestrielYoY(
       debut: startOfMonth(new Date(annee - 1, t.months[0], 1)),
       fin: endOfMonth(new Date(annee - 1, t.months[2], 1)),
     };
-    const caAnnee = chiffreAffaires(ventes, pointDeVenteId, rangeAnnee);
-    const caAnneePrec = chiffreAffaires(ventes, pointDeVenteId, rangeAnneePrec);
+    const caAnnee = ca(rangeAnnee);
+    const caAnneePrec = ca(rangeAnneePrec);
     const { ecart, pct } = ecartPct(caAnnee, caAnneePrec);
     return {
       key: `t-${i}`,
@@ -522,6 +533,18 @@ export function caRapportTrimestrielYoY(
     };
   });
   return construireRapportYoY(annee, lignes, "CA trimestriel", "CA cumulé");
+}
+
+/** CA trimestriel année N vs N-1 (+ cumulé) — vue annuelle type rapport. */
+export function caRapportTrimestrielYoY(
+  ventes: Vente[],
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+): RapportCaYoY {
+  return caRapportTrimestrielYoYDepuis(
+    (range) => chiffreAffaires(ventes, pointDeVenteId, range),
+    annee,
+  );
 }
 
 export type LigneStock = {

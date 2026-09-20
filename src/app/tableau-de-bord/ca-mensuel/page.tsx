@@ -17,15 +17,17 @@ import { CaComparaisonDoubleTable } from "@/components/ca-comparaison-tables";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import {
-  caPrecedent,
-  caRapportAnnuel,
-  caRapportHebdomadaireYoY,
-  caRapportMensuelYoY,
-  caRapportTrimestrielYoY,
-  chiffreAffaires,
   labelPeriodeCourante,
   type Periode,
 } from "@/lib/calculations";
+import {
+  caPrecedentFactures,
+  caRapportAnnuelFactures,
+  caRapportHebdomadaireYoYFactures,
+  caRapportMensuelYoYFactures,
+  caRapportTrimestrielYoYFactures,
+  chiffreAffairesFactures,
+} from "@/lib/rentabilite";
 import { formatCompactCurrency, formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -48,7 +50,13 @@ function titreEvolution(periode: Periode) {
 }
 
 export default function CaMensuelPage() {
-  const { ventes, produits, pointsDeVente, pointDeVenteActifId } = useStore();
+  const {
+    factures,
+    parametres,
+    produits,
+    pointsDeVente,
+    pointDeVenteActifId,
+  } = useStore();
   const [periode, setPeriode] = useState<Periode>("mois");
   const annee = new Date().getFullYear();
 
@@ -61,34 +69,81 @@ export default function CaMensuelPage() {
   const labelAnnee = useMemo(() => labelPeriodeCourante("annee"), []);
 
   const ca = useMemo(
-    () => chiffreAffaires(ventes, pointDeVenteActifId, periode),
-    [ventes, pointDeVenteActifId, periode],
+    () =>
+      chiffreAffairesFactures(
+        factures,
+        parametres,
+        pointDeVenteActifId,
+        periode,
+      ),
+    [factures, parametres, pointDeVenteActifId, periode],
   );
   const prev = useMemo(
-    () => caPrecedent(ventes, pointDeVenteActifId, periode),
-    [ventes, pointDeVenteActifId, periode],
+    () =>
+      caPrecedentFactures(
+        factures,
+        parametres,
+        pointDeVenteActifId,
+        periode,
+      ),
+    [factures, parametres, pointDeVenteActifId, periode],
   );
 
-  const caSemaine = chiffreAffaires(ventes, pointDeVenteActifId, "semaine");
-  const caMois = chiffreAffaires(ventes, pointDeVenteActifId, "mois");
-  const caAnnee = chiffreAffaires(ventes, pointDeVenteActifId, "annee");
+  const caSemaine = chiffreAffairesFactures(
+    factures,
+    parametres,
+    pointDeVenteActifId,
+    "semaine",
+  );
+  const caMois = chiffreAffairesFactures(
+    factures,
+    parametres,
+    pointDeVenteActifId,
+    "mois",
+  );
+  const caAnnee = chiffreAffairesFactures(
+    factures,
+    parametres,
+    pointDeVenteActifId,
+    "annee",
+  );
 
   const rapport = useMemo(() => {
     if (periode === "semaine") {
-      return caRapportHebdomadaireYoY(ventes, pointDeVenteActifId, annee);
+      return caRapportHebdomadaireYoYFactures(
+        factures,
+        parametres,
+        pointDeVenteActifId,
+        annee,
+      );
     }
     if (periode === "annee") {
-      return caRapportTrimestrielYoY(ventes, pointDeVenteActifId, annee);
+      return caRapportTrimestrielYoYFactures(
+        factures,
+        parametres,
+        pointDeVenteActifId,
+        annee,
+      );
     }
-    return caRapportMensuelYoY(ventes, pointDeVenteActifId, annee);
-  }, [ventes, pointDeVenteActifId, periode, annee]);
+    return caRapportMensuelYoYFactures(
+      factures,
+      parametres,
+      pointDeVenteActifId,
+      annee,
+    );
+  }, [factures, parametres, pointDeVenteActifId, periode, annee]);
 
   const rapportAnnuel3ans = useMemo(
     () =>
       periode === "annee"
-        ? caRapportAnnuel(ventes, pointDeVenteActifId, annee)
+        ? caRapportAnnuelFactures(
+            factures,
+            parametres,
+            pointDeVenteActifId,
+            annee,
+          )
         : null,
-    [periode, ventes, pointDeVenteActifId, annee],
+    [periode, factures, parametres, pointDeVenteActifId, annee],
   );
 
   const chartEvolution = useMemo(() => {
@@ -127,7 +182,7 @@ export default function CaMensuelPage() {
     <div>
       <PageHeader
         title="Chiffre d'affaires mensuel"
-        description="Analyse hebdomadaire, mensuelle et annuelle alimentée par la facturation."
+        description="Analyse hebdomadaire, mensuelle et annuelle : factures fiscales validées (date de facture, hors paiement)."
         actions={
           <Link href="/factures" className="btn btn-primary">
             <ScrollText className="h-4 w-4" />
@@ -192,14 +247,15 @@ export default function CaMensuelPage() {
           )}
         </p>
         <p className="mt-1 text-xs text-muted">
-          Comparaison {rapport.annee} vs {rapport.anneePrec} (CA HT)
+          Comparaison {rapport.annee} vs {rapport.anneePrec} (CA HT facturé)
         </p>
       </div>
 
       <div className="mt-6">
         <CaComparaisonDoubleTable
           rapport={rapport}
-          ventes={ventes}
+          factures={factures}
+          parametres={parametres}
           produits={produits}
           pointsDeVente={pointsDeVente}
           pointDeVenteActifId={pointDeVenteActifId}

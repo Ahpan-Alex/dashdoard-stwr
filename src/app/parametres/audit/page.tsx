@@ -63,7 +63,7 @@ function Contenu() {
     <div>
       <ParametresSubnav />
       <PageHeader
-        title="Journal d'audit — rétention"
+        title="Journal métier — rétention"
         description="La conservation des actions comptables et RBAC est illimitée. Les autres catégories peuvent être purgées après X années — jamais rétroactivement sur les catégories illimitées."
         showPosSelector={false}
       />
@@ -122,7 +122,7 @@ function Contenu() {
         )}
         <p className="text-sm">
           <Link href="/administration/journal-audit" className="text-sea-700 underline">
-            Ouvrir le journal d'audit
+            Ouvrir le journal métier
           </Link>
         </p>
       </form>

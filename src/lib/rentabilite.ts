@@ -1,14 +1,35 @@
 import {
+  differenceInCalendarDays,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  endOfDay,
+  endOfMonth,
+  format as formatDateFns,
+  startOfDay,
+  startOfMonth,
+  subMonths,
+  subWeeks,
+  subYears,
+} from "date-fns";
+import { fr } from "date-fns/locale";
+import { montantAchatsHT } from "./achats";
+import {
+  caRapportAnnuelDepuis,
+  caRapportHebdomadaireYoYDepuis,
+  caRapportMensuelYoYDepuis,
+  caRapportTrimestrielYoYDepuis,
+  inDateRange,
+  periodToRange,
+  type DateRange,
+  type Periode,
+} from "./calculations";
+import {
   htNetsLignesProduit,
   isLigneProduit,
   totauxFacture,
 } from "./commercial";
-import {
-  inDateRange,
-  type DateRange,
-} from "./calculations";
-import { montantAchatsHT } from "./achats";
 import { cmvSortiesPeriode } from "./cump";
+import { libelleProduit } from "./produits";
 import type {
   Achat,
   EntreeStock,
@@ -310,4 +331,244 @@ export function serieRentabiliteMensuelle(opts: {
     });
   }
   return out;
+}
+
+/** CA HT des factures fiscales validées (date de facture, hors paiement). */
+export function chiffreAffairesFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  periodeOrRange: Periode | DateRange,
+  reference = new Date(),
+) {
+  const range =
+    typeof periodeOrRange === "string"
+      ? periodToRange(periodeOrRange, reference)
+      : periodeOrRange;
+  return caHtFacturesPeriode(factures, parametres, pointDeVenteId, range);
+}
+
+export function caPrecedentFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  periode: Periode,
+) {
+  const ref =
+    periode === "semaine"
+      ? subWeeks(new Date(), 1)
+      : periode === "mois"
+        ? subMonths(new Date(), 1)
+        : subYears(new Date(), 1);
+  return chiffreAffairesFactures(
+    factures,
+    parametres,
+    pointDeVenteId,
+    periode,
+    ref,
+  );
+}
+
+function caFacturesInRange(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+) {
+  return (range: DateRange) =>
+    caHtFacturesPeriode(factures, parametres, pointDeVenteId, range);
+}
+
+export function caRapportMensuelYoYFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+) {
+  return caRapportMensuelYoYDepuis(
+    caFacturesInRange(factures, parametres, pointDeVenteId),
+    annee,
+  );
+}
+
+export function caRapportHebdomadaireYoYFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+) {
+  return caRapportHebdomadaireYoYDepuis(
+    caFacturesInRange(factures, parametres, pointDeVenteId),
+    annee,
+  );
+}
+
+export function caRapportTrimestrielYoYFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+) {
+  return caRapportTrimestrielYoYDepuis(
+    caFacturesInRange(factures, parametres, pointDeVenteId),
+    annee,
+  );
+}
+
+export function caRapportAnnuelFactures(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  annee = new Date().getFullYear(),
+) {
+  return caRapportAnnuelDepuis(
+    (y) =>
+      chiffreAffairesFactures(
+        factures,
+        parametres,
+        pointDeVenteId,
+        "annee",
+        new Date(y, 6, 1),
+      ),
+    annee,
+  );
+}
+
+export type LigneCaProduitFacture = {
+  id: string;
+  nom: string;
+  unite: string;
+  quantite: number;
+  montant: number;
+};
+
+export function caParProduitFactures(
+  factures: Facture[],
+  produits: Produit[],
+  pointDeVenteId: string | "tous",
+  periodeOrRange: Periode | DateRange,
+  reference = new Date(),
+): LigneCaProduitFacture[] {
+  const range =
+    typeof periodeOrRange === "string"
+      ? periodToRange(periodeOrRange, reference)
+      : periodeOrRange;
+  const map = new Map<string, { quantite: number; montant: number }>();
+  for (const f of factures) {
+    if (!factureCompteDansCA(f)) continue;
+    if (pointDeVenteId !== "tous" && f.pointDeVenteId !== pointDeVenteId) {
+      continue;
+    }
+    if (!inDateRange(f.date, range)) continue;
+    const signe = f.type === "avoir" ? -1 : 1;
+    const lignes = f.lignes.filter((l) => isLigneProduit(l) && l.produitId);
+    const htsNets = htNetsLignesProduit(
+      lignes,
+      f.remiseGlobale ?? 0,
+      f.remiseGlobaleMode,
+    );
+    lignes.forEach((l, i) => {
+      const prev = map.get(l.produitId!) ?? { quantite: 0, montant: 0 };
+      prev.quantite += signe * l.quantite;
+      prev.montant += signe * (htsNets[i] ?? 0);
+      map.set(l.produitId!, prev);
+    });
+  }
+  return [...map.entries()]
+    .map(([id, v]) => {
+      const p = produits.find((x) => x.id === id);
+      return {
+        id,
+        nom: p ? libelleProduit(p) : id,
+        unite: p?.unite ?? "",
+        quantite: v.quantite,
+        montant: Math.round(v.montant),
+      };
+    })
+    .filter((l) => l.montant !== 0 || l.quantite !== 0)
+    .sort((a, b) => b.montant - a.montant);
+}
+
+export type LigneDetailFactureCa = {
+  id: string;
+  date: string;
+  numero: string;
+  type: Facture["type"];
+  pointDeVenteId: string;
+  clientId: string;
+  totalHT: number;
+};
+
+export function detailFacturesCaPeriode(
+  factures: Facture[],
+  parametres: Parametres,
+  pointDeVenteId: string | "tous",
+  range: DateRange,
+): LigneDetailFactureCa[] {
+  const out: LigneDetailFactureCa[] = [];
+  for (const f of factures) {
+    if (!factureCompteDansCA(f)) continue;
+    if (pointDeVenteId !== "tous" && f.pointDeVenteId !== pointDeVenteId) {
+      continue;
+    }
+    if (!inDateRange(f.date, range)) continue;
+    const t = totauxFacture(f, parametres);
+    const ht = f.type === "avoir" ? -t.totalHT : t.totalHT;
+    out.push({
+      id: f.id,
+      date: f.date,
+      numero: f.numero,
+      type: f.type,
+      pointDeVenteId: f.pointDeVenteId,
+      clientId: f.clientId,
+      totalHT: Math.round(ht),
+    });
+  }
+  return out.sort(
+    (a, b) => b.date.localeCompare(a.date) || b.numero.localeCompare(a.numero),
+  );
+}
+
+export function serieRentabiliteTemporelle(opts: {
+  factures: Facture[];
+  achats: Achat[];
+  produits: Produit[];
+  entrees: EntreeStock[];
+  inventaires?: Inventaire[];
+  parametres: Parametres;
+  pointDeVenteId: string | "tous";
+  range: DateRange;
+  mode?: "jour" | "mois" | "auto";
+}): { key: string; label: string; ca: number; coutAchat: number; benefice: number }[] {
+  const { range, mode = "auto", ...rest } = opts;
+  const jours = differenceInCalendarDays(range.fin, range.debut) + 1;
+  const granularite: "jour" | "mois" =
+    mode === "auto" ? (jours <= 62 ? "jour" : "mois") : mode;
+
+  const agregat = (bucket: DateRange) => {
+    const s = syntheseRentabiliteDeuxPaliers({ ...rest, range: bucket });
+    return { ca: s.caHt, coutAchat: s.cmv, benefice: s.margeBrute };
+  };
+
+  if (granularite === "jour") {
+    return eachDayOfInterval({
+      start: startOfDay(range.debut),
+      end: endOfDay(range.fin),
+    }).map((day) => ({
+      key: formatDateFns(day, "yyyy-MM-dd"),
+      label: formatDateFns(day, "d MMM", { locale: fr }),
+      ...agregat({ debut: startOfDay(day), fin: endOfDay(day) }),
+    }));
+  }
+
+  return eachMonthOfInterval({
+    start: startOfMonth(range.debut),
+    end: endOfMonth(range.fin),
+  }).map((month) => ({
+    key: formatDateFns(month, "yyyy-MM"),
+    label: formatDateFns(month, "MMM yyyy", { locale: fr }),
+    ...agregat({
+      debut: startOfMonth(month),
+      fin: endOfMonth(month),
+    }),
+  }));
 }

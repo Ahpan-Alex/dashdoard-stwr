@@ -190,7 +190,7 @@ function UtilisateursContent() {
     <div>
       <PageHeader
         title="Historique"
-        description="Historique de connexions, actions d'accès et journal métier — export CSV et purge au-delà de 90 jours."
+        description="Connexions et actions — export CSV. Pour consulter : Administration → Journal métier ou Journal connexion."
         showPosSelector={false}
       />
       <ParametresSubnav />

@@ -48,8 +48,8 @@ function AuditContent() {
   return (
     <div>
       <PageHeader
-        title="Journal d'audit accès"
-        description="Connexions, verrouillages, changements de mots de passe et administration."
+        title="Journal connexion"
+        description="Qui s'est connecté, déconnecté, ou a changé un mot de passe. Distinct du journal métier (factures, stocks, tiers)."
         showPosSelector={false}
       />
       <AdminSubnav />

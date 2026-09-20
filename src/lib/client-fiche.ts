@@ -1,17 +1,21 @@
-import { parseISO } from "date-fns";
-import { caRapportMensuelYoY, ecartPct, montantVente } from "./calculations";
+import { ecartPct, periodToRange } from "./calculations";
 import {
+  ACOMPTE_STATUTS,
   BL_STATUTS,
   COMMANDE_STATUTS,
   DEVIS_STATUTS,
   FACTURE_STATUTS,
-  ACOMPTE_STATUTS,
   totalFacture,
   totauxBonDeLivraison,
   totauxCommande,
   totauxDevis,
 } from "./commercial";
-import { categorieRacine, libelleProduit } from "./produits";
+import { categorieRacine } from "./produits";
+import {
+  caHtFacturesPeriode,
+  caParProduitFactures,
+  caRapportMensuelYoYFactures,
+} from "./rentabilite";
 import { BP_STATUTS } from "./bon-de-preparation";
 import type {
   Acompte,
@@ -41,6 +45,11 @@ const MOIS_COURTS = [
   "Déc",
 ];
 
+/** Factures fiscales d’un client. */
+export function facturesDuClient(factures: Facture[], clientId: string) {
+  return factures.filter((f) => f.clientId === clientId);
+}
+
 /** Ventes (dérivées des factures) rattachées à un client. */
 export function ventesDuClient(ventes: Vente[], clientId: string) {
   return ventes.filter((v) => v.clientId === clientId);
@@ -50,17 +59,21 @@ export type CaMoisClient = { mois: string; montant: number };
 
 /** CA HT mensuel réalisé avec le client sur l'année donnée (12 mois). */
 export function caMensuelClient(
-  ventes: Vente[],
+  factures: Facture[],
+  parametres: Parametres,
   clientId: string,
   annee = new Date().getFullYear(),
 ): CaMoisClient[] {
-  const totals = new Array(12).fill(0) as number[];
-  for (const v of ventesDuClient(ventes, clientId)) {
-    const d = parseISO(v.date);
-    if (d.getFullYear() !== annee) continue;
-    totals[d.getMonth()] += montantVente(v);
-  }
-  return totals.map((montant, i) => ({ mois: MOIS_COURTS[i], montant }));
+  const duClient = facturesDuClient(factures, clientId);
+  return Array.from({ length: 12 }, (_, month) => ({
+    mois: MOIS_COURTS[month],
+    montant: caHtFacturesPeriode(
+      duClient,
+      parametres,
+      "tous",
+      periodToRange("mois", new Date(annee, month, 15)),
+    ),
+  }));
 }
 
 export type CaArticleClient = {
@@ -76,34 +89,27 @@ export type CaArticleClient = {
  * Si `annee` est fourni, restreint à cette année civile.
  */
 export function caParArticleClient(
-  ventes: Vente[],
+  factures: Facture[],
+  parametres: Parametres,
   produits: Produit[],
   clientId: string,
   annee?: number,
 ): CaArticleClient[] {
-  const list = ventesDuClient(ventes, clientId).filter((v) =>
-    annee ? parseISO(v.date).getFullYear() === annee : true,
-  );
-  const map = new Map<string, { quantite: number; montant: number }>();
-  for (const v of list) {
-    const cur = map.get(v.produitId) ?? { quantite: 0, montant: 0 };
-    cur.quantite += v.quantite;
-    cur.montant += montantVente(v);
-    map.set(v.produitId, cur);
-  }
-  return [...map.entries()]
-    .map(([produitId, agg]) => {
-      const produit = produits.find((p) => p.id === produitId);
-      return {
-        id: produitId,
-        nom: produit ? libelleProduit(produit) : "Produit supprimé",
-        unite: produit?.unite ?? "",
-        quantite: agg.quantite,
-        montant: agg.montant,
+  const range = annee
+    ? {
+        debut: new Date(annee, 0, 1),
+        fin: new Date(annee, 11, 31, 23, 59, 59, 999),
+      }
+    : {
+        debut: new Date(1970, 0, 1),
+        fin: new Date(2999, 11, 31, 23, 59, 59, 999),
       };
-    })
-    .filter((l) => l.montant !== 0 || l.quantite !== 0)
-    .sort((a, b) => b.montant - a.montant);
+  return caParProduitFactures(
+    facturesDuClient(factures, clientId),
+    produits,
+    "tous",
+    range,
+  );
 }
 
 export type CaAnnuelClient = {
@@ -116,14 +122,20 @@ export type CaAnnuelClient = {
 };
 
 /**
- * CA annuel (année civile) net des remises, ventes du tiers en tant que Client.
+ * CA annuel (année civile) net des remises, factures validées du tiers en tant que Client.
  */
 export function caAnnuelClient(
-  ventes: Vente[],
+  factures: Facture[],
+  parametres: Parametres,
   clientId: string,
   annee = new Date().getFullYear(),
 ): CaAnnuelClient {
-  const rapport = caRapportMensuelYoY(ventesDuClient(ventes, clientId), "tous", annee);
+  const rapport = caRapportMensuelYoYFactures(
+    facturesDuClient(factures, clientId),
+    parametres,
+    "tous",
+    annee,
+  );
   return {
     annee: rapport.annee,
     anneePrec: rapport.anneePrec,
@@ -146,14 +158,21 @@ export type CaFamilleClient = {
 const FAMILLE_SANS_ID = "__sans_famille__";
 
 function montantParFamille(
-  ventes: Vente[],
+  factures: Facture[],
+  parametres: Parametres,
   produits: Produit[],
   categories: CategorieProduit[],
   clientId: string,
   annee: number,
 ): Map<string, { libelle: string; montant: number }> {
   const map = new Map<string, { libelle: string; montant: number }>();
-  for (const art of caParArticleClient(ventes, produits, clientId, annee)) {
+  for (const art of caParArticleClient(
+    factures,
+    parametres,
+    produits,
+    clientId,
+    annee,
+  )) {
     const produit = produits.find((p) => p.id === art.id);
     const racine = categorieRacine(produit?.categorieId, categories);
     const id = racine?.id ?? FAMILLE_SANS_ID;
@@ -167,14 +186,29 @@ function montantParFamille(
 
 /** CA HT par famille de produits (racine), N vs N-1. */
 export function caParFamilleClient(
-  ventes: Vente[],
+  factures: Facture[],
+  parametres: Parametres,
   produits: Produit[],
   categories: CategorieProduit[],
   clientId: string,
   annee = new Date().getFullYear(),
 ): CaFamilleClient[] {
-  const n = montantParFamille(ventes, produits, categories, clientId, annee);
-  const n1 = montantParFamille(ventes, produits, categories, clientId, annee - 1);
+  const n = montantParFamille(
+    factures,
+    parametres,
+    produits,
+    categories,
+    clientId,
+    annee,
+  );
+  const n1 = montantParFamille(
+    factures,
+    parametres,
+    produits,
+    categories,
+    clientId,
+    annee - 1,
+  );
   const ids = new Set([...n.keys(), ...n1.keys()]);
   return [...ids]
     .map((id) => {

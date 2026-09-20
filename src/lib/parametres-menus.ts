@@ -250,8 +250,8 @@ export const REFERENTIEL_SECTIONS: ParametreSection[] = [
   {
     id: "audit",
     href: "/parametres/audit",
-    label: "Journal d'audit",
-    description: "Rétention des actions sensibles.",
+    label: "Rétention journal métier",
+    description: "Durée de conservation des actions sensibles.",
     permission: "audit.lire",
     groupe: "referentiel",
     items: [],

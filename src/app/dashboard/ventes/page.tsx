@@ -112,7 +112,7 @@ function DashboardVentesContent() {
           Marge produits
         </Link>
         <Link href="/tableau-de-bord/ca-produits" className="text-sea-800 underline">
-          CA produits (ventes caisse)
+          CA produits
         </Link>
       </p>
 

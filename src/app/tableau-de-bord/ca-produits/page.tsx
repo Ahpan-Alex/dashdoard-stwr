@@ -14,7 +14,8 @@ import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
-import { caParProduit, type Periode } from "@/lib/calculations";
+import { caParProduitFactures } from "@/lib/rentabilite";
+import { type Periode } from "@/lib/calculations";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -31,13 +32,14 @@ const periodes: { id: Periode; label: string }[] = [
 ];
 
 export default function CaProduitsPage() {
-  const { ventes, produits, pointDeVenteActifId } = useStore();
+  const { factures, produits, pointDeVenteActifId } = useStore();
   const { visible, colSpan } = useAffichageTable("ca_produits");
   const [periode, setPeriode] = useState<Periode>("mois");
 
   const parProduit = useMemo(
-    () => caParProduit(ventes, produits, pointDeVenteActifId, periode),
-    [ventes, produits, pointDeVenteActifId, periode],
+    () =>
+      caParProduitFactures(factures, produits, pointDeVenteActifId, periode),
+    [factures, produits, pointDeVenteActifId, periode],
   );
   const total = parProduit.reduce((s, l) => s + l.montant, 0);
   const top = parProduit[0];
@@ -50,7 +52,7 @@ export default function CaProduitsPage() {
     <div>
       <PageHeader
         title="CA produits"
-        description="Répartition du chiffre d'affaires par produit sur la période sélectionnée."
+        description="Répartition du CA HT par produit, à partir des factures fiscales validées (date de facture, hors paiement)."
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -89,7 +91,7 @@ export default function CaProduitsPage() {
         <div className="h-72">
           {chartData.length === 0 ? (
             <p className="flex h-full items-center justify-center text-sm text-muted">
-              Aucune vente sur cette période.
+              Aucune facture validée sur cette période.
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -151,7 +153,7 @@ export default function CaProduitsPage() {
             {parProduit.length === 0 ? (
               <tr>
                 <td colSpan={colSpan(false)} className="text-muted">
-                  Aucune vente sur cette période.
+                  Aucune facture validée sur cette période.
                 </td>
               </tr>
             ) : (

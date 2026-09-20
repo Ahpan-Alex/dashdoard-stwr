@@ -7,13 +7,20 @@ import { CaComparaisonDoubleTable } from "@/components/ca-comparaison-tables";
 import { EmptyState } from "@/components/empty-state";
 import { BadgeMargeTheorique } from "@/components/badge-marge-theorique";
 import { IndicateurInfo } from "@/components/indicateur-info";
-import { caAnnuelClient, caParFamilleClient, ventesDuClient } from "@/lib/client-fiche";
-import { caRapportMensuelYoY } from "@/lib/calculations";
+import { caAnnuelClient, caParFamilleClient, facturesDuClient } from "@/lib/client-fiche";
+import { caRapportMensuelYoYFactures } from "@/lib/rentabilite";
 import { produitsEnAlerteMargeTheoriqueVendusAuClient } from "@/lib/cout-theorique";
 import { formatCurrency } from "@/lib/format";
 import { libelleProduit } from "@/lib/produits";
 import { useStore } from "@/lib/store";
-import type { CategorieProduit, PointDeVente, Produit, Vente } from "@/lib/types";
+import type {
+  CategorieProduit,
+  Facture,
+  Parametres,
+  PointDeVente,
+  Produit,
+  Vente,
+} from "@/lib/types";
 
 function fmtPct(pct: number | null) {
   if (pct === null) return "—";
@@ -23,6 +30,8 @@ function fmtPct(pct: number | null) {
 
 type Props = {
   clientId: string;
+  factures: Facture[];
+  parametres: Parametres;
   ventes: Vente[];
   produits: Produit[];
   categories: CategorieProduit[];
@@ -31,31 +40,41 @@ type Props = {
 
 export function TiersDashboardPanel({
   clientId,
+  factures,
+  parametres,
   ventes,
   produits,
   categories,
   pointsDeVente,
 }: Props) {
   const annee = new Date().getFullYear();
-  const ventesClient = useMemo(
-    () => ventesDuClient(ventes, clientId),
-    [ventes, clientId],
+  const facturesClient = useMemo(
+    () => facturesDuClient(factures, clientId),
+    [factures, clientId],
   );
   const annuel = useMemo(
-    () => caAnnuelClient(ventes, clientId, annee),
-    [ventes, clientId, annee],
+    () => caAnnuelClient(factures, parametres, clientId, annee),
+    [factures, parametres, clientId, annee],
   );
   const rapportMensuel = useMemo(
-    () => caRapportMensuelYoY(ventesClient, "tous", annee),
-    [ventesClient, annee],
+    () =>
+      caRapportMensuelYoYFactures(facturesClient, parametres, "tous", annee),
+    [facturesClient, parametres, annee],
   );
   const familles = useMemo(
-    () => caParFamilleClient(ventes, produits, categories, clientId, annee),
-    [ventes, produits, categories, clientId, annee],
+    () =>
+      caParFamilleClient(
+        factures,
+        parametres,
+        produits,
+        categories,
+        clientId,
+        annee,
+      ),
+    [factures, parametres, produits, categories, clientId, annee],
   );
   const entrees = useStore((s) => s.entrees);
   const inventaires = useStore((s) => s.inventaires);
-  const parametres = useStore((s) => s.parametres);
   const alertesMarge = useMemo(
     () =>
       produitsEnAlerteMargeTheoriqueVendusAuClient({
@@ -91,8 +110,8 @@ export function TiersDashboardPanel({
         </section>
       )}
       <p className="text-xs text-muted">
-        CA HT net des remises, année civile {annee} — ventes rattachées à ce
-        tiers en tant que client.
+        CA HT net des remises, année civile {annee} — factures validées de ce
+        client (date de facture, hors paiement).
       </p>
 
       <section>
@@ -123,16 +142,17 @@ export function TiersDashboardPanel({
 
       <section>
         <h2 className="mb-3 font-display text-lg font-semibold">CA mensuel</h2>
-        {ventesClient.length === 0 ? (
+        {facturesClient.length === 0 ? (
           <EmptyState
             icon={<BarChart3 className="h-5 w-5" />}
-            title="Aucune vente"
+            title="Aucune facture"
             description="Le CA mensuel apparaîtra dès qu'une facture de vente sera validée pour ce client."
           />
         ) : (
           <CaComparaisonDoubleTable
             rapport={rapportMensuel}
-            ventes={ventesClient}
+            factures={facturesClient}
+            parametres={parametres}
             produits={produits}
             pointsDeVente={pointsDeVente}
             pointDeVenteActifId="tous"
@@ -148,7 +168,7 @@ export function TiersDashboardPanel({
           <EmptyState
             icon={<BarChart3 className="h-5 w-5" />}
             title="Aucune famille"
-            description="Le CA par famille se calcule à partir des ventes de ce client."
+            description="Le CA par famille se calcule à partir des factures validées de ce client."
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-[1fr_auto_1fr] xl:items-start">

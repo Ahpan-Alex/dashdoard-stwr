@@ -9,7 +9,10 @@ import { PageHeader } from "@/components/page-header";
 import { ParametresAlertesForm } from "@/components/parametres-alertes-form";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RequirePermission } from "@/components/require-permission";
-import { chiffreAffaires, syntheseBenefices } from "@/lib/calculations";
+import {
+  chiffreAffairesFactures,
+  syntheseRentabiliteDeuxPaliers,
+} from "@/lib/rentabilite";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MODULES_ALERTES } from "@/lib/alertes";
 import { useAuthStore } from "@/lib/auth-store";
@@ -123,7 +126,8 @@ function PilotageContent() {
 
 function ObjectifsPilotage({ peutMarge }: { peutMarge: boolean }) {
   const pointsDeVente = useStore((s) => s.pointsDeVente);
-  const ventes = useStore((s) => s.ventes);
+  const factures = useStore((s) => s.factures);
+  const achats = useStore((s) => s.achats);
   const entrees = useStore((s) => s.entrees);
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
@@ -215,29 +219,43 @@ function ObjectifsPilotage({ peutMarge }: { peutMarge: boolean }) {
           {pointsDeVente.map((pdv) => {
             const objCaMois = pdv.objectifCAMensuel ?? 0;
             const objCaAnnee = pdv.objectifCAAnnuel ?? 0;
-            const caMois = chiffreAffaires(ventes, pdv.id, "mois");
-            const caAnnee = chiffreAffaires(ventes, pdv.id, "annee");
+            const caMois = chiffreAffairesFactures(
+              factures,
+              parametres,
+              pdv.id,
+              "mois",
+            );
+            const caAnnee = chiffreAffairesFactures(
+              factures,
+              parametres,
+              pdv.id,
+              "annee",
+            );
             const objMargeMois = pdv.objectifMargeMensuel ?? 0;
             const objMargeAnnee = pdv.objectifMargeAnnuel ?? 0;
             const margeMois = peutMarge
-              ? syntheseBenefices(
-                  ventes,
-                  entrees,
+              ? syntheseRentabiliteDeuxPaliers({
+                  factures,
+                  achats,
                   produits,
-                  pdv.id,
-                  mois,
+                  entrees,
                   inventaires,
-                ).benefice
+                  parametres,
+                  pointDeVenteId: pdv.id,
+                  range: mois,
+                }).margeBrute
               : 0;
             const margeAnnee = peutMarge
-              ? syntheseBenefices(
-                  ventes,
-                  entrees,
+              ? syntheseRentabiliteDeuxPaliers({
+                  factures,
+                  achats,
                   produits,
-                  pdv.id,
-                  annee,
+                  entrees,
                   inventaires,
-                ).benefice
+                  parametres,
+                  pointDeVenteId: pdv.id,
+                  range: annee,
+                }).margeBrute
               : 0;
 
             return (

@@ -4,20 +4,18 @@ import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { ChevronDown, X } from "lucide-react";
+import { type LigneCaYoY, type RapportCaYoY } from "@/lib/calculations";
 import {
-  caParProduit,
-  detailVentesPeriode,
-  montantVente,
-  type LigneCaYoY,
-  type RapportCaYoY,
-} from "@/lib/calculations";
+  caParProduitFactures,
+  detailFacturesCaPeriode,
+} from "@/lib/rentabilite";
 import {
   formatCurrency,
   formatDate,
   formatNumber,
   formatPercent,
 } from "@/lib/format";
-import type { PointDeVente, Produit, Vente } from "@/lib/types";
+import type { Facture, Parametres, PointDeVente, Produit } from "@/lib/types";
 
 function fmtPct(pct: number | null) {
   if (pct === null) return "—";
@@ -120,10 +118,18 @@ function CaReportTable({
   );
 }
 
+function libelleTypeFacture(type: Facture["type"]) {
+  if (type === "avoir") return "Avoir";
+  if (type === "acompte") return "Acompte";
+  if (type === "proforma") return "Proforma";
+  return "Facture";
+}
+
 function DetailPeriodePanel({
   selection,
   annee,
-  ventes,
+  factures,
+  parametres,
   produits,
   pointsDeVente,
   pointDeVenteActifId,
@@ -131,7 +137,8 @@ function DetailPeriodePanel({
 }: {
   selection: SelectionPeriode;
   annee: number;
-  ventes: Vente[];
+  factures: Facture[];
+  parametres: Parametres;
   produits: Produit[];
   pointsDeVente: PointDeVente[];
   pointDeVenteActifId: string | "tous";
@@ -141,13 +148,20 @@ function DetailPeriodePanel({
   const plageLabel = `${format(range.debut, "d MMM yyyy", { locale: fr })} → ${format(range.fin, "d MMM yyyy", { locale: fr })}`;
 
   const parProduit = useMemo(
-    () => caParProduit(ventes, produits, pointDeVenteActifId, range),
-    [ventes, produits, pointDeVenteActifId, range],
+    () =>
+      caParProduitFactures(factures, produits, pointDeVenteActifId, range),
+    [factures, produits, pointDeVenteActifId, range],
   );
 
-  const ventesDetail = useMemo(
-    () => detailVentesPeriode(ventes, pointDeVenteActifId, range),
-    [ventes, pointDeVenteActifId, range],
+  const facturesDetail = useMemo(
+    () =>
+      detailFacturesCaPeriode(
+        factures,
+        parametres,
+        pointDeVenteActifId,
+        range,
+      ),
+    [factures, parametres, pointDeVenteActifId, range],
   );
 
   const total = parProduit.reduce((s, l) => s + l.montant, 0);
@@ -193,7 +207,7 @@ function DetailPeriodePanel({
                 {parProduit.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="text-muted">
-                      Aucune vente sur cette période.
+                    Aucune facture validée sur cette période.
                     </td>
                   </tr>
                 ) : (
@@ -220,11 +234,12 @@ function DetailPeriodePanel({
         <div>
           <div className="px-5 py-3">
             <h3 className="text-sm font-semibold text-ink">
-              Ventes détaillées
+              Factures de la période
             </h3>
             <p className="text-xs text-muted">
-              {ventesDetail.length} ligne
-              {ventesDetail.length > 1 ? "s" : ""}
+              {facturesDetail.length} pièce
+              {facturesDetail.length > 1 ? "s" : ""} — date de facture, hors
+              paiement
             </p>
           </div>
           <div className="max-h-80 overflow-auto">
@@ -232,37 +247,32 @@ function DetailPeriodePanel({
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Produit</th>
+                  <th>N°</th>
+                  <th>Type</th>
                   <th>Point de vente</th>
-                  <th>Qté</th>
-                  <th>P.U.</th>
-                  <th>Montant</th>
+                  <th>CA HT</th>
                 </tr>
               </thead>
               <tbody>
-                {ventesDetail.length === 0 ? (
+                {facturesDetail.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-muted">
-                      Aucune vente.
+                    <td colSpan={5} className="text-muted">
+                      Aucune facture.
                     </td>
                   </tr>
                 ) : (
-                  ventesDetail.map((v) => {
-                    const produit = produits.find((p) => p.id === v.produitId);
+                  facturesDetail.map((f) => {
                     const pdv = pointsDeVente.find(
-                      (p) => p.id === v.pointDeVenteId,
+                      (p) => p.id === f.pointDeVenteId,
                     );
                     return (
-                      <tr key={v.id}>
-                        <td>{formatDate(v.date)}</td>
-                        <td className="font-medium">{produit?.libelleCourt ?? "—"}</td>
+                      <tr key={f.id}>
+                        <td>{formatDate(f.date)}</td>
+                        <td className="font-medium">{f.numero}</td>
+                        <td>{libelleTypeFacture(f.type)}</td>
                         <td>{pdv?.nom ?? "—"}</td>
-                        <td>
-                          {formatNumber(v.quantite)} {produit?.unite}
-                        </td>
-                        <td>{formatCurrency(v.prixUnitaire)}</td>
                         <td className="font-semibold">
-                          {formatCurrency(montantVente(v))}
+                          {formatCurrency(f.totalHT)}
                         </td>
                       </tr>
                     );
@@ -279,13 +289,15 @@ function DetailPeriodePanel({
 
 export function CaComparaisonDoubleTable({
   rapport,
-  ventes,
+  factures,
+  parametres,
   produits,
   pointsDeVente,
   pointDeVenteActifId,
 }: {
   rapport: RapportCaYoY;
-  ventes: Vente[];
+  factures: Facture[];
+  parametres: Parametres;
   produits: Produit[];
   pointsDeVente: PointDeVente[];
   pointDeVenteActifId: string | "tous";
@@ -341,7 +353,8 @@ export function CaComparaisonDoubleTable({
         <DetailPeriodePanel
           selection={selection}
           annee={rapport.annee}
-          ventes={ventes}
+          factures={factures}
+          parametres={parametres}
           produits={produits}
           pointsDeVente={pointsDeVente}
           pointDeVenteActifId={pointDeVenteActifId}

@@ -192,7 +192,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "parametres.gerer": "Paramètres — gestion",
   "navigation.identite": "Menu — identité (nom et logo)",
   "users.gerer": "Utilisateurs — gestion",
-  "audit.lire": "Journal d'audit — lecture",
+  "audit.lire": "Journaux métier et connexion — lecture",
   "securite.gerer": "Sécurité — gestion",
   "sites.vue_globale": "Sites — vue globale (tous les stocks)",
   "ventes.deroger_credit": "Ventes — dérogation au plafond de crédit",

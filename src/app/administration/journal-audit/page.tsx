@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Search, Shield } from "lucide-react";
 import { AdminSubnav } from "@/components/admin-subnav";
 import { EmptyState } from "@/components/empty-state";
+import { JournalToutesActions } from "@/components/journal-toutes-actions";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
@@ -34,12 +36,56 @@ import { useStore } from "@/lib/store";
 export default function JournalAuditPage() {
   return (
     <RequirePermission permission="audit.lire">
-      <Contenu />
+      <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+        <Contenu />
+      </Suspense>
     </RequirePermission>
   );
 }
 
 function Contenu() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const vue = searchParams.get("vue") === "toutes" ? "toutes" : "sensibles";
+
+  function aller(next: "sensibles" | "toutes") {
+    router.replace(
+      next === "toutes"
+        ? "/administration/journal-audit?vue=toutes"
+        : "/administration/journal-audit",
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Journal métier"
+        description="Qui a fait quoi sur le dossier : factures, stocks, tiers, prix. Les actions sensibles (suppressions, changements de compte) sont immuables."
+        showPosSelector={false}
+      />
+      <AdminSubnav />
+      <nav className="mb-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={`btn ${vue === "sensibles" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => aller("sensibles")}
+        >
+          Actions sensibles
+        </button>
+        <button
+          type="button"
+          className={`btn ${vue === "toutes" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => aller("toutes")}
+        >
+          Toutes les actions
+        </button>
+      </nav>
+      {vue === "toutes" ? <JournalToutesActions /> : <ActionsSensibles />}
+    </div>
+  );
+}
+
+function ActionsSensibles() {
   const users = useAuthStore((s) => s.users);
   const refreshUsers = useAuthStore((s) => s.refreshUsers);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
@@ -122,13 +168,6 @@ function Contenu() {
 
   return (
     <div>
-      <PageHeader
-        title="Journal d'audit"
-        description="Actions sensibles, immuables, isolées par entreprise. Aucune modification ni purge manuelle, y compris pour un administrateur."
-        showPosSelector={false}
-      />
-      <AdminSubnav />
-
       <div className="mb-4 grid gap-3 rounded-[var(--radius)] border border-line bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-xs font-semibold text-muted">
           Utilisateur

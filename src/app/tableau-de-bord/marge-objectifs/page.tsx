@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
-import { syntheseBenefices } from "@/lib/calculations";
+import { syntheseRentabiliteDeuxPaliers } from "@/lib/rentabilite";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -30,10 +30,12 @@ import { useAffichageTable } from "@/lib/use-affichage-table";
 type Horizon = "mois" | "annee";
 
 export default function MargeObjectifsPage() {
-  const ventes = useStore((s) => s.ventes);
+  const factures = useStore((s) => s.factures);
+  const achats = useStore((s) => s.achats);
   const entrees = useStore((s) => s.entrees);
   const produits = useStore((s) => s.produits);
   const inventaires = useStore((s) => s.inventaires);
+  const parametres = useStore((s) => s.parametres);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const [horizon, setHorizon] = useState<Horizon>("mois");
@@ -57,14 +59,16 @@ export default function MargeObjectifsPage() {
   const lignes = useMemo(
     () =>
       pdvVisibles.map((pdv) => {
-        const realise = syntheseBenefices(
-          ventes,
-          entrees,
+        const realise = syntheseRentabiliteDeuxPaliers({
+          factures,
+          achats,
           produits,
-          pdv.id,
-          range,
+          entrees,
           inventaires,
-        ).benefice;
+          parametres,
+          pointDeVenteId: pdv.id,
+          range,
+        }).margeBrute;
         const objectif =
           horizon === "mois"
             ? (pdv.objectifMargeMensuel ?? 0)
@@ -73,7 +77,7 @@ export default function MargeObjectifsPage() {
         const ecart = realise - objectif;
         return { ...pdv, realise, objectif, taux, ecart };
       }),
-    [pdvVisibles, ventes, entrees, produits, inventaires, range, horizon],
+    [pdvVisibles, factures, achats, produits, entrees, inventaires, parametres, range, horizon],
   );
 
   const totalRealise = lignes.reduce((s, l) => s + l.realise, 0);
@@ -92,7 +96,7 @@ export default function MargeObjectifsPage() {
     <div>
       <PageHeader
         title="Marge objectif par point de vente"
-        description="Suivi de la marge brute (CA − coût d'achat) face aux objectifs mensuels et annuels."
+        description="Suivi de la marge brute (CA facturé − CMV) face aux objectifs mensuels et annuels."
         actions={
           <Link
             href="/parametres/pilotage?onglet=objectifs"

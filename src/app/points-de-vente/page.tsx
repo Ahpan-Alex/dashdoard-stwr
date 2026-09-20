@@ -3,14 +3,23 @@
 import Link from "next/link";
 import { MapPin, Settings } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { chiffreAffaires, calculerStocks } from "@/lib/calculations";
+import { calculerStocks } from "@/lib/calculations";
+import { chiffreAffairesFactures } from "@/lib/rentabilite";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { libelleRolesSite } from "@/lib/sites";
 import { useStore } from "@/lib/store";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 
 export default function PointsDeVentePage() {
-  const { pointsDeVente, ventes, entrees, produits, inventaires } = useStore();
+  const {
+    pointsDeVente,
+    ventes,
+    entrees,
+    produits,
+    inventaires,
+    factures,
+    parametres,
+  } = useStore();
   const { visibles } = useSitesVisibles();
 
   return (
@@ -32,8 +41,18 @@ export default function PointsDeVentePage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibles.map((pdv) => {
-          const caMois = chiffreAffaires(ventes, pdv.id, "mois");
-          const caAnnee = chiffreAffaires(ventes, pdv.id, "annee");
+          const caMois = chiffreAffairesFactures(
+            factures,
+            parametres,
+            pdv.id,
+            "mois",
+          );
+          const caAnnee = chiffreAffairesFactures(
+            factures,
+            parametres,
+            pdv.id,
+            "annee",
+          );
           const stocks = calculerStocks(
             produits,
             entrees,
