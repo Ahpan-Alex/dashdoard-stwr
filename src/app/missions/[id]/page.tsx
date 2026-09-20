@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { Component, FormEvent, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -94,20 +94,58 @@ const VALIDATION_LABELS: Record<MissionValidationAction, string> = {
 export default function MissionAchatDetailPage() {
   return (
     <RequirePermission permission={["missions.lire", "missions.gerer"]}>
-      <MissionDetail />
+      <MissionDetailGuard>
+        <MissionDetail />
+      </MissionDetailGuard>
     </RequirePermission>
   );
+}
+
+function MissionDetailGuard({ children }: { children: ReactNode }) {
+  return <MissionDetailBoundary>{children}</MissionDetailBoundary>;
+}
+
+class MissionDetailBoundary extends Component<
+  { children: ReactNode },
+  { erreur: string | null }
+> {
+  state: { erreur: string | null } = { erreur: null };
+
+  static getDerivedStateFromError(erreur: Error) {
+    return { erreur: erreur.message || "Erreur d’affichage de la mission." };
+  }
+
+  render() {
+    if (this.state.erreur) {
+      return (
+        <div className="rounded-[var(--radius)] border border-red-200 bg-red-50 p-6">
+          <h1 className="font-display text-xl font-semibold text-red-900">
+            Impossible d’afficher cette mission d’achat
+          </h1>
+          <p className="mt-2 text-sm text-red-800">{this.state.erreur}</p>
+          <a href="/missions" className="btn btn-secondary mt-4">
+            Retour à la liste
+          </a>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function MissionDetail() {
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
   const mission = useStore((s) => (s.missionsAchat ?? []).find((m) => m.id === id));
-  const produits = useStore((s) => s.produits);
-  const categoriesProduits = useStore((s) => s.categoriesProduits);
+  const produits = useStore((s) => (Array.isArray(s.produits) ? s.produits : []));
+  const categoriesProduits = useStore((s) =>
+    Array.isArray(s.categoriesProduits) ? s.categoriesProduits : [],
+  );
   const tiers = useStore((s) => s.tiers ?? []);
   const naturesDepenseMission = useStore((s) => s.naturesDepenseMission ?? []);
-  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const pointsDeVente = useStore((s) =>
+    Array.isArray(s.pointsDeVente) ? s.pointsDeVente : [],
+  );
   const comptesTresorerie = useStore((s) => s.comptesTresorerie ?? []);
   const modesPaiement = useStore((s) => s.modesPaiement ?? []);
   const parametres = useStore((s) => s.parametres);
@@ -116,17 +154,15 @@ function MissionDetail() {
       (j) => j.entite === "mission_achat" && j.entiteId === id,
     ),
   );
-  const {
-    modifierMissionAchat,
-    soumettreMissionAchat,
-    validerMissionAchat,
-    rejeterMissionAchat,
-    remettreFondsMissionAchat,
-    cloturerMissionAchat,
-    annulerMissionAchat,
-    reglerMissionAchat,
-    addTiers,
-  } = useStore();
+  const modifierMissionAchat = useStore((s) => s.modifierMissionAchat);
+  const soumettreMissionAchat = useStore((s) => s.soumettreMissionAchat);
+  const validerMissionAchat = useStore((s) => s.validerMissionAchat);
+  const rejeterMissionAchat = useStore((s) => s.rejeterMissionAchat);
+  const remettreFondsMissionAchat = useStore((s) => s.remettreFondsMissionAchat);
+  const cloturerMissionAchat = useStore((s) => s.cloturerMissionAchat);
+  const annulerMissionAchat = useStore((s) => s.annulerMissionAchat);
+  const reglerMissionAchat = useStore((s) => s.reglerMissionAchat);
+  const addTiers = useStore((s) => s.addTiers);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const user = useAuthStore((s) => s.user);
   const gerer = hasPermission("missions.gerer");
@@ -160,9 +196,11 @@ function MissionDetail() {
   const dossierEditable = gerer && peutModifierDossierMission(doc);
   const saisie = peutSaisirMission(doc, { gerer, userId: user?.id });
   const achetable = produits.filter(
-    (p) => p.actif && produitEstAchetable(p, categoriesProduits),
+    (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
   );
-  const fournisseurs = tiers.filter((t) => t.actif !== false && estFournisseur(t));
+  const fournisseurs = (Array.isArray(tiers) ? tiers : []).filter(
+    (t) => t && t.actif !== false && estFournisseur(t),
+  );
   const nomSite =
     pointsDeVente.find((s) => s.id === doc.siteDestinataireId)?.nom ?? "Site";
   const fin = syntheseFinanciereMission(doc);
@@ -357,7 +395,7 @@ function MissionDetail() {
               <input
                 type="date"
                 className="input mt-1"
-                value={(mission.datePrevue ?? mission.date).slice(0, 10)}
+                value={String(mission.datePrevue || mission.date || "").slice(0, 10)}
                 onChange={(e) =>
                   modifierMissionAchat(mission.id, { datePrevue: e.target.value })
                 }
@@ -478,7 +516,7 @@ function MissionDetail() {
         <p className="mb-3 text-xs text-muted">
           Budget prévisionnel : {formatCurrency(budgetPrevisionnelMission(mission))}
         </p>
-        {mission.lignesPrevisionnelles.length === 0 ? (
+        {(mission.lignesPrevisionnelles ?? []).length === 0 ? (
           <p className="text-sm text-muted">Aucun article prévu.</p>
         ) : (
           <div className="table-shell">
@@ -495,13 +533,16 @@ function MissionDetail() {
                 </tr>
               </thead>
               <tbody>
-                {mission.lignesPrevisionnelles.map((l) => {
-                  const p = produits.find((x) => x.id === l.produitId);
+                {(mission.lignesPrevisionnelles ?? []).map((l) => {
+                  const p = produits.find((x) => x?.id === l.produitId);
                   return (
                     <tr key={l.id}>
                       <td className="min-w-[14rem]">
                         {dossierEditable ? (
                           <SelecteurArticle
+                            compact
+                            allowEmpty
+                            emptyLabel="— Choisir un article —"
                             produits={achetable}
                             value={l.produitId}
                             onChange={(produitId) =>
@@ -859,9 +900,9 @@ function MissionDetail() {
               </tr>
             </thead>
             <tbody>
-              {mission.achatsRealises.map((l) => {
-                const p = produits.find((x) => x.id === l.produitId);
-                const prev = mission.lignesPrevisionnelles.find(
+              {(mission.achatsRealises ?? []).map((l) => {
+                const p = produits.find((x) => x?.id === l.produitId);
+                const prev = (mission.lignesPrevisionnelles ?? []).find(
                   (x) => x.id === l.previsionId,
                 );
                 const ecartQte =
@@ -879,6 +920,9 @@ function MissionDetail() {
                     <td className="min-w-[14rem]">
                       {saisie ? (
                         <SelecteurArticle
+                          compact
+                          allowEmpty
+                          emptyLabel="— Choisir un article —"
                           produits={achetable}
                           value={l.produitId}
                           onChange={(produitId) =>
@@ -1152,9 +1196,9 @@ function MissionDetail() {
               </tr>
             </thead>
             <tbody>
-              {mission.achatsRealises.map((l) => {
-                const p = produits.find((x) => x.id === l.produitId);
-                const prev = mission.lignesPrevisionnelles.find(
+              {(mission.achatsRealises ?? []).map((l) => {
+                const p = produits.find((x) => x?.id === l.produitId);
+                const prev = (mission.lignesPrevisionnelles ?? []).find(
                   (x) => x.id === l.previsionId,
                 );
                 const st = statutReceptionLigne(l);
@@ -1240,16 +1284,16 @@ function MissionDetail() {
           catalogue ou saisie libre (imputation automatique au compte 471).
           Total divers : {formatCurrency(totalDepensesDiverses(mission))}
         </p>
-        {mission.depensesDiverses.length === 0 ? (
+        {(mission.depensesDiverses ?? []).length === 0 ? (
           <p className="text-sm text-muted">Aucune dépense diverse.</p>
         ) : (
           <div className="space-y-2">
-            {mission.depensesDiverses.map((d) => {
+            {(mission.depensesDiverses ?? []).map((d) => {
               const ok = depenseEstJustifiee(mission, d);
               const naturesActives = naturesDepenseActives(naturesDepenseMission);
               const selectNature = d.natureId
                 ? d.natureId
-                : d.nature.trim()
+                : (d.nature ?? "").trim()
                   ? "__libre__"
                   : "";
               const attente471 = depenseEnAttenteReclassement(
@@ -1697,13 +1741,13 @@ function MissionDetail() {
         </div>
       )}
 
-      {(mission.validations.length > 0 || journal.length > 0) && (
+      {((mission.validations ?? []).length > 0 || journal.length > 0) && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-3 font-display text-lg font-semibold">
             Historique et traçabilité
           </h2>
           <ul className="space-y-2 text-sm">
-            {mission.validations.map((v) => (
+            {(mission.validations ?? []).map((v) => (
               <li key={v.id}>
                 <span className="font-medium">
                   {VALIDATION_LABELS[v.action] ?? v.action}

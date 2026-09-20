@@ -207,7 +207,11 @@ export function jourDepuisIso(iso: string) {
 }
 
 export function isoMidiDepuisJour(jour: string) {
-  return new Date(`${jour}T12:00:00`).toISOString();
+  const cle = (jour ?? "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cle)) return new Date().toISOString();
+  const d = new Date(`${cle}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
 }
 
 export function dateDernierInventaireValide(

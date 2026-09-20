@@ -43,7 +43,7 @@ export const MissionRapportDocument = forwardRef<HTMLDivElement, Props>(
         className="document-preview-sheet print-area mx-auto box-border w-full max-w-[210mm] overflow-x-hidden rounded-[var(--radius)] border border-line bg-white p-[12mm] text-ink shadow-sm"
       >
         <div className="mb-4 border-b border-line pb-3">
-          {parametres.logoDataUrl ? (
+          {parametres?.logoDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={parametres.logoDataUrl}
@@ -56,7 +56,7 @@ export const MissionRapportDocument = forwardRef<HTMLDivElement, Props>(
           </p>
           <h1 className="font-display text-xl font-semibold">{mission.numero}</h1>
           <p className="text-sm text-muted">
-            {parametres.nomEntreprise || "Entreprise"} ·{" "}
+            {parametres?.nomEntreprise || "Entreprise"} ·{" "}
             {MISSION_STATUT_LABELS[mission.statut]}
             {mission.dateCloture
               ? ` · Clôturée le ${formatDate(mission.dateCloture)}`
@@ -111,8 +111,8 @@ export const MissionRapportDocument = forwardRef<HTMLDivElement, Props>(
               </tr>
             </thead>
             <tbody>
-              {mission.lignesPrevisionnelles.map((l) => {
-                const p = produits.find((x) => x.id === l.produitId);
+              {(mission.lignesPrevisionnelles ?? []).map((l) => {
+                const p = (produits ?? []).find((x) => x?.id === l.produitId);
                 return (
                   <tr key={l.id} className="border-b border-line/60">
                     <td>{p ? `${p.code} — ${libelleProduit(p)}` : "—"}</td>
@@ -145,10 +145,10 @@ export const MissionRapportDocument = forwardRef<HTMLDivElement, Props>(
               </tr>
             </thead>
             <tbody>
-              {mission.achatsRealises
+              {(mission.achatsRealises ?? [])
                 .filter((l) => l.quantite > 0)
                 .map((l) => {
-                  const p = produits.find((x) => x.id === l.produitId);
+                  const p = (produits ?? []).find((x) => x?.id === l.produitId);
                   return (
                     <tr key={l.id} className="border-b border-line/60">
                       <td>{p ? `${p.code} — ${libelleProduit(p)}` : "—"}</td>

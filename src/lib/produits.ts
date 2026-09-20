@@ -150,18 +150,19 @@ export function categoriesEnArbre(categories: CategorieProduit[]) {
 
 /** True si l'article appartient à la famille ou à l'une de ses sous-familles. */
 export function produitAppartientFamille(
-  produit: Pick<Produit, "categorieId">,
+  produit: Pick<Produit, "categorieId"> | undefined | null,
   familleId: string | undefined,
   categories: CategorieProduit[],
 ) {
   if (!familleId) return true;
-  let current = categories.find((c) => c.id === produit.categorieId);
+  if (!produit || !Array.isArray(categories)) return false;
+  let current = categories.find((c) => c?.id === produit.categorieId);
   const guard = new Set<string>();
-  while (current && !guard.has(current.id)) {
+  while (current?.id && !guard.has(current.id)) {
     if (current.id === familleId) return true;
     guard.add(current.id);
     current = current.parentId
-      ? categories.find((c) => c.id === current!.parentId)
+      ? categories.find((c) => c?.id === current!.parentId)
       : undefined;
   }
   return false;
@@ -188,10 +189,11 @@ export function categoriesPresentesDansCatalogue(
   categories: CategorieProduit[],
   produits: Produit[],
 ) {
-  return categories.filter(
+  const cats = Array.isArray(categories) ? categories.filter((c) => c?.id) : [];
+  const arts = Array.isArray(produits) ? produits.filter((p) => p?.id) : [];
+  return cats.filter(
     (c) =>
-      c.actif &&
-      produits.some((p) => produitAppartientFamille(p, c.id, categories)),
+      c.actif && arts.some((p) => produitAppartientFamille(p, c.id, cats)),
   );
 }
 

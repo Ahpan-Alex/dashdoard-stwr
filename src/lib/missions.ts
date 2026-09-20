@@ -100,7 +100,10 @@ export function montantLignePrevisionnelle(
 export function budgetPrevisionnelMission(
   m: Pick<MissionAchat, "lignesPrevisionnelles">,
 ) {
-  return m.lignesPrevisionnelles.reduce((s, l) => s + montantLignePrevisionnelle(l), 0);
+  return (m.lignesPrevisionnelles ?? []).reduce(
+    (s, l) => s + montantLignePrevisionnelle(l),
+    0,
+  );
 }
 
 export function montantLigneRealisee(l: Pick<MissionAchatRealise, "quantite" | "prixUnitaire">) {
@@ -108,11 +111,14 @@ export function montantLigneRealisee(l: Pick<MissionAchatRealise, "quantite" | "
 }
 
 export function totalAchatsRealises(m: Pick<MissionAchat, "achatsRealises">) {
-  return m.achatsRealises.reduce((s, l) => s + montantLigneRealisee(l), 0);
+  return (m.achatsRealises ?? []).reduce((s, l) => s + montantLigneRealisee(l), 0);
 }
 
 export function totalDepensesDiverses(m: Pick<MissionAchat, "depensesDiverses">) {
-  return m.depensesDiverses.reduce((s, d) => s + Math.max(0, d.montant), 0);
+  return (m.depensesDiverses ?? []).reduce(
+    (s, d) => s + Math.max(0, d.montant),
+    0,
+  );
 }
 
 export function totalDepenseMission(m: Pick<MissionAchat, "achatsRealises" | "depensesDiverses">) {
@@ -189,11 +195,11 @@ export function depenseEstJustifiee(m: MissionAchat, d: MissionDepenseDiverse) {
 }
 
 export function depensesJustifieesMission(m: MissionAchat) {
-  const achats = m.achatsRealises.reduce(
+  const achats = (m.achatsRealises ?? []).reduce(
     (s, l) => s + (achatEstJustifie(m, l) ? montantLigneRealisee(l) : 0),
     0,
   );
-  const divers = m.depensesDiverses.reduce(
+  const divers = (m.depensesDiverses ?? []).reduce(
     (s, d) => s + (depenseEstJustifiee(m, d) ? Math.max(0, d.montant) : 0),
     0,
   );
@@ -620,12 +626,18 @@ export type AnomalieMission = {
 };
 
 export function totauxArticlesMission(m: MissionAchat) {
-  const prevu = m.lignesPrevisionnelles.reduce(
+  const prevu = (m.lignesPrevisionnelles ?? []).reduce(
     (s, l) => s + Math.max(0, l.quantiteSouhaitee),
     0,
   );
-  const achete = m.achatsRealises.reduce((s, l) => s + Math.max(0, l.quantite), 0);
-  const recu = m.achatsRealises.reduce((s, l) => s + quantiteReceptionneeLigne(l), 0);
+  const achete = (m.achatsRealises ?? []).reduce(
+    (s, l) => s + Math.max(0, l.quantite),
+    0,
+  );
+  const recu = (m.achatsRealises ?? []).reduce(
+    (s, l) => s + quantiteReceptionneeLigne(l),
+    0,
+  );
   return { prevu, achete, recu };
 }
 
@@ -652,8 +664,8 @@ export function anomaliesMission(m: MissionAchat): AnomalieMission[] {
       libelle: "Dépense supérieure au montant autorisé",
     });
   }
-  const prevuIds = new Set(m.lignesPrevisionnelles.map((l) => l.produitId));
-  for (const l of m.achatsRealises) {
+  const prevuIds = new Set((m.lignesPrevisionnelles ?? []).map((l) => l.produitId));
+  for (const l of m.achatsRealises ?? []) {
     if (l.quantite <= 0) continue;
     if (!l.previsionId && !prevuIds.has(l.produitId)) {
       out.push({
@@ -664,9 +676,9 @@ export function anomaliesMission(m: MissionAchat): AnomalieMission[] {
       break;
     }
   }
-  for (const l of m.achatsRealises) {
+  for (const l of m.achatsRealises ?? []) {
     if (!l.previsionId) continue;
-    const prev = m.lignesPrevisionnelles.find((p) => p.id === l.previsionId);
+    const prev = (m.lignesPrevisionnelles ?? []).find((p) => p.id === l.previsionId);
     if (prev && l.quantite > prev.quantiteSouhaitee + 1e-9) {
       out.push({
         gravite: "warning",
@@ -684,7 +696,7 @@ export function anomaliesMission(m: MissionAchat): AnomalieMission[] {
       libelle: `${nJust} dépense(s) sans justificatif`,
     });
   }
-  if (m.achatsRealises.some((l) => l.quantite > 0 && statutReceptionLigne(l) !== "complet")) {
+  if ((m.achatsRealises ?? []).some((l) => l.quantite > 0 && statutReceptionLigne(l) !== "complet")) {
     out.push({
       gravite: "warning",
       code: "non_receptionne",

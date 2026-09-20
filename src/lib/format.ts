@@ -28,11 +28,14 @@ export function formatNumber(value: number, digits = 1): string {
 }
 
 export function formatDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(iso));
+  }).format(d);
 }
 
 export function formatDateTime(iso: string): string {

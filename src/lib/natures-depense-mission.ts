@@ -30,8 +30,10 @@ export function fusionnerNaturesDepenseMission(
 }
 
 export function naturesDepenseTriees(natures: NatureDepenseMission[]) {
-  return [...natures].sort(
-    (a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle, "fr"),
+  return [...(natures ?? []).filter((n) => n?.id)].sort(
+    (a, b) =>
+      (Number(a.ordre) || 0) - (Number(b.ordre) || 0) ||
+      String(a.libelle ?? "").localeCompare(String(b.libelle ?? ""), "fr"),
   );
 }
 

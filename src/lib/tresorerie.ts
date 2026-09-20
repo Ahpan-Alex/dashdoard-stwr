@@ -100,8 +100,10 @@ export function fusionnerModesPaiement(existing?: ModePaiementParam[] | null) {
 }
 
 export function modesPaiementTries(modes: ModePaiementParam[]) {
-  return [...modes].sort(
-    (a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle, "fr"),
+  return [...(modes ?? []).filter((m) => m?.id)].sort(
+    (a, b) =>
+      (Number(a.ordre) || 0) - (Number(b.ordre) || 0) ||
+      String(a.libelle ?? "").localeCompare(String(b.libelle ?? ""), "fr"),
   );
 }
 
@@ -166,8 +168,10 @@ export function fusionnerComptesTresorerie(existing?: CompteTresorerie[] | null)
 }
 
 export function comptesTresorerieTries(comptes: CompteTresorerie[]) {
-  return [...comptes].sort(
-    (a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle, "fr"),
+  return [...(comptes ?? []).filter((c) => c?.id)].sort(
+    (a, b) =>
+      (Number(a.ordre) || 0) - (Number(b.ordre) || 0) ||
+      String(a.libelle ?? "").localeCompare(String(b.libelle ?? ""), "fr"),
   );
 }
 

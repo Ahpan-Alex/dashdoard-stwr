@@ -63,14 +63,16 @@ export function usageCommercialDeLaFamille(
   categorieId: string | undefined,
   categories: CategorieProduit[] | undefined | null,
 ): UsageCommercialProduit {
-  if (!categorieId || !categories?.length) return "achat_vente";
+  if (!categorieId || !Array.isArray(categories) || !categories.length) {
+    return "achat_vente";
+  }
   const guard = new Set<string>();
-  let current = categories.find((c) => c.id === categorieId);
-  while (current && !guard.has(current.id)) {
+  let current = categories.find((c) => c?.id === categorieId);
+  while (current?.id && !guard.has(current.id)) {
     if (estUsageCommercial(current.usageCommercial)) return current.usageCommercial;
     guard.add(current.id);
     current = current.parentId
-      ? categories.find((c) => c.id === current!.parentId)
+      ? categories.find((c) => c?.id === current!.parentId)
       : undefined;
   }
   return "achat_vente";
@@ -149,9 +151,10 @@ export function typeAchatEstAttendu(
 }
 
 export function produitEstAchetable(
-  produit: ProduitUsage,
+  produit: ProduitUsage | undefined | null,
   categories?: CategorieProduit[] | null,
 ) {
+  if (!produit) return false;
   if (produitEstFabrique(produit)) {
     return achatSousTraitanceDuProduit(produit);
   }

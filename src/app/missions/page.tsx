@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Component, FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Banknote, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -88,7 +88,7 @@ function MissionsContent() {
         if (m.acheteurUserId === user?.id) return true;
         return m.siteDestinataireId === actif;
       })
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
   }, [missionsAchat, user, gerer, actif]);
 
   const nomSite = (id: string) =>
@@ -133,27 +133,29 @@ function MissionsContent() {
       />
 
       {creer && gerer && (
-        <FormulaireMission
-          sites={visibles.length ? visibles : pointsDeVente.filter((s) => s.actif)}
-          defautSite={actif !== "tous" ? actif : ""}
-          acheteurs={
-            users.filter((u) => u.actif).length
-              ? users.filter((u) => u.actif)
-              : user
-                ? [user]
-                : []
-          }
-          onClose={() => setCreer(false)}
-          onSubmit={(payload) => {
-            const res = creerMissionAchat(payload);
-            if (!res.ok) {
-              alert(res.reason);
-              return;
+        <FormulaireMissionGuard onClose={() => setCreer(false)}>
+          <FormulaireMission
+            sites={visibles.length ? visibles : pointsDeVente.filter((s) => s.actif)}
+            defautSite={actif !== "tous" ? actif : ""}
+            acheteurs={
+              users.filter((u) => u.actif).length
+                ? users.filter((u) => u.actif)
+                : user
+                  ? [user]
+                  : []
             }
-            setCreer(false);
-            router.push(`/missions/${res.id}`);
-          }}
-        />
+            onClose={() => setCreer(false)}
+            onSubmit={(payload) => {
+              const res = creerMissionAchat(payload);
+              if (!res.ok) {
+                alert(res.reason);
+                return;
+              }
+              setCreer(false);
+              router.push(`/missions/${res.id}`);
+            }}
+          />
+        </FormulaireMissionGuard>
       )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -266,6 +268,48 @@ function MissionsContent() {
   );
 }
 
+function FormulaireMissionGuard({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <FormulaireMissionBoundary onClose={onClose}>
+      {children}
+    </FormulaireMissionBoundary>
+  );
+}
+
+class FormulaireMissionBoundary extends Component<
+  { children: ReactNode; onClose: () => void },
+  { erreur: string | null }
+> {
+  state: { erreur: string | null } = { erreur: null };
+
+  static getDerivedStateFromError(erreur: Error) {
+    return { erreur: erreur.message || "Erreur d’affichage du formulaire." };
+  }
+
+  render() {
+    if (this.state.erreur) {
+      return (
+        <div className="mb-6 rounded-[var(--radius)] border border-red-200 bg-red-50 p-5">
+          <p className="text-sm font-semibold text-red-900">
+            Impossible d’ouvrir le formulaire de nouvelle mission d’achat.
+          </p>
+          <p className="mt-1 text-sm text-red-800">{this.state.erreur}</p>
+          <button type="button" className="btn btn-secondary mt-3" onClick={this.props.onClose}>
+            Fermer
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function FormulaireMission({
   sites,
   defautSite,
@@ -297,10 +341,12 @@ function FormulaireMission({
   }) => void;
 }) {
   const catalogue = useStore((s) => s.produits);
-  const categoriesProduits = useStore((s) => s.categoriesProduits);
+  const categoriesProduits = useStore((s) =>
+    Array.isArray(s.categoriesProduits) ? s.categoriesProduits : [],
+  );
   const produits = useMemo(
     () =>
-      (catalogue ?? []).filter(
+      (Array.isArray(catalogue) ? catalogue : []).filter(
         (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
       ),
     [catalogue, categoriesProduits],
@@ -327,7 +373,7 @@ function FormulaireMission({
       acheteurUserId: acheteur.id,
       acheteurNom: acheteur.nom,
       date: isoMidiDepuisJour(date),
-      datePrevue: isoMidiDepuisJour(datePrevue),
+      datePrevue: datePrevue ? isoMidiDepuisJour(datePrevue) : undefined,
       siteDestinataireId: siteId,
       service: service.trim() || undefined,
       objet: objet.trim() || undefined,
@@ -465,6 +511,7 @@ function FormulaireMission({
               onChange={(produitId) =>
                 setLignes(lignes.map((x, j) => (j === i ? { ...x, produitId } : x)))
               }
+              compact
               allowEmpty
               emptyLabel="— Choisir un article —"
             />
