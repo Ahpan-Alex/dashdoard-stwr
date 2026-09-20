@@ -40,6 +40,7 @@ const ENTITE_LABELS: Record<ActiviteEntite, string> = {
   compte_comptable: "Plan comptable",
   compte_courant: "Compte courant d'associé",
   compte_tresorerie: "Compte de trésorerie",
+  journal_tresorerie: "Journal de trésorerie",
   mode_paiement: "Mode de paiement",
   sortie_atelier: "Sortie atelier",
   motif_sortie_atelier: "Motif sortie atelier",

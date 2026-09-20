@@ -8,8 +8,8 @@ import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
-  JOURNAL_ECRITURE_LABELS,
-  JOURNAUX_ECRITURE,
+  libelleJournalEcriture,
+  optionsJournauxEcriture,
   ecritureEstEquilibree,
   ecritureEstTransferee,
   filtrerEcrituresComptables,
@@ -28,6 +28,15 @@ export default function JournauxPage() {
 
 function JournauxContent() {
   const ecrituresComptables = useStore((s) => s.ecrituresComptables);
+  const journauxTresorerie = useStore((s) => s.journauxTresorerie ?? []);
+  const optionsJournaux = useMemo(
+    () =>
+      optionsJournauxEcriture(
+        journauxTresorerie,
+        ecrituresComptables.map((e) => e.journal),
+      ),
+    [journauxTresorerie, ecrituresComptables],
+  );
   const [journal, setJournal] = useState<JournalEcriture | "tous">("tous");
   const [statut, setStatut] = useState<"tous" | "transferee" | "en_attente">(
     "tous",
@@ -50,7 +59,7 @@ function JournauxContent() {
     <div>
       <PageHeader
         title="Journaux"
-        description="Écritures d'achat, de vente et de trésorerie. Les encaissements et décaissements alimentent les journaux banque, caisse et mobile monnaie."
+        description="Écritures d'achat et de vente dans leurs deux journaux, et un journal par compte de trésorerie (Caisse 1, BNI…)."
         showPosSelector={false}
       />
       <ComptabiliteSubnav />
@@ -66,9 +75,9 @@ function JournauxContent() {
             }
           >
             <option value="tous">Tous</option>
-            {JOURNAUX_ECRITURE.map((j) => (
-              <option key={j} value={j}>
-                {JOURNAL_ECRITURE_LABELS[j]}
+            {optionsJournaux.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.libelle}
               </option>
             ))}
           </select>
@@ -111,7 +120,7 @@ function JournauxContent() {
         <EmptyState
           icon={<ScrollText className="h-5 w-5" />}
           title="Aucune écriture"
-          description="Les écritures apparaissent à la validation d'une facture d'achat ou de vente, et à chaque encaissement / décaissement (journaux de trésorerie)."
+          description="Les écritures apparaissent à la validation d'une facture d'achat ou de vente, et à chaque encaissement / décaissement dans le journal du compte de trésorerie."
         />
       ) : (
         <div className="space-y-4">
@@ -126,7 +135,7 @@ function JournauxContent() {
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-sea-700">
-                      Journal {JOURNAL_ECRITURE_LABELS[e.journal]} · {e.piece}
+                      Journal {libelleJournalEcriture(e.journal, journauxTresorerie)} · {e.piece}
                     </p>
                     <p className="font-display text-base font-semibold">
                       {formatDate(e.date)} — {e.libelle}

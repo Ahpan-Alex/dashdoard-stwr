@@ -12,7 +12,7 @@ export default function ParametresComptabilitePage() {
       <div>
         <PageHeader
           title="Compta"
-          description="Longueur des numéros de compte. Plan, journaux et transfert restent dans le menu Comptabilité."
+          description="Longueur des numéros de compte. Un journal de trésorerie est créé pour chaque compte (Paramètres → Trésorerie). Plan et transfert restent dans Comptabilité."
           showPosSelector={false}
         />
         <ParametresSubnav />
@@ -22,7 +22,11 @@ export default function ParametresComptabilitePage() {
           <Link href="/comptabilite/plan" className="text-sea-800 underline">
             Comptabilité → Plan comptable
           </Link>
-          . Les exercices sont l&apos;onglet à côté.
+          . Chaque compte de trésorerie a son journal (liste dans{" "}
+          <Link href="/parametres/comptabilite/journaux" className="text-sea-800 underline">
+            Journaux de trésorerie
+          </Link>
+          ). Les exercices sont l&apos;onglet à côté.
         </p>
       </div>
     </RequirePermission>

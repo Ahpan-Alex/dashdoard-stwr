@@ -19,6 +19,7 @@ import type {
   Facture,
   Fournisseur,
   JournalEcriture,
+  JournalTresorerie,
   LotPaiementFournisseur,
   ModePaiementParam,
   MouvementTresorerie,
@@ -35,6 +36,11 @@ import type {
   TypeCompteTresorerie,
 } from "./types";
 import { tousMouvementsTresorerie } from "./tresorerie";
+import {
+  idJournalDedieCompte,
+  journalTresorerieEstPartage,
+  journauxTresorerieTries,
+} from "./journaux-tresorerie";
 import {
   produitEstVendable,
   typeAchatEstAttendu,
@@ -1227,26 +1233,69 @@ function ecritureMissionDepense(opts: {
   };
 }
 
-export const JOURNAL_ECRITURE_LABELS: Record<JournalEcriture, string> = {
+export const JOURNAL_SYSTEME_LABELS: Record<"vente" | "achat", string> = {
   vente: "Vente",
   achat: "Achat",
+};
+
+const JOURNAL_TRESORERIE_FALLBACK_LABELS: Record<string, string> = {
   banque: "Banque",
   caisse: "Caisse",
   mobile_monnaie: "Mobile monnaie",
 };
 
-export const JOURNAUX_ECRITURE: JournalEcriture[] = [
-  "vente",
-  "achat",
-  "banque",
-  "caisse",
-  "mobile_monnaie",
-];
+export function libelleJournalEcriture(
+  journal: string,
+  journaux: JournalTresorerie[] = [],
+) {
+  if (journal === "vente" || journal === "achat") {
+    return JOURNAL_SYSTEME_LABELS[journal];
+  }
+  const j = journaux.find((x) => x.id === journal);
+  if (j) return j.libelle;
+  return JOURNAL_TRESORERIE_FALLBACK_LABELS[journal] ?? journal;
+}
+
+export function optionsJournauxEcriture(
+  journaux: JournalTresorerie[],
+  extraIds: string[] = [],
+) {
+  const out: { id: string; libelle: string }[] = [
+    { id: "vente", libelle: JOURNAL_SYSTEME_LABELS.vente },
+    { id: "achat", libelle: JOURNAL_SYSTEME_LABELS.achat },
+  ];
+  const seen = new Set(["vente", "achat"]);
+  for (const j of journauxTresorerieTries(journaux)) {
+    if (journalTresorerieEstPartage(j) && !extraIds.includes(j.id)) continue;
+    seen.add(j.id);
+    out.push({ id: j.id, libelle: j.libelle });
+  }
+  for (const id of extraIds) {
+    if (!id || id === "tous" || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, libelle: libelleJournalEcriture(id, journaux) });
+  }
+  return out;
+}
 
 export function journalTresorerieDuType(
   type: TypeCompteTresorerie,
 ): JournalEcriture {
   return type;
+}
+
+export function journalEcritureDuCompteTresorerie(
+  compte: CompteTresorerie | undefined,
+  journaux: JournalTresorerie[],
+): JournalEcriture {
+  if (!compte) return "banque";
+  const dedie = journaux.find((j) => j.compteTresorerieId === compte.id);
+  if (dedie) return dedie.id;
+  if (compte.journalTresorerieId) {
+    const lie = journaux.find((j) => j.id === compte.journalTresorerieId);
+    if (lie && !journalTresorerieEstPartage(lie)) return lie.id;
+  }
+  return idJournalDedieCompte(compte.id);
 }
 
 export function prefixeCompteTresorerie(type: TypeCompteTresorerie) {
@@ -1306,6 +1355,7 @@ function compteFournisseurPourId(
 export function ecritureDepuisMouvementTresorerie(opts: {
   mouvement: MouvementTresorerie;
   comptesTresorerie: CompteTresorerie[];
+  journauxTresorerie?: JournalTresorerie[];
   comptes: CompteComptable[];
   factures: Facture[];
   achats: Achat[];
@@ -1391,7 +1441,10 @@ export function ecritureDepuisMouvementTresorerie(opts: {
     date: m.date,
     libelle: m.libelle,
     piece: m.reference || m.lignePaiementId,
-    journal: journalTresorerieDuType(caisse?.type ?? "banque"),
+    journal: journalEcritureDuCompteTresorerie(
+      caisse,
+      opts.journauxTresorerie ?? [],
+    ),
     sourceType: "tresorerie",
     sourceId: m.id,
     lignes,
@@ -1465,6 +1518,7 @@ export function regenererEcrituresComptables(opts: {
   sortiesAtelier?: SortieAtelier[];
   existantes?: EcritureComptable[];
   comptesTresorerie?: CompteTresorerie[];
+  journauxTresorerie?: JournalTresorerie[];
   acomptes?: Acompte[];
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
@@ -1538,6 +1592,7 @@ export function regenererEcrituresComptables(opts: {
     const e = ecritureDepuisMouvementTresorerie({
       mouvement: mvt,
       comptesTresorerie: opts.comptesTresorerie ?? [],
+      journauxTresorerie: opts.journauxTresorerie ?? [],
       comptes: opts.comptesComptables,
       factures: opts.factures,
       achats: opts.achats,
@@ -1598,7 +1653,10 @@ export function filtrerEcrituresComptables(
   });
 }
 
-export function lignesExportEcritures(ecritures: EcritureComptable[]) {
+export function lignesExportEcritures(
+  ecritures: EcritureComptable[],
+  journaux: JournalTresorerie[] = [],
+) {
   const rows: (string | number)[][] = [
     [
       "Date",
@@ -1615,7 +1673,7 @@ export function lignesExportEcritures(ecritures: EcritureComptable[]) {
     for (const l of e.lignes) {
       rows.push([
         e.date.slice(0, 10),
-        JOURNAL_ECRITURE_LABELS[e.journal],
+        libelleJournalEcriture(e.journal, journaux),
         e.piece,
         e.libelle,
         l.numero,

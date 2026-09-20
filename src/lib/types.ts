@@ -83,8 +83,24 @@ export type CompteTresorerie = {
   siteId?: string;
   /** Compte de classe 5 (512 / 53 / 531…) pour le journal de trésorerie. */
   compteComptableId?: string;
+  /** Journal de trésorerie (BNI, Orange Money…). Absent = journal du type. */
+  journalTresorerieId?: string;
   actif: boolean;
   ordre: number;
+};
+
+/** Journal de trésorerie paramétrable (une banque, une caisse, un mobile money). */
+export type JournalTresorerie = {
+  id: string;
+  code: string;
+  libelle: string;
+  type: TypeCompteTresorerie;
+  actif: boolean;
+  ordre: number;
+  /** Journaux Banque / Caisse / Mobile monnaie d'origine — non supprimables. */
+  systeme?: boolean;
+  /** Compte de trésorerie propriétaire (1 journal = 1 compte). */
+  compteTresorerieId?: string;
 };
 
 export type ModePaiementParam = {
@@ -1565,6 +1581,7 @@ export type ActiviteEntite =
   | "compte_comptable"
   | "compte_courant"
   | "compte_tresorerie"
+  | "journal_tresorerie"
   | "mode_paiement"
   | "sortie_atelier"
   | "motif_sortie_atelier"
@@ -1614,12 +1631,8 @@ export type CompteComptable = {
   roleCompte?: RoleCompteComptable;
 };
 
-export type JournalEcriture =
-  | "vente"
-  | "achat"
-  | "banque"
-  | "caisse"
-  | "mobile_monnaie";
+/** `vente` / `achat`, ou l'id d'un journal de trésorerie. */
+export type JournalEcriture = string;
 
 export type SourceEcriture =
   | "facture"
@@ -2029,6 +2042,7 @@ export type AppState = {
   emplacementsStock: EmplacementStock[];
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
+  journauxTresorerie: JournalTresorerie[];
   /** Lignes de relevé bancaire importées (rapprochement manuel). */
   lignesReleveBancaire: LigneReleveBancaire[];
   modesPaiement: ModePaiementParam[];

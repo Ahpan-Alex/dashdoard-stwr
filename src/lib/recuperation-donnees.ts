@@ -341,12 +341,31 @@ export const LOTS_RECUPERATION: LotRecuperation[] = [
     compter: (s) => s.comptesTresorerie.length,
     exporter: (s) =>
       downloadCsv("comptes-tresorerie.csv", [
-        ["Libellé", "Type", "Site", "Actif"],
+        ["Libellé", "Type", "Journal", "Site", "Actif"],
         ...s.comptesTresorerie.map((c) => [
           c.libelle,
           c.type,
+          c.journalTresorerieId ?? "",
           c.siteId ? nomSite(s, c.siteId) : "Tous sites",
           c.actif ? "oui" : "non",
+        ]),
+      ]),
+  },
+  {
+    id: "journaux-tresorerie",
+    titre: "Journaux de trésorerie",
+    pourquoi: "Un journal par compte de trésorerie (caisse, banque, mobile money).",
+    ouLabel: "Paramètres → Compta → Journaux de trésorerie",
+    ouHref: "/parametres/comptabilite/journaux",
+    compter: (s) => (s.journauxTresorerie ?? []).length,
+    exporter: (s) =>
+      downloadCsv("journaux-tresorerie.csv", [
+        ["Code", "Libellé", "Type", "Actif"],
+        ...(s.journauxTresorerie ?? []).map((j) => [
+          j.code,
+          j.libelle,
+          j.type,
+          j.actif ? "oui" : "non",
         ]),
       ]),
   },

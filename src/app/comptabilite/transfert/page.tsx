@@ -8,8 +8,8 @@ import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
 import {
-  JOURNAL_ECRITURE_LABELS,
-  JOURNAUX_ECRITURE,
+  libelleJournalEcriture,
+  optionsJournauxEcriture,
   filtrerEcrituresComptables,
 } from "@/lib/comptabilite";
 import { downloadCsv } from "@/lib/csv";
@@ -36,9 +36,18 @@ function telecharger(t: TransfertComptable, format: "csv" | "xlsx") {
 
 function TransfertContent() {
   const ecrituresComptables = useStore((s) => s.ecrituresComptables);
+  const journauxTresorerie = useStore((s) => s.journauxTresorerie ?? []);
   const transfertsComptables = useStore((s) => s.transfertsComptables ?? []);
   const creerTransfertComptable = useStore((s) => s.creerTransfertComptable);
   const peutGerer = useAuthStore((s) => s.hasPermission("comptabilite.gerer"));
+  const optionsJournaux = useMemo(
+    () =>
+      optionsJournauxEcriture(
+        journauxTresorerie,
+        ecrituresComptables.map((e) => e.journal),
+      ),
+    [journauxTresorerie, ecrituresComptables],
+  );
   const [journal, setJournal] = useState<JournalEcriture | "tous">("tous");
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
@@ -104,9 +113,9 @@ function TransfertContent() {
                 }
               >
                 <option value="tous">Tous</option>
-                {JOURNAUX_ECRITURE.map((j) => (
-                  <option key={j} value={j}>
-                    {JOURNAL_ECRITURE_LABELS[j]}
+                {optionsJournaux.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.libelle}
                   </option>
                 ))}
               </select>
@@ -193,7 +202,7 @@ function TransfertContent() {
                   <td>
                     {t.journal === "tous"
                       ? "Tous"
-                      : JOURNAL_ECRITURE_LABELS[t.journal]}
+                      : libelleJournalEcriture(t.journal, journauxTresorerie)}
                   </td>
                   <td className="text-xs text-muted">
                     {t.debut || t.fin

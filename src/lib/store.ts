@@ -89,6 +89,13 @@ import {
   type SaisieLignePaiement,
 } from "./tresorerie";
 import {
+  assurerJournauxParCompteTresorerie,
+  codeJournalDepuisLibelle,
+  journalTresorerieUtilise,
+  motifJournalTresorerieInvalide,
+  normaliserCodeJournal,
+} from "./journaux-tresorerie";
+import {
   libelleMotifSortieAtelier,
   motifSortieAtelierInvalide,
   regenererEntreesSortiesAtelier,
@@ -296,6 +303,7 @@ import type {
   Client,
   CompteComptable,
   CompteTresorerie,
+  JournalTresorerie,
   LigneReleveBancaire,
   EcritureComptable,
   Commande,
@@ -397,6 +405,7 @@ type Store = {
   emplacementsStock: EmplacementStock[];
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
+  journauxTresorerie: JournalTresorerie[];
   lignesReleveBancaire: LigneReleveBancaire[];
   modesPaiement: ModePaiementParam[];
   exercicesComptables: ExerciceComptable[];
@@ -1200,14 +1209,37 @@ type Store = {
     type: CompteTresorerie["type"];
     siteId?: string;
     compteComptableId?: string;
+    journalTresorerieId?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   updateCompteTresorerie: (
     id: string,
     data: Partial<
-      Pick<CompteTresorerie, "libelle" | "type" | "siteId" | "actif" | "ordre" | "compteComptableId">
+      Pick<
+        CompteTresorerie,
+        | "libelle"
+        | "type"
+        | "siteId"
+        | "actif"
+        | "ordre"
+        | "compteComptableId"
+        | "journalTresorerieId"
+      >
     >,
   ) => { ok: true } | { ok: false; reason: string };
   deleteCompteTresorerie: (id: string) => { ok: true } | { ok: false; reason: string };
+
+  addJournalTresorerie: (data: {
+    code: string;
+    libelle: string;
+    type: CompteTresorerie["type"];
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateJournalTresorerie: (
+    id: string,
+    data: Partial<
+      Pick<JournalTresorerie, "code" | "libelle" | "type" | "actif" | "ordre">
+    >,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteJournalTresorerie: (id: string) => { ok: true } | { ok: false; reason: string };
 
   addModePaiement: (data: {
     libelle: string;
@@ -1392,6 +1424,7 @@ function journalDepuis(state: {
   sortiesAtelier?: SortieAtelier[];
   ecrituresComptables?: EcritureComptable[];
   comptesTresorerie?: CompteTresorerie[];
+  journauxTresorerie?: JournalTresorerie[];
   acomptes?: Acompte[];
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
@@ -1410,6 +1443,7 @@ function journalDepuis(state: {
     sortiesAtelier: state.sortiesAtelier,
     existantes: state.ecrituresComptables,
     comptesTresorerie: state.comptesTresorerie,
+    journauxTresorerie: state.journauxTresorerie,
     acomptes: state.acomptes,
     lotsPaiementFournisseur: state.lotsPaiementFournisseur,
     modesPaiement: state.modesPaiement,
@@ -1431,6 +1465,7 @@ function avecJournal<T extends Record<string, unknown>>(
     sortiesAtelier?: SortieAtelier[];
     ecrituresComptables?: EcritureComptable[];
     comptesTresorerie?: CompteTresorerie[];
+    journauxTresorerie?: JournalTresorerie[];
     acomptes?: Acompte[];
     lotsPaiementFournisseur?: LotPaiementFournisseur[];
     modesPaiement?: ModePaiementParam[];
@@ -1443,13 +1478,21 @@ function avecJournal<T extends Record<string, unknown>>(
 } {
   const merged = { ...state, ...patch };
   const seeded = seedComptesDefautState(merged);
+  const assures = assurerJournauxParCompteTresorerie(
+    merged.comptesTresorerie ?? [],
+    merged.journauxTresorerie ?? [],
+  );
   return {
     ...patch,
+    comptesTresorerie: assures.comptes,
+    journauxTresorerie: assures.journaux,
     parametres: seeded.parametres,
     comptesComptables: seeded.comptesComptables,
     ecrituresComptables: journalDepuis({
       ...merged,
       ...seeded,
+      comptesTresorerie: assures.comptes,
+      journauxTresorerie: assures.journaux,
       ecrituresComptables:
         (patch as { ecrituresComptables?: EcritureComptable[] })
           .ecrituresComptables ?? state.ecrituresComptables,
@@ -2183,7 +2226,10 @@ export const useStore = create<Store>()((set, get) => ({
           debut: opts.debut || undefined,
           fin: opts.fin || undefined,
           ecritureIds: aExporter.map((e) => e.id),
-          lignes: lignesExportEcritures(aExporter),
+          lignes: lignesExportEcritures(
+            aExporter,
+            state.journauxTresorerie ?? [],
+          ),
           nomFichier: `transfert-comptable-${stamp}`,
         };
         const ids = new Set(transfert.ecritureIds);
@@ -9241,10 +9287,123 @@ export const useStore = create<Store>()((set, get) => ({
         }
         set((s) => ({
           comptesTresorerie: (s.comptesTresorerie ?? []).filter((c) => c.id !== id),
+          journauxTresorerie: (s.journauxTresorerie ?? []).filter(
+            (j) => j.compteTresorerieId !== id && j.id !== prev.journalTresorerieId,
+          ),
           journalActivites: [
             entreeActivite("suppression", "compte_tresorerie", {
               entiteId: id,
               libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+
+      addJournalTresorerie: (data) => {
+        const state = get();
+        const motif = motifJournalTresorerieInvalide(
+          data,
+          state.journauxTresorerie ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const libelle = data.libelle.trim();
+        const code = normaliserCodeJournal(
+          data.code || codeJournalDepuisLibelle(libelle),
+        );
+        const id = uid("jtr");
+        const ordre =
+          (state.journauxTresorerie ?? []).reduce((m, j) => Math.max(m, j.ordre), 0) +
+          1;
+        set((s) => ({
+          journauxTresorerie: [
+            ...(s.journauxTresorerie ?? []),
+            {
+              id,
+              code,
+              libelle,
+              type: data.type,
+              actif: true,
+              ordre,
+            },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "journal_tresorerie", {
+              entiteId: id,
+              libelle: `${code} ${libelle}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateJournalTresorerie: (id, data) => {
+        const state = get();
+        const prev = (state.journauxTresorerie ?? []).find((j) => j.id === id);
+        if (!prev) return { ok: false as const, reason: "Journal introuvable." };
+        const libelle = (data.libelle ?? prev.libelle).trim();
+        const code = normaliserCodeJournal(data.code ?? prev.code);
+        const motif = motifJournalTresorerieInvalide(
+          { code, libelle },
+          state.journauxTresorerie ?? [],
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        set((s) =>
+          avecJournal(s, {
+            journauxTresorerie: (s.journauxTresorerie ?? []).map((j) =>
+              j.id === id
+                ? {
+                    ...j,
+                    code,
+                    libelle,
+                    type: data.type ?? j.type,
+                    actif: data.actif ?? j.actif,
+                    ordre: data.ordre ?? j.ordre,
+                  }
+                : j,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "journal_tresorerie", {
+                entiteId: id,
+                libelle: `${code} ${libelle}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true as const };
+      },
+      deleteJournalTresorerie: (id) => {
+        const state = get();
+        const prev = (state.journauxTresorerie ?? []).find((j) => j.id === id);
+        if (!prev) return { ok: false as const, reason: "Journal introuvable." };
+        if (prev.systeme || prev.compteTresorerieId) {
+          return {
+            ok: false as const,
+            reason: prev.compteTresorerieId
+              ? "Ce journal est lié à un compte de trésorerie. Supprimez le compte si besoin."
+              : "Ce journal d'origine ne peut pas être supprimé. Désactivez-le si besoin.",
+          };
+        }
+        if (
+          journalTresorerieUtilise(id, {
+            comptes: state.comptesTresorerie ?? [],
+            ecritures: state.ecrituresComptables ?? [],
+          })
+        ) {
+          return {
+            ok: false as const,
+            reason: "Ce journal est déjà utilisé : suppression impossible.",
+          };
+        }
+        set((s) => ({
+          journauxTresorerie: (s.journauxTresorerie ?? []).filter((j) => j.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "journal_tresorerie", {
+              entiteId: id,
+              libelle: `${prev.code} ${prev.libelle}`,
             }),
             ...s.journalActivites,
           ],

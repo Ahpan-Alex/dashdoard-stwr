@@ -20,6 +20,7 @@ import {
   fusionnerModesPaiement,
   seedModesPaiement,
 } from "./tresorerie";
+import { fusionnerJournauxTresorerie, assurerJournauxParCompteTresorerie } from "./journaux-tresorerie";
 import type { AppState } from "./types";
 
 /** État métier vide — plus de données fake côté client. */
@@ -100,6 +101,7 @@ export function emptyAppState(): AppState {
     emplacementsStock: [],
     sortiesAtelier: [],
     comptesTresorerie: [],
+    journauxTresorerie: [],
     lignesReleveBancaire: [],
     modesPaiement: seedModesPaiement(),
     exercicesComptables: [],
@@ -169,7 +171,17 @@ export function pickAppState(state: AppState): AppState {
     sortiesAtelier: Array.isArray(state.sortiesAtelier)
       ? state.sortiesAtelier
       : [],
-    comptesTresorerie: fusionnerComptesTresorerie(state.comptesTresorerie),
+    ...(() => {
+      const comptes = fusionnerComptesTresorerie(state.comptesTresorerie);
+      const a = assurerJournauxParCompteTresorerie(
+        comptes,
+        fusionnerJournauxTresorerie(state.journauxTresorerie),
+      );
+      return {
+        comptesTresorerie: a.comptes,
+        journauxTresorerie: a.journaux,
+      };
+    })(),
     lignesReleveBancaire: Array.isArray(state.lignesReleveBancaire)
       ? state.lignesReleveBancaire
       : [],

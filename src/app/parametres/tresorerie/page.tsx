@@ -6,6 +6,7 @@ import { ParametresSectionFrame } from "@/components/parametres-subnav";
 import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency } from "@/lib/format";
 import { comptesParClasse } from "@/lib/comptabilite";
+import { libelleJournalTresorerie } from "@/lib/journaux-tresorerie";
 import {
   TYPE_COMPTE_TRESORERIE_LABELS,
   comptesTresorerieTries,
@@ -94,6 +95,7 @@ function ComptesSection() {
     lotsPaiementFournisseur,
     modesPaiement,
     comptesComptables,
+    journauxTresorerie,
     addCompteTresorerie,
     updateCompteTresorerie,
     deleteCompteTresorerie,
@@ -155,8 +157,9 @@ function ComptesSection() {
         <div>
           <h2 className="font-display text-lg font-semibold">Comptes de trésorerie</h2>
           <p className="mt-1 text-sm text-muted">
-            Associez un compte de classe 5 pour générer les écritures des
-            journaux Banque, Caisse et Mobile monnaie.
+            Chaque compte (Caisse 1, BNI, Orange Money…) a son propre journal
+            comptable. Les ventes et les achats restent sur les journaux Vente
+            et Achat.
           </p>
         </div>
         <button
@@ -189,7 +192,10 @@ function ComptesSection() {
               className="select mt-1"
               value={form.type}
               onChange={(e) =>
-                setForm({ ...form, type: e.target.value as TypeCompteTresorerie })
+                setForm({
+                  ...form,
+                  type: e.target.value as TypeCompteTresorerie,
+                })
               }
             >
               {(Object.keys(TYPE_COMPTE_TRESORERIE_LABELS) as TypeCompteTresorerie[]).map(
@@ -249,6 +255,7 @@ function ComptesSection() {
           <tr>
             <th>Compte</th>
             <th>Type</th>
+            <th>Journal</th>
             <th>Compte comptable</th>
             <th>Site</th>
             <th>Solde</th>
@@ -258,7 +265,7 @@ function ComptesSection() {
         <tbody>
           {liste.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-sm text-muted">
+              <td colSpan={7} className="text-sm text-muted">
                 Aucun compte. Un point de vente en exigera au moins un.
               </td>
             </tr>
@@ -267,6 +274,12 @@ function ComptesSection() {
               <tr key={c.id} className={c.actif ? "" : "opacity-50"}>
                 <td>{c.libelle}</td>
                 <td>{TYPE_COMPTE_TRESORERIE_LABELS[c.type]}</td>
+                <td className="text-xs text-muted">
+                  {libelleJournalTresorerie(
+                    c.journalTresorerieId,
+                    journauxTresorerie ?? [],
+                  )}
+                </td>
                 <td className="text-xs text-muted">
                   {comptesClasse5.find((x) => x.id === c.compteComptableId)
                     ? `${comptesClasse5.find((x) => x.id === c.compteComptableId)!.numero}`
