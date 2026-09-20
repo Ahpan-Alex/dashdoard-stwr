@@ -7,6 +7,7 @@ import {
   paletteParId,
   piedDePageAlignementDuModele,
   piedDePageLigneDuModele,
+  zonesAvecAffichagePrix,
   zonesDuModele,
   type ColonneArticleId,
   type ModeleDocument,
@@ -45,7 +46,7 @@ function libelleMesureLigne(l: LigneDocument) {
 }
 
 type Props = {
-  type: "devis" | "commande" | "bon_de_livraison" | "facture";
+  type: "devis" | "commande" | "bon_de_preparation" | "bon_de_livraison" | "facture";
   titre?: string;
   numero: string;
   date: string;
@@ -54,6 +55,8 @@ type Props = {
   validiteJours?: number;
   client: Client | undefined;
   pdv?: PointDeVente;
+  /** Sites pour résoudre l'emplacement de picking. */
+  pointsDeVente?: PointDeVente[];
   parametres: Parametres;
   modele: ModeleDocument | undefined;
   lignes: LigneDocument[];
@@ -63,6 +66,9 @@ type Props = {
   referenceDevis?: string;
   referenceCommande?: string;
   referenceBl?: string;
+  /** Afficher les colonnes de prix (bon de préparation). */
+  afficherPrix?: boolean;
+  visaPreparateur?: { nom?: string; date?: string };
   factureType?: "standard" | "acompte" | "solde" | "avoir" | "proforma";
   referenceFacture?: string;
   acomptesDetail?: { numero: string; date: string; montant: number; mode?: string }[];
@@ -92,6 +98,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
     echeance,
     client,
     pdv,
+    pointsDeVente,
     parametres,
     modele,
     lignes,
@@ -101,6 +108,8 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
     referenceDevis,
     referenceCommande,
     referenceBl,
+    afficherPrix,
+    visaPreparateur,
     factureType = "standard",
     referenceFacture,
     acomptesDetail = [],
@@ -115,7 +124,11 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
     validiteJours,
   } = props;
 
-  const z = zonesDuModele(modele);
+  const z0 = zonesDuModele(modele);
+  const z =
+    type === "bon_de_preparation"
+      ? zonesAvecAffichagePrix(z0, afficherPrix === true)
+      : z0;
   const palette = paletteParId(z.couleurId);
   const labelStyle = { color: palette.accent };
   const softStyle = { backgroundColor: palette.soft };
@@ -154,7 +167,9 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
         ? "Devis"
         : type === "bon_de_livraison"
           ? "Bon de livraison"
-          : "Bon de commande";
+          : type === "bon_de_preparation"
+            ? "Bon de préparation"
+            : "Bon de commande";
 
   const nomDocument = titre ?? z.document.nomDocument ?? labelType;
 
@@ -229,6 +244,16 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
         return formatCurrency(c.totalTTC);
       case "mesure":
         return libelleMesureLigne(l);
+      case "site":
+      case "emplacement": {
+        const siteId = l.siteStockId || pdv?.id;
+        const nom =
+          (pointsDeVente ?? (pdv ? [pdv] : [])).find((s) => s.id === siteId)
+            ?.nom ?? pdv?.nom;
+        return nom || (apercuModele ? "Magasin central" : "—");
+      }
+      case "prepare":
+        return l.prepare ? "☑" : "☐";
       default:
         return "";
     }
@@ -838,9 +863,11 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
                 </div>
               )}
               <div className="pt-2 text-xs text-muted">
-                {z.signataire.nom?.trim() ||
-                  parametres.signatureNom?.trim() ||
-                  "Signature / cachet"}
+                {visaPreparateur?.nom
+                  ? `Visa ${visaPreparateur.nom}${visaPreparateur.date ? ` — ${formatDate(visaPreparateur.date)}` : ""}`
+                  : z.signataire.nom?.trim() ||
+                    parametres.signatureNom?.trim() ||
+                    "Signature / cachet"}
               </div>
             </div>
           </div>

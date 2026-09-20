@@ -24,6 +24,7 @@ const ENTITE_LABELS: Record<ActiviteEntite, string> = {
   devis: "Devis",
   commande: "Commande",
   bon_de_livraison: "Bon de livraison",
+  bon_de_preparation: "Bon de préparation",
   facture: "Facture",
   achat: "Achat fournisseur",
   acompte: "Acompte",

@@ -103,7 +103,7 @@ export function lignesToDraft(lignes: LigneDocument[]): DraftLigne[] {
 }
 
 type PreviewMeta = {
-  type: "devis" | "commande" | "bon_de_livraison" | "facture";
+  type: "devis" | "commande" | "bon_de_preparation" | "bon_de_livraison" | "facture";
   numero: string;
   date: string;
   echeance?: string;

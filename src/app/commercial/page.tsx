@@ -55,6 +55,12 @@ const cards = [
     icon: ClipboardList,
   },
   {
+    href: "/bons-de-preparation",
+    title: "Bons de préparation",
+    description: "Picking commande → BL (optionnel)",
+    icon: Package,
+  },
+  {
     href: "/bons-de-livraison",
     title: "Bons de livraison",
     description: "Livraisons → conversion facture",
@@ -111,7 +117,7 @@ export default function CommercialPage() {
     <div>
       <PageHeader
         title="Gestion commerciale"
-        description="Cycle devis → commande → bon de livraison → acompte → facture, conforme aux mentions fiscales malagasy."
+        description="Cycle devis → commande → (bon de préparation optionnel) → bon de livraison → acompte → facture, conforme aux mentions fiscales malagasy."
       />
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

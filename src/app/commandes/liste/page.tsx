@@ -65,6 +65,11 @@ import {
   verrouTransformationActif,
 } from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
+import {
+  lignesPreparationDepuisCommande,
+  moduleBonDePreparationActif,
+  raisonGenerationBp,
+} from "@/lib/bon-de-preparation";
 import type { CommandeStatut, ModeRemise } from "@/lib/types";
 
 type Filtre = "tous" | CommandeStatut;
@@ -100,6 +105,9 @@ export default function ListeCommandesPage() {
     deleteCommande,
     addBonDeLivraison,
     bonsDeLivraison,
+    addBonDePreparation,
+    bonsDePreparation,
+    ordresFabrication,
     addFacture,
     factures,
     tarifsClients,
@@ -146,7 +154,7 @@ export default function ListeCommandesPage() {
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
   const [pending, setPending] = useState<{
     commandeId: string;
-    cible: "bon_de_livraison" | "facture";
+    cible: "bon_de_preparation" | "bon_de_livraison" | "facture";
   } | null>(null);
 
   useEffect(() => {
@@ -156,7 +164,9 @@ export default function ListeCommandesPage() {
   const { visible, colSpan } = useAffichageTable("commandes");
   const modele = useModelePourType("commande");
   const modeleBl = useModelePourType("bon_de_livraison");
+  const modeleBp = useModelePourType("bon_de_preparation");
   const modeleFacture = useModelePourType("facture");
+  const moduleBp = moduleBonDePreparationActif(parametres);
   const assujettiTVA = appliqueTVA(parametres);
   const editDoc = commandes.find((c) => c.id === editId);
   const preview = commandes.find((c) => c.id === previewId);
@@ -229,10 +239,21 @@ export default function ListeCommandesPage() {
 
   function demanderTransformation(
     commandeId: string,
-    cible: "bon_de_livraison" | "facture",
+    cible: "bon_de_preparation" | "bon_de_livraison" | "facture",
   ) {
     const c = commandes.find((x) => x.id === commandeId);
     if (!c || c.statut === "annulee") return;
+    if (cible === "bon_de_preparation") {
+      const motif = raisonGenerationBp({
+        commande: c,
+        ofs: ordresFabrication ?? [],
+        parametres,
+      });
+      if (motif) {
+        alert(motif);
+        return;
+      }
+    }
     const res = verrouillerTransformation("commande", commandeId, cible);
     if (!res.ok) {
       alert(res.reason);
@@ -292,6 +313,51 @@ export default function ListeCommandesPage() {
       cibleId: blId,
       cibleNumero: numero,
       statutSource: statutCommandeSelonLivraison(avancement),
+    });
+    if (!fin.ok) {
+      alert(fin.reason);
+      return;
+    }
+    setPending(null);
+  }
+
+  function confirmerBonDePreparation() {
+    const c = useStore.getState().commandes.find((x) => x.id === pending?.commandeId);
+    if (!c || !verrouTransformationActif(c.verrouTransformation)) {
+      libererVerrousExpires();
+      setPending(null);
+      alert(
+        "Le délai de validation (10 min) est dépassé. La commande a été déverrouillée.",
+      );
+      return;
+    }
+    const numero = numeroPieceSuivant(
+      "preparation",
+      (bonsDePreparation ?? []).map((b) => b.numero),
+      parametres,
+    );
+    const bpId = addBonDePreparation({
+      numero,
+      clientId: c.clientId,
+      pointDeVenteId: c.pointDeVenteId,
+      date: new Date().toISOString(),
+      statut: "a_preparer",
+      commandeId: c.id,
+      devisId: c.devisId,
+      note: c.note,
+      afficherPrix: false,
+      lignes: lignesPreparationDepuisCommande(c.lignes, c.pointDeVenteId),
+    });
+    const precedent =
+      c.verrouTransformation?.statutPrecedent ??
+      (c.statut === "en_transformation" ? "confirmee" : c.statut);
+    const fin = finaliserTransformation({
+      sourceType: "commande",
+      sourceId: c.id,
+      cibleType: "bon_de_preparation",
+      cibleId: bpId,
+      cibleNumero: numero,
+      statutSource: precedent,
     });
     if (!fin.ok) {
       alert(fin.reason);
@@ -387,6 +453,11 @@ export default function ListeCommandesPage() {
   const numeroBlProvisoire = numeroPieceSuivant(
     "livraison",
     bonsDeLivraison.map((b) => b.numero),
+    parametres,
+  );
+  const numeroBpProvisoire = numeroPieceSuivant(
+    "preparation",
+    (bonsDePreparation ?? []).map((b) => b.numero),
     parametres,
   );
   const numeroFacProvisoire = nextNumeroDocumentCommercial({
@@ -781,6 +852,17 @@ export default function ListeCommandesPage() {
                       </IconButton>
                       {c.statut !== "annulee" && (
                         <>
+                          {moduleBp && (
+                            <button
+                              className="btn btn-secondary"
+                              disabled={documentEstVerrouille(c)}
+                              onClick={() =>
+                                demanderTransformation(c.id, "bon_de_preparation")
+                              }
+                            >
+                              → BP
+                            </button>
+                          )}
                           <button
                             className="btn btn-secondary"
                             disabled={documentEstVerrouille(c)}
@@ -868,17 +950,21 @@ export default function ListeCommandesPage() {
         <TransformationValidationModal
           open
           titre={
-            pending.cible === "bon_de_livraison"
-              ? `Transformer ${pendingCmd.numero} en bon de livraison`
-              : `Transformer ${pendingCmd.numero} en facture`
+            pending.cible === "bon_de_preparation"
+              ? `Transformer ${pendingCmd.numero} en bon de préparation`
+              : pending.cible === "bon_de_livraison"
+                ? `Transformer ${pendingCmd.numero} en bon de livraison`
+                : `Transformer ${pendingCmd.numero} en facture`
           }
           sourceNumero={pendingCmd.numero}
           cible={pending.cible}
           verrou={pendingCmd.verrouTransformation}
           onConfirmer={
-            pending.cible === "bon_de_livraison"
-              ? confirmerBonDeLivraison
-              : confirmerFacture
+            pending.cible === "bon_de_preparation"
+              ? confirmerBonDePreparation
+              : pending.cible === "bon_de_livraison"
+                ? confirmerBonDeLivraison
+                : confirmerFacture
           }
           onAnnuler={() => fermerValidation()}
           onRetourEdition={() => fermerValidation({ edition: true })}
@@ -890,7 +976,28 @@ export default function ListeCommandesPage() {
             );
           }}
         >
-          {pending.cible === "bon_de_livraison" ? (
+          {pending.cible === "bon_de_preparation" ? (
+            <DocumentPreview
+              type="bon_de_preparation"
+              numero={numeroBpProvisoire}
+              date={new Date().toISOString()}
+              client={clients.find((x) => x.id === pendingCmd.clientId)}
+              pdv={pointsDeVente.find(
+                (p) => p.id === pendingCmd.pointDeVenteId,
+              )}
+              pointsDeVente={pointsDeVente}
+              parametres={parametres}
+              modele={modeleBp}
+              lignes={lignesPreparationDepuisCommande(
+                pendingCmd.lignes,
+                pendingCmd.pointDeVenteId,
+              )}
+              totaux={totauxCommande(pendingCmd, parametres, acomptes)}
+              note={pendingCmd.note}
+              referenceCommande={pendingCmd.numero}
+              afficherPrix={false}
+            />
+          ) : pending.cible === "bon_de_livraison" ? (
             <DocumentPreview
               type="bon_de_livraison"
               numero={numeroBlProvisoire}

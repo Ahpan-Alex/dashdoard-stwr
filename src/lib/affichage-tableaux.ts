@@ -7,6 +7,7 @@ export type TableAffichageId =
   | "factures"
   | "devis"
   | "commandes"
+  | "bons_de_preparation"
   | "bons_de_livraison"
   | "acomptes"
   | "clients"
@@ -127,6 +128,18 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("acomptes", "Acomptes", 24),
       col("avancement", "Avancement", 28),
       col("statut", "Statut", 24),
+    ],
+  },
+  {
+    id: "bons_de_preparation",
+    label: "Bons de préparation",
+    colonnes: [
+      col("numero", "N°", 24, true),
+      col("date", "Date", 22),
+      col("client", "Client", 32),
+      col("commande", "Commande", 24),
+      col("site", "Site", 28),
+      col("statut", "Statut", 24, true),
     ],
   },
   {

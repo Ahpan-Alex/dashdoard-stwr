@@ -27,6 +27,7 @@ import type { Client, LigneDocument } from "@/lib/types";
 const TYPE_LABELS: Record<TypeDocumentCommercial, string> = {
   devis: "Devis",
   commande: "Commande",
+  bon_de_preparation: "Bon de préparation",
   bon_de_livraison: "Bon de livraison",
   facture: "Facture",
 };
@@ -804,7 +805,7 @@ function ModeleEditor({
               onClick={() =>
                 setZones((z) => ({
                   ...z,
-                  articles: { ...z.articles, colonnes: colonnesParDefaut() },
+                  articles: { ...z.articles, colonnes: colonnesParDefaut(modele.type) },
                 }))
               }
             >

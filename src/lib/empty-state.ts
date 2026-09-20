@@ -2,7 +2,7 @@ import {
   normaliserParametresAlertes,
   PARAMETRES_ALERTES_DEFAUT,
 } from "./alertes";
-import { createDefaultModeles } from "./document-templates";
+import { assurerModelesDocuments, createDefaultModeles } from "./document-templates";
 import { ficheTiersDiversMarche } from "./missions";
 import { normaliserCategoriesProduits, seedCategoriesProduits } from "./produits";
 import { fusionnerUnitesMesure, seedUnitesMesure } from "./unites-mesure";
@@ -45,6 +45,8 @@ export function emptyAppState(): AppState {
       regimeFiscal: "tva",
       seuilMargePalier1Percent: 25,
       seuilMargePalier2Percent: 5,
+      seuilMargeTheoriqueAvertissementPercent: 20,
+      seuilMargeTheoriqueCritiquePercent: 0,
       conditionsPaiementDefaut:
         "Paiement à 30 jours. Acompte de 30 % à la commande. Espèces, virement ou Mobile Money.",
       tranchesBalanceAgeeJours: [30, 60, 90],
@@ -75,6 +77,7 @@ export function emptyAppState(): AppState {
     tiers: [ficheTiersDiversMarche()],
     devis: [],
     commandes: [],
+    bonsDePreparation: [],
     bonsDeLivraison: [],
     factures: [],
     acomptes: [],
@@ -118,7 +121,7 @@ export function pickAppState(state: AppState): AppState {
   return {
     parametres: state.parametres,
     identiteNavigation: state.identiteNavigation ?? { nom: "" },
-    modelesDocuments: state.modelesDocuments,
+    modelesDocuments: assurerModelesDocuments(state.modelesDocuments),
     preferencesModeles: state.preferencesModeles ?? {},
     preferencesAffichage: state.preferencesAffichage ?? {},
     parametresAlertes: normaliserParametresAlertes(state.parametresAlertes),
@@ -131,6 +134,7 @@ export function pickAppState(state: AppState): AppState {
     tiers: state.tiers ?? [],
     devis: state.devis,
     commandes: state.commandes,
+    bonsDePreparation: state.bonsDePreparation ?? [],
     bonsDeLivraison: state.bonsDeLivraison,
     factures: state.factures,
     acomptes: state.acomptes,

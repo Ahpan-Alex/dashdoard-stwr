@@ -22,6 +22,7 @@ export const FORMATS_NUMERO_DEFAUT: Record<
   devis: { prefixeLibre: "DEV", formatDate: "annee_4", longueurNumero: 4 },
   commande: { prefixeLibre: "CMD", formatDate: "annee_4", longueurNumero: 4 },
   livraison: { prefixeLibre: "BL", formatDate: "annee_4", longueurNumero: 4 },
+  preparation: { prefixeLibre: "BP", formatDate: "annee_4", longueurNumero: 4 },
   facture_client: {
     prefixeLibre: "FAC",
     formatDate: "annee_4",
@@ -52,6 +53,12 @@ export const PIECES_NUMEROTEES: {
     slug: "livraison",
     label: "Bon de livraison",
     description: "Numérotation automatique des bons de livraison.",
+  },
+  {
+    type: "preparation",
+    slug: "preparation",
+    label: "Bon de préparation",
+    description: "Numérotation automatique des bons de préparation.",
   },
   {
     type: "facture_client",

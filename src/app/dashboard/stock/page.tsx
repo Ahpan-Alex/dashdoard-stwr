@@ -12,6 +12,9 @@ import {
 } from "@/lib/dashboard-indicateurs";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { BP_STATUTS, moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
+import { filterByPos } from "@/lib/calculations";
+import Link from "next/link";
 
 export default function DashboardStockPage() {
   return (
@@ -35,6 +38,8 @@ function DashboardStockContent() {
     ordresFabrication,
     achats,
     transfertsMatiereOf,
+    bonsDePreparation,
+    parametres,
   } = useStore();
 
   const ctxReservation = {
@@ -215,6 +220,56 @@ function DashboardStockContent() {
           </table>
         </div>
       </div>
+
+      {moduleBonDePreparationActif(parametres) && (
+        <div className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+            En attente de préparation
+            <IndicateurInfo indicateur="bon_de_preparation_attente" />
+          </h2>
+          {(() => {
+            const attente = filterByPos(
+              bonsDePreparation ?? [],
+              pointDeVenteActifId,
+            ).filter(
+              (b) => b.statut === "a_preparer" || b.statut === "en_cours",
+            );
+            if (attente.length === 0) {
+              return (
+                <p className="mt-2 text-sm text-muted">
+                  Aucun bon de préparation en attente.
+                </p>
+              );
+            }
+            return (
+              <>
+                <p className="mt-1 text-sm text-muted">
+                  {attente.length} document
+                  {attente.length > 1 ? "s" : ""} à rassembler.
+                </p>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {attente.slice(0, 8).map((b) => (
+                    <li
+                      key={b.id}
+                      className="flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <Link
+                        href="/bons-de-preparation/liste"
+                        className="text-sea-800 underline"
+                      >
+                        {b.numero}
+                      </Link>
+                      <span className="text-xs text-muted">
+                        {BP_STATUTS[b.statut]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }

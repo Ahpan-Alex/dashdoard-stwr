@@ -32,6 +32,9 @@ export const POIDS_COLONNE_ARTICLE: Record<ColonneArticleId, number> = {
   tva_montant: 12,
   total_ttc: 13,
   mesure: 10,
+  site: 12,
+  emplacement: 14,
+  prepare: 8,
 };
 
 export const COLONNES_NUMERIQUES_ARTICLE: ColonneArticleId[] = [

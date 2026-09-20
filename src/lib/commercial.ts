@@ -4,6 +4,7 @@ import type {
   Acompte,
   AcompteDocumentLigne,
   BonDeLivraison,
+  BonDePreparation,
   Client,
   Commande,
   Devis,
@@ -810,6 +811,7 @@ export function motifLienClient(
     devis: Devis[];
     commandes: Commande[];
     bonsDeLivraison: BonDeLivraison[];
+    bonsDePreparation?: BonDePreparation[];
     acomptes: Acompte[];
     tarifsClients: Pick<TarifClient, "clientId">[];
   },
@@ -825,6 +827,9 @@ export function motifLienClient(
   }
   if (ctx.bonsDeLivraison.some((b) => b.clientId === clientId)) {
     return "Ce client est lié à un bon de livraison. Suppression impossible.";
+  }
+  if ((ctx.bonsDePreparation ?? []).some((b) => b.clientId === clientId)) {
+    return "Ce client est lié à un bon de préparation. Suppression impossible.";
   }
   if (ctx.acomptes.some((a) => a.clientId === clientId)) {
     return "Ce client est lié à un acompte. Suppression impossible.";
@@ -896,6 +901,7 @@ export function motifLienPointDeVente(
     devis: Devis[];
     commandes: Commande[];
     bonsDeLivraison: BonDeLivraison[];
+    bonsDePreparation?: BonDePreparation[];
     entrees: EntreeStock[];
     ventes: Vente[];
     immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
@@ -917,6 +923,9 @@ export function motifLienPointDeVente(
   }
   if (ctx.bonsDeLivraison.some((b) => b.pointDeVenteId === pdvId)) {
     return "Ce point de vente est lié à un bon de livraison. Suppression impossible.";
+  }
+  if ((ctx.bonsDePreparation ?? []).some((b) => b.pointDeVenteId === pdvId)) {
+    return "Ce point de vente est lié à un bon de préparation. Suppression impossible.";
   }
   if (ctx.entrees.some((e) => e.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des entrées de stock. Suppression impossible.";
@@ -994,6 +1003,15 @@ export const BL_STATUTS: Record<string, string> = {
   annule: "Annulé",
 };
 
+export const BP_STATUTS_DOC: Record<string, string> = {
+  a_preparer: "À préparer",
+  en_cours: "En cours",
+  pret: "Prêt",
+  en_transformation: "En cours de transformation",
+  transforme: "Transformé en BL",
+  annule: "Annulé",
+};
+
 export const FACTURE_STATUTS: Record<string, string> = {
   brouillon: "Brouillon",
   proforma: "Proforma",
@@ -1037,6 +1055,7 @@ export function couleurStatutDocument(statut: string): CouleurStatutDoc {
     case "envoye":
     case "proforma":
     case "en_cours":
+    case "a_preparer":
     case "prepare":
     case "expedie":
     case "partiellement_payee":
@@ -1047,6 +1066,7 @@ export function couleurStatutDocument(statut: string): CouleurStatutDoc {
     case "confirmee":
     case "livree":
     case "livre":
+    case "pret":
     case "transforme":
     case "validee":
     case "envoyee":

@@ -18,6 +18,9 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { syntheseRentabiliteDeuxPaliers } from "@/lib/rentabilite";
 import { useStore } from "@/lib/store";
+import { produitsEnAlerteMargeTheorique } from "@/lib/cout-theorique";
+import { BadgeMargeTheorique } from "@/components/badge-marge-theorique";
+import { libelleProduit } from "@/lib/produits";
 
 export default function DashboardGeneralPage() {
   const debut = useDashboardFiltres((s) => s.debut);
@@ -38,6 +41,8 @@ export default function DashboardGeneralPage() {
     bonsATirer,
     commandes,
     parametresAlertes,
+    ventes,
+    pointsDeVente,
   } = useStore();
 
   const { mois, annee } = caMoisEtAnnee(
@@ -71,6 +76,15 @@ export default function DashboardGeneralPage() {
     { factures, acomptes, parametres },
     parametresAlertes.ventePlafondCredit?.seuilPercent ?? 80,
   );
+  const alertesMarge = produitsEnAlerteMargeTheorique({
+    produits,
+    entrees,
+    ventes,
+    inventaires,
+    ateliers: pointsDeVente,
+    parametres,
+  });
+  const critiques = alertesMarge.filter((a) => a.niveau === "critique").length;
 
   return (
     <div>
@@ -251,6 +265,44 @@ export default function DashboardGeneralPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+        <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+          Alerte marge théorique
+          <IndicateurInfo indicateur="marge_theorique_alerte" />
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          {alertesMarge.length === 0
+            ? "Aucun semi-fini / fini sous les seuils de marge."
+            : `${alertesMarge.length} produit${alertesMarge.length > 1 ? "s" : ""} · ${critiques} critique${critiques > 1 ? "s" : ""}`}
+        </p>
+        {alertesMarge.length > 0 && (
+          <ul className="mt-3 space-y-2 text-sm">
+            {alertesMarge.slice(0, 8).map((a) => (
+              <li key={a.produit.id} className="flex flex-wrap items-center justify-between gap-2">
+                <Link
+                  href="/parametres/produits"
+                  className="text-sea-800 underline"
+                >
+                  {a.produit.code} — {libelleProduit(a.produit)}
+                </Link>
+                <span className="inline-flex items-center gap-2">
+                  <BadgeMargeTheorique niveau={a.niveau} taux={a.taux} compact />
+                  <span className="font-mono text-xs text-muted">
+                    {formatCurrency(a.cout)} / {formatCurrency(a.prixVente)}
+                    {a.partiel ? " · partiel" : ""}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {alertesMarge.length > 8 && (
+          <p className="mt-2 text-xs text-muted">
+            + {alertesMarge.length - 8} autre(s)
+          </p>
+        )}
       </div>
     </div>
   );

@@ -12,9 +12,11 @@ import {
   totauxDevis,
 } from "./commercial";
 import { categorieRacine, libelleProduit } from "./produits";
+import { BP_STATUTS } from "./bon-de-preparation";
 import type {
   Acompte,
   BonDeLivraison,
+  BonDePreparation,
   CategorieProduit,
   Commande,
   Devis,
@@ -195,6 +197,7 @@ export function caParFamilleClient(
 export type CategorieDocumentClient =
   | "devis"
   | "commande"
+  | "bon_de_preparation"
   | "bon_de_livraison"
   | "facture"
   | "acompte";
@@ -213,6 +216,7 @@ export type DocumentCommercialClient = {
 export const CATEGORIE_DOC_LABELS: Record<CategorieDocumentClient, string> = {
   devis: "Devis",
   commande: "Bon de commande",
+  bon_de_preparation: "Bon de préparation",
   bon_de_livraison: "Bon de livraison",
   facture: "Facture",
   acompte: "Acompte",
@@ -225,6 +229,7 @@ export function documentsCommerciauxClient(
     devis: Devis[];
     commandes: Commande[];
     bonsDeLivraison: BonDeLivraison[];
+    bonsDePreparation?: BonDePreparation[];
     factures: Facture[];
     acomptes: Acompte[];
     parametres: Parametres;
@@ -256,6 +261,21 @@ export function documentsCommerciauxClient(
       statut: c.statut,
       statutLabel: COMMANDE_STATUTS[c.statut] ?? c.statut,
       montant: totauxCommande(c, parametres, acomptes).totalTTC,
+    });
+  }
+
+  for (const b of (ctx.bonsDePreparation ?? []).filter(
+    (x) => x.clientId === clientId,
+  )) {
+    out.push({
+      id: b.id,
+      categorie: "bon_de_preparation",
+      categorieLabel: CATEGORIE_DOC_LABELS.bon_de_preparation,
+      numero: b.numero,
+      date: b.date,
+      statut: b.statut,
+      statutLabel: BP_STATUTS[b.statut] ?? b.statut,
+      montant: 0,
     });
   }
 

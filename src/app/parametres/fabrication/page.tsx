@@ -8,6 +8,7 @@ import { ParametresSectionFrame } from "@/components/parametres-subnav";
 import { RegleDelaiParametres } from "@/components/regle-delai-parametres";
 import { useAuthStore } from "@/lib/auth-store";
 import { atelierSansTauxMod, tauxHoraireModAtelier } from "@/lib/fabrication";
+import { seuilsMargeTheorique } from "@/lib/cout-theorique";
 import { formatCurrency } from "@/lib/format";
 import { siteEstAtelier } from "@/lib/sites";
 import { useStore } from "@/lib/store";
@@ -192,6 +193,17 @@ export default function ParametresFabricationPage() {
 
       <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="font-display text-lg font-semibold">
+          Alerte marge théorique
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          Compare le coût de revient théorique (nomenclature + CUMP + MOD, en
+          cascade) au prix de vente catalogue. Recalculé à chaque consultation.
+        </p>
+        <SeuilsMargeTheoriqueForm peutGerer={peutGerer} />
+      </section>
+
+      <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
+        <h2 className="font-display text-lg font-semibold">
           Règles de clôture d&apos;OF
         </h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
@@ -212,5 +224,71 @@ export default function ParametresFabricationPage() {
         </ul>
       </section>
     </ParametresSectionFrame>
+  );
+}
+
+function SeuilsMargeTheoriqueForm({ peutGerer }: { peutGerer: boolean }) {
+  const parametres = useStore((s) => s.parametres);
+  const updateParametres = useStore((s) => s.updateParametres);
+  const seuils = seuilsMargeTheorique(parametres);
+  const [avertissement, setAvertissement] = useState(String(seuils.avertissement));
+  const [critique, setCritique] = useState(String(seuils.critique));
+  const [saved, setSaved] = useState(false);
+
+  function enregistrer() {
+    const a = Math.max(0, Number(avertissement) || 0);
+    const c = Math.max(0, Number(critique) || 0);
+    updateParametres({
+      seuilMargeTheoriqueAvertissementPercent: a,
+      seuilMargeTheoriqueCritiquePercent: Math.min(c, a),
+    });
+    setAvertissement(String(a));
+    setCritique(String(Math.min(c, a)));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <label className="block text-xs font-semibold text-muted">
+        Seuil d&apos;avertissement (marge %, badge orange)
+        <input
+          type="number"
+          min={0}
+          max={100}
+          className="input mt-1"
+          value={avertissement}
+          disabled={!peutGerer}
+          onChange={(e) => setAvertissement(e.target.value)}
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Seuil critique (marge %, badge rouge)
+        <input
+          type="number"
+          min={0}
+          max={100}
+          className="input mt-1"
+          value={critique}
+          disabled={!peutGerer}
+          onChange={(e) => setCritique(e.target.value)}
+        />
+      </label>
+      <p className="text-xs text-muted sm:col-span-2">
+        Par défaut : orange sous 20 %, rouge si la marge est nulle ou négative
+        (coût ≥ prix de vente). Le seuil critique ne peut pas dépasser
+        l&apos;avertissement.
+      </p>
+      {peutGerer && (
+        <div className="sm:col-span-2">
+          <button type="button" className="btn btn-primary" onClick={enregistrer}>
+            Enregistrer les seuils
+          </button>
+          {saved && (
+            <span className="ml-2 text-xs text-sea-800">Enregistré</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

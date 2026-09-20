@@ -9,6 +9,7 @@ import {
   totauxDevis,
   totauxFacture,
 } from "./commercial";
+import { BP_STATUTS } from "./bon-de-preparation";
 import { DP_STATUT_LABELS } from "./demandes-prix";
 import { statutSuiviAchat, totauxAchat } from "./achats";
 import { achatConcerneSite } from "./sites";
@@ -24,6 +25,7 @@ import type {
   Fournisseur,
   Parametres,
   Tiers,
+  BonDePreparation,
 } from "./types";
 
 export type TypeDocumentArchive =
@@ -31,6 +33,7 @@ export type TypeDocumentArchive =
   | "commande_fournisseur"
   | "devis"
   | "commande_client"
+  | "bon_de_preparation"
   | "bon_de_livraison"
   | "facture";
 
@@ -42,6 +45,7 @@ export const TYPES_ARCHIVE_FOURNISSEUR: TypeDocumentArchive[] = [
 export const TYPES_ARCHIVE_VENTE: TypeDocumentArchive[] = [
   "devis",
   "commande_client",
+  "bon_de_preparation",
   "bon_de_livraison",
   "facture",
 ];
@@ -53,6 +57,7 @@ export const TYPE_DOCUMENT_ARCHIVE_LABELS: Record<TypeDocumentArchive, string> =
   commande_fournisseur: "Bon de commande fournisseur",
   devis: "Devis",
   commande_client: "Commande client",
+  bon_de_preparation: "Bon de préparation",
   bon_de_livraison: "Bon de livraison",
   facture: "Facture",
 };
@@ -89,6 +94,7 @@ export function collecterDocumentsArchive(opts: {
   achats: Achat[];
   devis: Devis[];
   commandes: Commande[];
+  bonsDePreparation?: BonDePreparation[];
   bonsDeLivraison: BonDeLivraison[];
   factures: Facture[];
   acomptes: Acompte[];
@@ -104,6 +110,7 @@ export function collecterDocumentsArchive(opts: {
     achats,
     devis,
     commandes,
+    bonsDePreparation,
     bonsDeLivraison,
     factures,
     acomptes,
@@ -185,6 +192,22 @@ export function collecterDocumentsArchive(opts: {
         statutLabel: COMMANDE_STATUTS[c.statut] ?? c.statut,
         href: "/commandes/liste",
         montant: totauxCommande(c, parametres, acomptes).totalTTC,
+      });
+    }
+  }
+
+  if (garder("bon_de_preparation")) {
+    for (const b of filterByPos(bonsDePreparation ?? [], pointDeVenteActifId)) {
+      rows.push({
+        id: b.id,
+        type: "bon_de_preparation",
+        numero: b.numero,
+        date: b.date,
+        tiersIds: [b.clientId],
+        tiersNom: nom(b.clientId),
+        statut: b.statut,
+        statutLabel: BP_STATUTS[b.statut] ?? b.statut,
+        href: "/bons-de-preparation/liste",
       });
     }
   }

@@ -17,12 +17,16 @@ function numerosExistants(
     devis: { numero: string }[];
     commandes: { numero: string }[];
     bonsDeLivraison: { numero: string }[];
+    bonsDePreparation?: { numero: string }[];
     factures: { numero: string }[];
   },
 ) {
   if (type === "devis") return etat.devis.map((d) => d.numero);
   if (type === "commande") return etat.commandes.map((c) => c.numero);
   if (type === "livraison") return etat.bonsDeLivraison.map((b) => b.numero);
+  if (type === "preparation") {
+    return (etat.bonsDePreparation ?? []).map((b) => b.numero);
+  }
   return etat.factures.map((f) => f.numero);
 }
 
@@ -32,6 +36,7 @@ export function NumerotationInitialeForm() {
   const devis = useStore((s) => s.devis);
   const commandes = useStore((s) => s.commandes);
   const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
+  const bonsDePreparation = useStore((s) => s.bonsDePreparation ?? []);
   const factures = useStore((s) => s.factures);
 
   const [valeurs, setValeurs] = useState<Record<TypePieceNumerotee, string>>(
@@ -39,6 +44,7 @@ export function NumerotationInitialeForm() {
       devis: String(prochainNumeroPieceEffectif(parametres, "devis")),
       commande: String(prochainNumeroPieceEffectif(parametres, "commande")),
       livraison: String(prochainNumeroPieceEffectif(parametres, "livraison")),
+      preparation: String(prochainNumeroPieceEffectif(parametres, "preparation")),
       facture_client: String(
         prochainNumeroPieceEffectif(parametres, "facture_client"),
       ),
@@ -51,6 +57,7 @@ export function NumerotationInitialeForm() {
       devis: String(prochainNumeroPieceEffectif(parametres, "devis")),
       commande: String(prochainNumeroPieceEffectif(parametres, "commande")),
       livraison: String(prochainNumeroPieceEffectif(parametres, "livraison")),
+      preparation: String(prochainNumeroPieceEffectif(parametres, "preparation")),
       facture_client: String(
         prochainNumeroPieceEffectif(parametres, "facture_client"),
       ),
@@ -58,8 +65,8 @@ export function NumerotationInitialeForm() {
   }, [parametres.prochainsNumerosPieces]);
 
   const etatDocs = useMemo(
-    () => ({ devis, commandes, bonsDeLivraison, factures }),
-    [bonsDeLivraison, commandes, devis, factures],
+    () => ({ devis, commandes, bonsDeLivraison, bonsDePreparation, factures }),
+    [bonsDeLivraison, bonsDePreparation, commandes, devis, factures],
   );
 
   function enregistrer(e: FormEvent) {
@@ -68,6 +75,7 @@ export function NumerotationInitialeForm() {
       devis: clampProchainNumeroPiece(valeurs.devis),
       commande: clampProchainNumeroPiece(valeurs.commande),
       livraison: clampProchainNumeroPiece(valeurs.livraison),
+      preparation: clampProchainNumeroPiece(valeurs.preparation),
       facture_client: clampProchainNumeroPiece(valeurs.facture_client),
     };
     updateParametres({ prochainsNumerosPieces: prochains });
@@ -75,6 +83,7 @@ export function NumerotationInitialeForm() {
       devis: String(prochains.devis),
       commande: String(prochains.commande),
       livraison: String(prochains.livraison),
+      preparation: String(prochains.preparation),
       facture_client: String(prochains.facture_client),
     });
     setMessage(

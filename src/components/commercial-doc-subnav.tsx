@@ -21,6 +21,11 @@ export const BL_MENUS: MenuItem[] = [
   { href: "/bons-de-livraison/liste", label: "Liste des BL" },
 ];
 
+export const BP_MENUS: MenuItem[] = [
+  { href: "/bons-de-preparation", label: "Nouveau BP", exact: true },
+  { href: "/bons-de-preparation/liste", label: "Liste des BP" },
+];
+
 function CommercialDocSubnav({ menus }: { menus: MenuItem[] }) {
   const pathname = usePathname();
 
@@ -54,4 +59,8 @@ export function CommandesSubnav() {
 
 export function BonsDeLivraisonSubnav() {
   return <CommercialDocSubnav menus={BL_MENUS} />;
+}
+
+export function BonsDePreparationSubnav() {
+  return <CommercialDocSubnav menus={BP_MENUS} />;
 }

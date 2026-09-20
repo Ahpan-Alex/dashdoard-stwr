@@ -119,6 +119,21 @@ export const REFERENTIEL_INDICATEURS = {
     definition:
       "Moyenne glissante (dernières missions clôturées avec avance) de l'écart avance / réel, par acheteur. Une alerte in-app se déclenche si le montant ou le pourcentage dépasse le seuil paramétré.",
   },
+  marge_theorique_alerte: {
+    titre: "Alerte marge théorique",
+    definition:
+      "Produits semi-finis et finis dont la marge (prix de vente catalogue − coût de revient théorique cascadé) passe sous le seuil d'avertissement (orange) ou le seuil critique (rouge, coût ≥ prix par défaut). Recalculé à chaque consultation, sans valeur stockée.",
+  },
+  bon_de_preparation_attente: {
+    titre: "En attente de préparation",
+    definition:
+      "Bons de préparation au statut « À préparer » ou « En cours ». Document logistique interne (picking), sans écriture comptable ni TVA. N'empêche pas le lien direct commande → BL.",
+  },
+  bon_de_preparation_versions: {
+    titre: "Versions du bon de préparation",
+    definition:
+      "Chaque changement de statut et chaque sauvegarde manuelle crée une version (qui / quand / contenu). Le document n'est pas fiscal : l'export PDF reflète l'état courant, fidèle à l'aperçu (couleurs et mise en forme du modèle).",
+  },
 } as const;
 
 export type IdIndicateur = keyof typeof REFERENTIEL_INDICATEURS;

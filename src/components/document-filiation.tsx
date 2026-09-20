@@ -4,12 +4,15 @@ import {
   avancementFacturationBl,
   avancementFacturationCommande,
   avancementLivraisonCommande,
+  avancementPreparationCommande,
   couleurAvancement,
   LABEL_AVANCEMENT_FACTURATION,
   LABEL_AVANCEMENT_LIVRAISON,
+  LABEL_AVANCEMENT_PREPARATION,
   LABEL_CIBLE_TRANSFORMATION,
   LABEL_SOURCE_TRANSFORMATION,
 } from "@/lib/transformation-document";
+import { moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
 import { formatDateTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { BonDeLivraison, Commande } from "@/lib/types";
@@ -90,11 +93,20 @@ export function OfLiesCommande({ commandeId }: { commandeId: string }) {
 
 export function BadgesAvancementCommande({ commande }: { commande: Commande }) {
   const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
+  const bonsDePreparation = useStore((s) => s.bonsDePreparation ?? []);
   const factures = useStore((s) => s.factures);
+  const parametres = useStore((s) => s.parametres);
   const liv = avancementLivraisonCommande(commande, bonsDeLivraison);
   const fac = avancementFacturationCommande(commande, factures);
+  const prep = avancementPreparationCommande(commande, bonsDePreparation);
+  const showPrep = moduleBonDePreparationActif(parametres);
   return (
     <div className="flex flex-wrap gap-1">
+      {showPrep && (
+        <span className={`badge badge-${couleurAvancement(prep)}`}>
+          {LABEL_AVANCEMENT_PREPARATION[prep]}
+        </span>
+      )}
       <span className={`badge badge-${couleurAvancement(liv)}`}>
         {LABEL_AVANCEMENT_LIVRAISON[liv]}
       </span>

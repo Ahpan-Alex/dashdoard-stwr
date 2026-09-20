@@ -46,6 +46,7 @@ import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
 import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { CoutTheoriqueProduitPanel } from "@/components/cout-theorique-produit";
+import { BadgeMargeFiche } from "@/components/badge-marge-theorique";
 import { AideSurfaceProduit } from "@/components/ligne-dimensions-saisie";
 import {
   achatSousTraitanceDuProduit,
@@ -1517,6 +1518,9 @@ export default function ParametresProduitsPage() {
                   {selected.prixVenteGrosHT != null
                     ? ` · Gros ${formatCurrency(selected.prixVenteGrosHT)}`
                     : ""}
+                  {produitEstFabrique(selected) && (
+                    <BadgeMargeFiche produit={selected} />
+                  )}
                 </p>
                 {moduleCompta && (
                   <div className="mt-4 rounded-[var(--radius)] border border-line/80 bg-sea-50/40 p-3">

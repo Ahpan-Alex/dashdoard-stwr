@@ -13,6 +13,7 @@ import {
   FileText,
   ClipboardList,
   Package,
+  PackageOpen,
   ScrollText,
   Wallet,
   ArrowLeftRight,
@@ -45,6 +46,7 @@ import {
 import { useStore } from "@/lib/store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { moduleComptabiliteActif } from "@/lib/comptabilite";
+import { BP_STATUTS, moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
 import { PARAMETRES_SECTIONS, type ParametreItem } from "@/lib/parametres-menus";
 import { AlertesCloche } from "./alertes-cloche";
 import { LogoNegoo, LogoNegooMark } from "./logo-negoo";
@@ -234,6 +236,16 @@ const sections: { title: string; links: NavLink[] }[] = [
           { href: "/commandes", label: "Nouvelle commande", exact: true },
           { href: "/commandes/liste", label: "Liste des commandes" },
           { href: "/commandes/bat", label: "Bons à tirer" },
+        ],
+      },
+      {
+        href: "/bons-de-preparation",
+        label: "Bons de préparation",
+        icon: PackageOpen,
+        permission: "commercial.lire",
+        children: [
+          { href: "/bons-de-preparation", label: "Nouveau BP", exact: true },
+          { href: "/bons-de-preparation/liste", label: "Liste des BP" },
         ],
       },
       {
@@ -520,11 +532,15 @@ export function Sidebar() {
   const devis = useStore((s) => s.devis);
   const commandes = useStore((s) => s.commandes);
   const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
+  const bonsDePreparation = useStore((s) => s.bonsDePreparation ?? []);
   const acomptes = useStore((s) => s.acomptes);
   const factures = useStore((s) => s.factures);
   const identiteNavigation = useStore((s) => s.identiteNavigation);
   const moduleCompta = useStore((s) =>
     moduleComptabiliteActif(s.parametres),
+  );
+  const moduleBp = useStore((s) =>
+    moduleBonDePreparationActif(s.parametres),
   );
 
   const pastillesParHref = useMemo(() => {
@@ -550,6 +566,13 @@ export function Sidebar() {
           listeHref="/bons-de-livraison/liste"
         />
       ),
+      "/bons-de-preparation": (
+        <StatusPastilles
+          docs={bonsDePreparation}
+          labels={BP_STATUTS}
+          listeHref="/bons-de-preparation/liste"
+        />
+      ),
       "/acomptes": (
         <StatusPastilles
           docs={acomptes}
@@ -566,7 +589,7 @@ export function Sidebar() {
       ),
       "/alertes": <AlertesNavCount />,
     } as Record<string, ReactNode>;
-  }, [devis, commandes, bonsDeLivraison, acomptes, factures]);
+  }, [devis, commandes, bonsDeLivraison, bonsDePreparation, acomptes, factures]);
 
   const visibleSections = useMemo(() => {
     return sections
@@ -574,6 +597,7 @@ export function Sidebar() {
         ...section,
         links: section.links
           .filter((link) => canSee(hasPermission, link))
+          .filter((link) => moduleBp || link.href !== "/bons-de-preparation")
           .map((link) => ({
             ...link,
             children: link.children
@@ -597,7 +621,7 @@ export function Sidebar() {
       }))
       .filter((s) => s.links.length > 0)
       .filter((s) => moduleCompta || s.title !== "Comptabilité");
-  }, [hasPermission, roleKey, currentSessionId, userState, moduleCompta]);
+  }, [hasPermission, roleKey, currentSessionId, userState, moduleCompta, moduleBp]);
 
   useEffect(() => {
     setOpenMenus((prev) => {

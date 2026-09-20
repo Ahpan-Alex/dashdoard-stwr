@@ -32,6 +32,7 @@ export function HistoriqueDocuments({
   const devis = useStore((s) => s.devis);
   const commandes = useStore((s) => s.commandes);
   const bonsDeLivraison = useStore((s) => s.bonsDeLivraison);
+  const bonsDePreparation = useStore((s) => s.bonsDePreparation ?? []);
   const factures = useStore((s) => s.factures);
   const acomptes = useStore((s) => s.acomptes);
   const clients = useStore((s) => s.clients);
@@ -73,6 +74,7 @@ export function HistoriqueDocuments({
         achats,
         devis,
         commandes,
+        bonsDePreparation,
         bonsDeLivraison,
         factures,
         acomptes,
@@ -88,6 +90,7 @@ export function HistoriqueDocuments({
       achats,
       devis,
       commandes,
+      bonsDePreparation,
       bonsDeLivraison,
       factures,
       acomptes,

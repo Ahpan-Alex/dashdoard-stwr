@@ -1,12 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { CaComparaisonDoubleTable } from "@/components/ca-comparaison-tables";
 import { EmptyState } from "@/components/empty-state";
+import { BadgeMargeTheorique } from "@/components/badge-marge-theorique";
+import { IndicateurInfo } from "@/components/indicateur-info";
 import { caAnnuelClient, caParFamilleClient, ventesDuClient } from "@/lib/client-fiche";
 import { caRapportMensuelYoY } from "@/lib/calculations";
+import { produitsEnAlerteMargeTheoriqueVendusAuClient } from "@/lib/cout-theorique";
 import { formatCurrency } from "@/lib/format";
+import { libelleProduit } from "@/lib/produits";
+import { useStore } from "@/lib/store";
 import type { CategorieProduit, PointDeVente, Produit, Vente } from "@/lib/types";
 
 function fmtPct(pct: number | null) {
@@ -47,9 +53,43 @@ export function TiersDashboardPanel({
     () => caParFamilleClient(ventes, produits, categories, clientId, annee),
     [ventes, produits, categories, clientId, annee],
   );
+  const entrees = useStore((s) => s.entrees);
+  const inventaires = useStore((s) => s.inventaires);
+  const parametres = useStore((s) => s.parametres);
+  const alertesMarge = useMemo(
+    () =>
+      produitsEnAlerteMargeTheoriqueVendusAuClient({
+        clientId,
+        ventes,
+        produits,
+        entrees,
+        inventaires,
+        ateliers: pointsDeVente,
+        parametres,
+      }),
+    [clientId, ventes, produits, entrees, inventaires, pointsDeVente, parametres],
+  );
 
   return (
     <div className="space-y-8">
+      {alertesMarge.length > 0 && (
+        <section>
+          <h2 className="mb-2 flex items-center gap-2 font-display text-lg font-semibold">
+            Marge théorique des articles vendus
+            <IndicateurInfo indicateur="marge_theorique_alerte" />
+          </h2>
+          <ul className="space-y-2 text-sm">
+            {alertesMarge.slice(0, 6).map((a) => (
+              <li key={a.produit.id} className="flex flex-wrap items-center justify-between gap-2">
+                <Link href="/parametres/produits" className="text-sea-800 underline">
+                  {a.produit.code} — {libelleProduit(a.produit)}
+                </Link>
+                <BadgeMargeTheorique niveau={a.niveau} taux={a.taux} compact />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="text-xs text-muted">
         CA HT net des remises, année civile {annee} — ventes rattachées à ce
         tiers en tant que client.

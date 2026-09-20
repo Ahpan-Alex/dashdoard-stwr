@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { createId } from "@/lib/id";
-import { motifComposantBomInvalide, NOM_NOMENCLATURE_STANDARD } from "@/lib/nomenclature";
+import { cycleNomenclature, motifComposantBomInvalide, NOM_NOMENCLATURE_STANDARD } from "@/lib/nomenclature";
 import {
   NATURES_STOCK,
   NATURE_STOCK_LABELS,
@@ -62,6 +62,26 @@ export function NomenclatureEditor({
     onNomenclaturesChange(next ? [auto, next] : [auto]);
   }
 
+  function verifierCycle(next: NomenclatureProduit) {
+    if (!parentId) return null;
+    const autoN =
+      nomenclatures.find((n) => n.type === "automatique") ?? auto;
+    const altN = nomenclatures.find((n) => n.type === "alternative");
+    const toutes =
+      next.type === "automatique"
+        ? altN
+          ? [next, altN]
+          : [next]
+        : [autoN, next];
+    return cycleNomenclature(
+      parentId,
+      toutes,
+      produits.map((p) =>
+        p.id === parentId ? { ...p, nomenclatures: toutes } : p,
+      ),
+    );
+  }
+
   return (
     <div className="sm:col-span-2 space-y-3">
       <label className="block text-xs font-semibold text-muted">
@@ -104,6 +124,7 @@ export function NomenclatureEditor({
             parentId={parentId}
             produits={produits}
             nomEditable={false}
+            verifierCycle={verifierCycle}
             onChange={setAuto}
           />
           {alt ? (
@@ -114,6 +135,7 @@ export function NomenclatureEditor({
               parentId={parentId}
               produits={produits}
               nomEditable
+              verifierCycle={verifierCycle}
               onChange={(n) => setAlt(n)}
               onRemove={() => setAlt(null)}
             />
@@ -147,6 +169,7 @@ function BlocNomenclature({
   parentId,
   produits,
   nomEditable,
+  verifierCycle,
   onChange,
   onRemove,
 }: {
@@ -156,6 +179,7 @@ function BlocNomenclature({
   parentId?: string;
   produits: Produit[];
   nomEditable: boolean;
+  verifierCycle?: (next: NomenclatureProduit) => string | null;
   onChange: (n: NomenclatureProduit) => void;
   onRemove?: () => void;
 }) {
@@ -172,13 +196,19 @@ function BlocNomenclature({
       alert(motif);
       return;
     }
-    onChange({
+    const next = {
       ...nomenclature,
       lignes: [
         ...nomenclature.lignes,
         { id: createId("nl"), composantId: premier.id, quantite: 1 },
       ],
-    });
+    };
+    const cycle = verifierCycle?.(next);
+    if (cycle) {
+      alert(cycle);
+      return;
+    }
+    onChange(next);
   }
 
   return (
@@ -226,6 +256,7 @@ function BlocNomenclature({
                 ligne={l}
                 nomenclature={nomenclature}
                 composants={composants}
+                verifierCycle={verifierCycle}
                 onChange={onChange}
               />
             ))
@@ -297,11 +328,13 @@ function LigneNomenclature({
   ligne,
   nomenclature,
   composants,
+  verifierCycle,
   onChange,
 }: {
   ligne: NomenclatureLigne;
   nomenclature: NomenclatureProduit;
   composants: Produit[];
+  verifierCycle?: (next: NomenclatureProduit) => string | null;
   onChange: (n: NomenclatureProduit) => void;
 }) {
   const type = typeCalculNomenclature(ligne);
@@ -323,9 +356,17 @@ function LigneNomenclature({
         <select
           className="select"
           value={ligne.composantId}
-          onChange={(e) =>
-            onChange(patchLigne(nomenclature, ligne.id, { composantId: e.target.value }))
-          }
+          onChange={(e) => {
+            const next = patchLigne(nomenclature, ligne.id, {
+              composantId: e.target.value,
+            });
+            const cycle = verifierCycle?.(next);
+            if (cycle) {
+              alert(cycle);
+              return;
+            }
+            onChange(next);
+          }}
         >
           {composants.map((c) => (
             <option key={c.id} value={c.id}>

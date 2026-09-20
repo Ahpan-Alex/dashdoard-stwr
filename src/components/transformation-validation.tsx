@@ -9,6 +9,7 @@ import type { CibleTransformation, VerrouTransformation } from "@/lib/types";
 
 const LIBELLE_CIBLE: Record<CibleTransformation, string> = {
   commande: "commande",
+  bon_de_preparation: "bon de préparation",
   bon_de_livraison: "bon de livraison",
   facture: "facture",
 };

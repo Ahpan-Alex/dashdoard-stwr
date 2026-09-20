@@ -25,6 +25,7 @@ export type DocumentRubriqueId =
 export type TypeDocumentCommercial =
   | "devis"
   | "commande"
+  | "bon_de_preparation"
   | "bon_de_livraison"
   | "facture";
 
@@ -45,7 +46,10 @@ export type ColonneArticleId =
   | "tva_pct"
   | "tva_montant"
   | "total_ttc"
-  | "mesure";
+  | "mesure"
+  | "site"
+  | "emplacement"
+  | "prepare";
 
 export type ColonneArticleConfig = {
   id: ColonneArticleId;
@@ -99,6 +103,46 @@ export const PALETTES: PaletteCouleur[] = [
 
 export function paletteParId(id: PaletteId | undefined): PaletteCouleur {
   return PALETTES.find((p) => p.id === id) ?? PALETTES[0];
+}
+
+export function zonesAvecAffichagePrix(
+  zones: ModeleZones,
+  afficherPrix: boolean,
+): ModeleZones {
+  const prix = new Set<ColonneArticleId>([
+    "pu_ht",
+    "pu_ttc",
+    "remise_pct",
+    "remise_ht",
+    "pu_ht_remise",
+    "pu_ttc_remise",
+    "total_ht",
+    "total_ht_remise",
+    "tva_pct",
+    "tva_montant",
+    "total_ttc",
+  ]);
+  return {
+    ...zones,
+    articles: {
+      ...zones.articles,
+      colonnes: zones.articles.colonnes.map((c) =>
+        prix.has(c.id)
+          ? {
+              ...c,
+              visible:
+                afficherPrix &&
+                (c.id === "pu_ht" || c.id === "total_ht" || c.visible),
+            }
+          : c,
+      ),
+    },
+    totaux: { ...zones.totaux, afficher: afficherPrix && zones.totaux.afficher },
+    montantEnLettres: {
+      ...zones.montantEnLettres,
+      afficher: afficherPrix && zones.montantEnLettres.afficher,
+    },
+  };
 }
 
 /** Préférences de modèle par utilisateur : userId → type de doc → modeleId. */
@@ -280,6 +324,9 @@ export const COLONNES_ARTICLE_CATALOGUE: {
   { id: "tva_montant", label: "TVA ou taxe" },
   { id: "total_ttc", label: "Total TTC" },
   { id: "mesure", label: "Mesure / dimensions" },
+  { id: "site", label: "Site" },
+  { id: "emplacement", label: "Emplacement stock" },
+  { id: "prepare", label: "Préparé" },
 ];
 
 /** Nombre maximal de colonnes affichables simultanément dans le tableau. */
@@ -296,17 +343,34 @@ export const COLONNES_VISIBLES_DEFAUT: ColonneArticleId[] = [
   "total_ttc",
 ];
 
-export function colonnesParDefaut(): ColonneArticleConfig[] {
+export const COLONNES_VISIBLES_PREPARATION: ColonneArticleId[] = [
+  "code",
+  "designation",
+  "quantite",
+  "unite",
+  "site",
+  "emplacement",
+  "prepare",
+];
+
+export function colonnesParDefaut(
+  type?: TypeDocumentCommercial,
+): ColonneArticleConfig[] {
+  const visibles =
+    type === "bon_de_preparation"
+      ? COLONNES_VISIBLES_PREPARATION
+      : COLONNES_VISIBLES_DEFAUT;
   return COLONNES_ARTICLE_CATALOGUE.map((c) => ({
     id: c.id,
     label: c.label,
-    visible: COLONNES_VISIBLES_DEFAUT.includes(c.id),
+    visible: visibles.includes(c.id),
   }));
 }
 
 const NOM_DOCUMENT_DEFAUT: Record<TypeDocumentCommercial, string> = {
   devis: "Devis",
   commande: "Bon de commande",
+  bon_de_preparation: "Bon de préparation",
   bon_de_livraison: "Bon de livraison",
   facture: "Facture",
 };
@@ -314,8 +378,9 @@ const NOM_DOCUMENT_DEFAUT: Record<TypeDocumentCommercial, string> = {
 /** Configuration de zones par défaut, cohérente avec le rendu actuel. */
 export function zonesParDefaut(type: TypeDocumentCommercial): ModeleZones {
   const estFacture = type === "facture";
+  const estBp = type === "bon_de_preparation";
   return {
-    couleurId: "ocean",
+    couleurId: estBp ? "cuivre" : "ocean",
     entete: {
       disposition: "logo_gauche",
       afficherInfosEntreprise: true,
@@ -345,34 +410,34 @@ export function zonesParDefaut(type: TypeDocumentCommercial): ModeleZones {
       adresseEtablissement: false,
       cadreEntrepriseFacturee: false,
       adresseEntrepriseFacturee: false,
-      cadreAdresseLivraison: type === "bon_de_livraison",
-      adresseLivraison: type === "bon_de_livraison",
+      cadreAdresseLivraison: type === "bon_de_livraison" || estBp,
+      adresseLivraison: type === "bon_de_livraison" || estBp,
     },
     tracabilite: {
-      afficher: false,
-      refCommandeClient: false,
+      afficher: estBp,
+      refCommandeClient: estBp,
       destinataire: false,
       vendeur: false,
-      intervenant: false,
-      dateIntervention: false,
+      intervenant: estBp,
+      dateIntervention: estBp,
     },
     articles: {
-      afficherLigneTotal: true,
-      colonnes: colonnesParDefaut(),
+      afficherLigneTotal: !estBp,
+      colonnes: colonnesParDefaut(type),
     },
     totaux: {
-      afficher: true,
-      totalHT: true,
-      totalTVA: true,
-      totalTTC: true,
+      afficher: !estBp,
+      totalHT: !estBp,
+      totalTVA: !estBp,
+      totalTTC: !estBp,
       tauxIMP: false,
       modePaiementIMP: false,
       montantIMP: false,
       taxesAdditionnelles: false,
       cautionConsigne: false,
-      totalAPayer: true,
+      totalAPayer: !estBp,
       paiementEffectue: estFacture,
-      netAPayer: true,
+      netAPayer: !estBp,
     },
     reglement: {
       afficher: estFacture,
@@ -387,7 +452,7 @@ export function zonesParDefaut(type: TypeDocumentCommercial): ModeleZones {
     },
     signataire: {
       afficher: true,
-      nom: "",
+      nom: estBp ? "Visa préparateur" : "",
     },
   };
 }
@@ -517,6 +582,51 @@ export const RUBRIQUES_CATALOGUE: {
 const MENTIONS_DEFAUT =
   "Document établi conformément à la réglementation fiscale malagasy. NIF et STAT obligatoires. En cas d'acompte, une facture d'acompte est émise. TVA exigible selon le régime applicable.";
 
+const MENTIONS_BP =
+  "Bon de préparation — document logistique interne. Ne constitue pas une facture, n'entraîne aucune écriture comptable et n'est pas assujetti à la TVA.";
+
+export function createDefaultModeles(): ModeleDocument[] {
+  return (
+    [
+      "devis",
+      "commande",
+      "bon_de_preparation",
+      "bon_de_livraison",
+      "facture",
+    ] as TypeDocumentCommercial[]
+  ).map((type) => ({
+    id: `modele-${type}-defaut`,
+    nom:
+      type === "bon_de_preparation"
+        ? "Modèle bon de préparation (législation MG)"
+        : `Modèle ${type.replaceAll("_", " ")} (législation MG)`,
+    type,
+    rubriques: [...DEFAULT_RUBRIQUES[type]],
+    mentionsLegales: type === "bon_de_preparation" ? MENTIONS_BP : MENTIONS_DEFAUT,
+    piedDePage:
+      type === "bon_de_preparation"
+        ? "Document interne — picking / rassemblement"
+        : "Merci de votre confiance — Négoo",
+    piedDePageAlignement: "centre",
+    piedDePageLigne: "aucune",
+    afficherMentionTvaImmatriculation: type !== "bon_de_preparation",
+    actif: true,
+    createur: "éditeur",
+    zones: zonesParDefaut(type),
+  }));
+}
+
+/** Injecte les modèles éditeur manquants (ex. nouveau type sur un tenant existant). */
+export function assurerModelesDocuments(
+  modeles: ModeleDocument[] | undefined,
+): ModeleDocument[] {
+  const list = Array.isArray(modeles) ? [...modeles] : [];
+  for (const d of createDefaultModeles()) {
+    if (!list.some((m) => m.type === d.type)) list.push(d);
+  }
+  return list;
+}
+
 export const DEFAULT_RUBRIQUES: Record<
   TypeDocumentCommercial,
   DocumentRubriqueId[]
@@ -556,6 +666,19 @@ export const DEFAULT_RUBRIQUES: Record<
     "net_a_payer",
     "conditions_paiement",
     "echeance",
+    "mentions_legales",
+    "signature_cachet",
+  ],
+  bon_de_preparation: [
+    "entete_entreprise",
+    "logo",
+    "nif",
+    "stat",
+    "coordonnees_entreprise",
+    "client",
+    "numero_date",
+    "reference_commande",
+    "lignes",
     "mentions_legales",
     "signature_cachet",
   ],
@@ -602,25 +725,6 @@ export const DEFAULT_RUBRIQUES: Record<
     "signature_cachet",
   ],
 };
-
-export function createDefaultModeles(): ModeleDocument[] {
-  return (
-    ["devis", "commande", "bon_de_livraison", "facture"] as TypeDocumentCommercial[]
-  ).map((type) => ({
-    id: `modele-${type}-defaut`,
-    nom: `Modèle ${type.replaceAll("_", " ")} (législation MG)`,
-    type,
-    rubriques: [...DEFAULT_RUBRIQUES[type]],
-    mentionsLegales: MENTIONS_DEFAUT,
-    piedDePage: "Merci de votre confiance — Négoo",
-    piedDePageAlignement: "centre",
-    piedDePageLigne: "aucune",
-    afficherMentionTvaImmatriculation: true,
-    actif: true,
-    createur: "éditeur",
-    zones: zonesParDefaut(type),
-  }));
-}
 
 export function hasRubrique(
   modele: ModeleDocument | undefined,

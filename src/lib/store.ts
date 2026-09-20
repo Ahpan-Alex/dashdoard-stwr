@@ -269,6 +269,10 @@ import {
   creerVerrouTransformation,
   verrouTransformationActif,
 } from "./transformation-document";
+import {
+  avecVersionSiStatutChange,
+  snapshotVersionBp,
+} from "./bon-de-preparation";
 import type {
   Achat,
   Acompte,
@@ -279,6 +283,8 @@ import type {
   BilanInitial,
   BonDeLivraison,
   BonDeLivraisonStatut,
+  BonDePreparation,
+  BonDePreparationStatut,
   CategorieProduit,
   CibleTransformation,
   Client,
@@ -359,6 +365,7 @@ type Store = {
   tiers: Tiers[];
   devis: Devis[];
   commandes: Commande[];
+  bonsDePreparation: BonDePreparation[];
   bonsDeLivraison: BonDeLivraison[];
   factures: Facture[];
   acomptes: Acompte[];
@@ -1061,6 +1068,11 @@ type Store = {
   updateBonDeLivraison: (id: string, data: Partial<BonDeLivraison>) => void;
   deleteBonDeLivraison: (id: string) => void;
 
+  addBonDePreparation: (bp: Omit<BonDePreparation, "id">) => string;
+  updateBonDePreparation: (id: string, data: Partial<BonDePreparation>) => void;
+  deleteBonDePreparation: (id: string) => void;
+  sauvegarderVersionBonDePreparation: (id: string) => void;
+
   verrouillerTransformation: (
     kind: SourceTransformation,
     id: string,
@@ -1725,24 +1737,29 @@ function etatAvecTiersDivers(state: {
   });
 }
 
-type DocSource = Devis | Commande | BonDeLivraison;
+type DocSource = Devis | Commande | BonDeLivraison | BonDePreparation;
 
 function trouverSource(
-  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison">,
+  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison" | "bonsDePreparation">,
   kind: SourceTransformation,
   id: string,
 ): DocSource | undefined {
   if (kind === "devis") return state.devis.find((d) => d.id === id);
   if (kind === "commande") return state.commandes.find((c) => c.id === id);
+  if (kind === "bon_de_preparation") {
+    return (state.bonsDePreparation ?? []).find((b) => b.id === id);
+  }
   return state.bonsDeLivraison.find((b) => b.id === id);
 }
 
 function patcherSource(
-  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison">,
+  state: Pick<Store, "devis" | "commandes" | "bonsDeLivraison" | "bonsDePreparation">,
   kind: SourceTransformation,
   id: string,
   patch: Record<string, unknown>,
-): Partial<Pick<Store, "devis" | "commandes" | "bonsDeLivraison">> {
+): Partial<
+  Pick<Store, "devis" | "commandes" | "bonsDeLivraison" | "bonsDePreparation">
+> {
   if (kind === "devis") {
     return {
       devis: state.devis.map((d) => (d.id === id ? { ...d, ...patch } : d)),
@@ -1752,6 +1769,13 @@ function patcherSource(
     return {
       commandes: state.commandes.map((c) =>
         c.id === id ? { ...c, ...patch } : c,
+      ),
+    };
+  }
+  if (kind === "bon_de_preparation") {
+    return {
+      bonsDePreparation: (state.bonsDePreparation ?? []).map((b) =>
+        b.id === id ? { ...b, ...patch } : b,
       ),
     };
   }
@@ -1765,6 +1789,7 @@ function patcherSource(
 function entiteSource(kind: SourceTransformation): ActiviteEntite {
   if (kind === "devis") return "devis";
   if (kind === "commande") return "commande";
+  if (kind === "bon_de_preparation") return "bon_de_preparation";
   return "bon_de_livraison";
 }
 
@@ -2352,6 +2377,7 @@ export const useStore = create<Store>()((set, get) => ({
           devis: state.devis,
           commandes: state.commandes,
           bonsDeLivraison: state.bonsDeLivraison,
+          bonsDePreparation: state.bonsDePreparation,
           entrees: state.entrees,
           ventes: state.ventes,
           immobilisations: state.immobilisations,
@@ -6476,6 +6502,7 @@ export const useStore = create<Store>()((set, get) => ({
             devis: state.devis,
             commandes: state.commandes,
             bonsDeLivraison: state.bonsDeLivraison,
+            bonsDePreparation: state.bonsDePreparation,
             factures: state.factures,
             achats: state.achats,
             ordresFabrication: state.ordresFabrication,
@@ -7338,6 +7365,7 @@ export const useStore = create<Store>()((set, get) => ({
           devis: state.devis,
           commandes: state.commandes,
           bonsDeLivraison: state.bonsDeLivraison,
+          bonsDePreparation: state.bonsDePreparation,
           acomptes: state.acomptes,
           tarifsClients: state.tarifsClients,
         });
@@ -7576,6 +7604,7 @@ export const useStore = create<Store>()((set, get) => ({
             devis: state.devis,
             commandes: state.commandes,
             bonsDeLivraison: state.bonsDeLivraison,
+            bonsDePreparation: state.bonsDePreparation,
             acomptes: state.acomptes,
             tarifsClients: state.tarifsClients,
           });
@@ -7822,6 +7851,7 @@ export const useStore = create<Store>()((set, get) => ({
             devis: state.devis,
             commandes: state.commandes,
             bonsDeLivraison: state.bonsDeLivraison,
+            bonsDePreparation: state.bonsDePreparation,
             acomptes: state.acomptes,
             tarifsClients: state.tarifsClients,
           });
@@ -8091,6 +8121,82 @@ export const useStore = create<Store>()((set, get) => ({
           };
         }),
 
+      addBonDePreparation: (bp) => {
+        const id = uid("bp");
+        const actor = getActiviteActor();
+        const doc: BonDePreparation = {
+          ...bp,
+          id,
+          versions: bp.versions?.length
+            ? bp.versions
+            : [
+                snapshotVersionBp({
+                  ...bp,
+                  id,
+                  versions: [],
+                }),
+              ],
+        };
+        set((state) => ({
+          bonsDePreparation: [doc, ...(state.bonsDePreparation ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "bon_de_preparation", {
+              entiteId: id,
+              libelle: bp.numero,
+              detail: actor.nom ? `créé par ${actor.nom}` : undefined,
+            }),
+            ...state.journalActivites,
+          ],
+        }));
+        return id;
+      },
+      updateBonDePreparation: (id, data) =>
+        set((state) => {
+          const prev = (state.bonsDePreparation ?? []).find((b) => b.id === id);
+          if (prev && verrouTransformationActif(prev.verrouTransformation)) {
+            return state;
+          }
+          return {
+            bonsDePreparation: (state.bonsDePreparation ?? []).map((b) => {
+              if (b.id !== id) return b;
+              const next = { ...b, ...data };
+              return avecVersionSiStatutChange(b, next);
+            }),
+            journalActivites: [
+              entreeActivite(
+                data.statut === "annule" ? "annulation" : "modification",
+                "bon_de_preparation",
+                { entiteId: id, libelle: prev?.numero },
+              ),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+      deleteBonDePreparation: (id) =>
+        set((state) => {
+          const prev = (state.bonsDePreparation ?? []).find((b) => b.id === id);
+          return {
+            bonsDePreparation: (state.bonsDePreparation ?? []).filter(
+              (b) => b.id !== id,
+            ),
+            journalActivites: [
+              entreeActivite("suppression", "bon_de_preparation", {
+                entiteId: id,
+                libelle: prev?.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          };
+        }),
+      sauvegarderVersionBonDePreparation: (id) =>
+        set((state) => ({
+          bonsDePreparation: (state.bonsDePreparation ?? []).map((b) =>
+            b.id === id
+              ? { ...b, versions: [...(b.versions ?? []), snapshotVersionBp(b)] }
+              : b,
+          ),
+        })),
+
       verrouillerTransformation: (kind, id, cible) => {
         get().libererVerrousExpires();
         const state = get();
@@ -8128,7 +8234,9 @@ export const useStore = create<Store>()((set, get) => ({
             ? ("en_transformation" as DevisStatut)
             : kind === "commande"
               ? ("en_transformation" as CommandeStatut)
-              : ("en_transformation" as BonDeLivraisonStatut);
+              : kind === "bon_de_preparation"
+                ? ("en_transformation" as BonDePreparationStatut)
+                : ("en_transformation" as BonDeLivraisonStatut);
         set((s) => ({
           ...patcherSource(s, kind, id, {
             statut: statutVerrou,
@@ -8155,6 +8263,7 @@ export const useStore = create<Store>()((set, get) => ({
           devis: state.devis.map(libererSiExpire),
           commandes: state.commandes.map(libererSiExpire),
           bonsDeLivraison: state.bonsDeLivraison.map(libererSiExpire),
+          bonsDePreparation: (state.bonsDePreparation ?? []).map(libererSiExpire),
         })),
 
       finaliserTransformation: (payload) => {

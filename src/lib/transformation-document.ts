@@ -2,6 +2,7 @@ import { getActiviteActor } from "./activity-actor";
 import { factureImpacteExploitation, isLigneProduit } from "./commercial";
 import type {
   BonDeLivraison,
+  BonDePreparation,
   CibleTransformation,
   Commande,
   Devis,
@@ -16,6 +17,7 @@ export const DUREE_VERROU_TRANSFORMATION_MS = 10 * 60 * 1000;
 
 export const LABEL_CIBLE_TRANSFORMATION: Record<CibleTransformation, string> = {
   commande: "commande",
+  bon_de_preparation: "bon de préparation",
   bon_de_livraison: "bon de livraison",
   facture: "facture",
 };
@@ -23,6 +25,7 @@ export const LABEL_CIBLE_TRANSFORMATION: Record<CibleTransformation, string> = {
 export const LABEL_SOURCE_TRANSFORMATION: Record<SourceTransformation, string> = {
   devis: "devis",
   commande: "commande",
+  bon_de_preparation: "bon de préparation",
   bon_de_livraison: "bon de livraison",
 };
 
@@ -136,6 +139,10 @@ function blComptePourLivraison(b: BonDeLivraison): boolean {
   return b.statut !== "annule" && b.statut !== "brouillon";
 }
 
+function bpComptePourAvancement(b: BonDePreparation): boolean {
+  return b.statut !== "annule";
+}
+
 function factureComptePourAvancement(f: Facture): boolean {
   return f.type !== "avoir" && factureImpacteExploitation(f);
 }
@@ -152,6 +159,25 @@ export function avancementLivraisonCommande(
     fusionnerQuantites(bls.map((b) => quantitesParProduit(b.lignes))),
   );
 }
+
+export function avancementPreparationCommande(
+  commande: Commande,
+  bons: BonDePreparation[],
+): AvancementQuantite {
+  const bps = bons.filter(
+    (b) => b.commandeId === commande.id && bpComptePourAvancement(b),
+  );
+  return comparerAvancement(
+    quantitesParProduit(commande.lignes),
+    fusionnerQuantites(bps.map((b) => quantitesParProduit(b.lignes))),
+  );
+}
+
+export const LABEL_AVANCEMENT_PREPARATION: Record<AvancementQuantite, string> = {
+  aucune: "Non préparée",
+  partielle: "Partiellement préparée",
+  totale: "Totalement préparée",
+};
 
 export function avancementFacturationCommande(
   commande: Commande,

@@ -197,6 +197,7 @@ export type TypePieceNumerotee =
   | "devis"
   | "commande"
   | "livraison"
+  | "preparation"
   | "facture_client";
 
 export type FormatNumeroPiece = {
@@ -526,10 +527,24 @@ export type Parametres = {
    */
   moduleComptabilite?: boolean;
   /**
+   * Bon de préparation (picking entre commande et BL).
+   * Absent = désactivé (étape optionnelle).
+   */
+  moduleBonDePreparation?: boolean;
+  /**
    * Durée de validité par défaut des demandes de prix et commandes fournisseurs (jours).
    * Absent = 15.
    */
   validiteJoursDefautAchats?: number;
+  /**
+   * Marge théorique mini (coût de revient vs prix catalogue) avant badge orange.
+   * Absent = 20.
+   */
+  seuilMargeTheoriqueAvertissementPercent?: number;
+  /**
+   * Marge théorique mini avant badge rouge. Absent = 0 (coût ≥ prix de vente).
+   */
+  seuilMargeTheoriqueCritiquePercent?: number;
   /** Formats de n° pour devis, commande, BL et facture client. */
   formatsNumeroPieces?: FormatsNumeroPieces;
   /**
@@ -1082,6 +1097,10 @@ export type LigneDocument = {
   largeurM?: number;
   /** Hauteur en mètres. */
   hauteurM?: number;
+  /** Cochage opérateur (bon de préparation). */
+  prepare?: boolean;
+  /** Site de picking (bon de préparation). Défaut = site du document. */
+  siteStockId?: string;
 };
 
 export type DevisStatut =
@@ -1093,8 +1112,16 @@ export type DevisStatut =
   | "refuse"
   | "expire";
 
-export type CibleTransformation = "commande" | "bon_de_livraison" | "facture";
-export type SourceTransformation = "devis" | "commande" | "bon_de_livraison";
+export type CibleTransformation =
+  | "commande"
+  | "bon_de_preparation"
+  | "bon_de_livraison"
+  | "facture";
+export type SourceTransformation =
+  | "devis"
+  | "commande"
+  | "bon_de_preparation"
+  | "bon_de_livraison";
 
 /** Verrou temporaire pendant l'écran de validation d'une transformation. */
 export type VerrouTransformation = {
@@ -1204,6 +1231,48 @@ export type BonATirer = {
   sourceBatId?: string;
 };
 
+export type BonDePreparationStatut =
+  | "a_preparer"
+  | "en_cours"
+  | "pret"
+  | "en_transformation"
+  | "transforme"
+  | "annule";
+
+export type VersionBonDePreparation = {
+  id: string;
+  version: number;
+  date: string;
+  userId?: string;
+  userNom?: string;
+  statut: BonDePreparationStatut;
+  afficherPrix: boolean;
+  lignes: LigneDocument[];
+  note?: string;
+};
+
+/** Étape logistique de picking : aucune écriture, pas de TVA. */
+export type BonDePreparation = {
+  id: string;
+  numero: string;
+  clientId: string;
+  pointDeVenteId: string;
+  date: string;
+  statut: BonDePreparationStatut;
+  lignes: LigneDocument[];
+  commandeId: string;
+  devisId?: string;
+  note?: string;
+  /** Affichage des prix sur le document (désactivé par défaut). */
+  afficherPrix?: boolean;
+  preparateurUserId?: string;
+  preparateurNom?: string;
+  dateVisa?: string;
+  visa?: boolean;
+  versions?: VersionBonDePreparation[];
+  verrouTransformation?: VerrouTransformation | null;
+};
+
 export type BonDeLivraisonStatut =
   | "brouillon"
   | "prepare"
@@ -1225,6 +1294,7 @@ export type BonDeLivraison = {
   tauxTVA: number;
   commandeId?: string;
   devisId?: string;
+  bonDePreparationId?: string;
   conditionsPaiement?: string;
   note?: string;
   remiseGlobale?: number;
@@ -1469,6 +1539,7 @@ export type ActiviteEntite =
   | "devis"
   | "commande"
   | "bon_de_livraison"
+  | "bon_de_preparation"
   | "facture"
   | "acompte"
   | "inventaire"
@@ -1907,6 +1978,7 @@ export type AppState = {
   tiers: Tiers[];
   devis: Devis[];
   commandes: Commande[];
+  bonsDePreparation: BonDePreparation[];
   bonsDeLivraison: BonDeLivraison[];
   factures: Facture[];
   acomptes: Acompte[];

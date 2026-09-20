@@ -41,6 +41,13 @@ export function nomenclatureParType(
   return nomenclaturesDuProduit(produit).find((n) => n.type === type);
 }
 
+export function nomenclatureStandardDuProduit(
+  produit: Pick<Produit, "nomenclatures" | "natureStock">,
+): NomenclatureProduit | undefined {
+  const list = nomenclaturesDuProduit(produit);
+  return list.find((n) => n.type === "automatique") ?? list[0];
+}
+
 export function normaliserNomenclatures(
   nomenclatures: NomenclatureProduit[] | undefined,
   natureFabriquee: boolean,
