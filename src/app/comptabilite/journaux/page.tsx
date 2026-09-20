@@ -9,6 +9,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   JOURNAL_ECRITURE_LABELS,
+  JOURNAUX_ECRITURE,
   ecritureEstEquilibree,
   ecritureEstTransferee,
   filtrerEcrituresComptables,
@@ -49,7 +50,7 @@ function JournauxContent() {
     <div>
       <PageHeader
         title="Journaux"
-        description="Écritures d'achat et de vente générées à la validation d'une facture. Consultez le détail avant de les transférer."
+        description="Écritures d'achat, de vente et de trésorerie. Les encaissements et décaissements alimentent les journaux banque, caisse et mobile monnaie."
         showPosSelector={false}
       />
       <ComptabiliteSubnav />
@@ -65,8 +66,11 @@ function JournauxContent() {
             }
           >
             <option value="tous">Tous</option>
-            <option value="vente">Vente</option>
-            <option value="achat">Achat</option>
+            {JOURNAUX_ECRITURE.map((j) => (
+              <option key={j} value={j}>
+                {JOURNAL_ECRITURE_LABELS[j]}
+              </option>
+            ))}
           </select>
         </label>
         <label className="text-xs font-semibold text-muted">
@@ -107,7 +111,7 @@ function JournauxContent() {
         <EmptyState
           icon={<ScrollText className="h-5 w-5" />}
           title="Aucune écriture"
-          description="Les écritures apparaissent ici à la validation d'une facture d'achat ou de vente, une fois équilibrées."
+          description="Les écritures apparaissent à la validation d'une facture d'achat ou de vente, et à chaque encaissement / décaissement (journaux de trésorerie)."
         />
       ) : (
         <div className="space-y-4">

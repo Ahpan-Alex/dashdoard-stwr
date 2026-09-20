@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { ComptabiliteSubnav } from "@/components/comptabilite-subnav";
 import { useStore } from "@/lib/store";
@@ -62,13 +61,6 @@ export default function ParametresBilanInitialPage() {
         title="Bilan initial"
         description={`Soldes d'ouverture — ${parametres.nomEntreprise}`}
         showPosSelector={false}
-        actions={
-          <div className="flex gap-2">
-            <Link href="/compte-courant" className="btn btn-secondary">
-              Compte courant
-            </Link>
-          </div>
-        }
       />
       <ComptabiliteSubnav />
 
@@ -104,7 +96,6 @@ export default function ParametresBilanInitialPage() {
           {field("Emprunts (Ar)", "emprunts")}
           {field("Dettes fournisseurs (Ar)", "dettesFournisseurs")}
           {field("Dettes sociales (Ar)", "dettesSociales")}
-          {field("Compte courant d'associé (Ar, + crédit / − débit)", "compteCourantAssocie")}
           <div className="sm:col-span-2 lg:col-span-3">
             <button type="submit" className="btn btn-primary">
               Enregistrer le bilan initial

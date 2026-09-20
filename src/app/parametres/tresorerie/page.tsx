@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { ParametresSectionFrame } from "@/components/parametres-subnav";
 import { RequirePermission } from "@/components/require-permission";
 import { formatCurrency } from "@/lib/format";
+import { comptesParClasse } from "@/lib/comptabilite";
 import {
   TYPE_COMPTE_TRESORERIE_LABELS,
   comptesTresorerieTries,
@@ -20,6 +21,7 @@ const COMPTE_VIDE = {
   libelle: "",
   type: "caisse" as TypeCompteTresorerie,
   siteId: "",
+  compteComptableId: "",
 };
 
 export default function ParametresTresoreriePage() {
@@ -91,6 +93,7 @@ function ComptesSection() {
     missionsAchat,
     lotsPaiementFournisseur,
     modesPaiement,
+    comptesComptables,
     addCompteTresorerie,
     updateCompteTresorerie,
     deleteCompteTresorerie,
@@ -129,6 +132,7 @@ function ComptesSection() {
       libelle: form.libelle,
       type: form.type,
       siteId: form.siteId || undefined,
+      compteComptableId: form.compteComptableId || undefined,
     };
     const res = editingId
       ? updateCompteTresorerie(editingId, payload)
@@ -140,10 +144,21 @@ function ComptesSection() {
     fermer();
   }
 
+  const comptesClasse5 = useMemo(
+    () => comptesParClasse(comptesComptables ?? [], "5"),
+    [comptesComptables],
+  );
+
   return (
     <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold">Comptes de trésorerie</h2>
+        <div>
+          <h2 className="font-display text-lg font-semibold">Comptes de trésorerie</h2>
+          <p className="mt-1 text-sm text-muted">
+            Associez un compte de classe 5 pour générer les écritures des
+            journaux Banque, Caisse et Mobile monnaie.
+          </p>
+        </div>
         <button
           type="button"
           className="btn btn-primary"
@@ -158,7 +173,7 @@ function ComptesSection() {
         </button>
       </div>
       {open && (
-        <form onSubmit={onSubmit} className="mb-4 grid gap-3 sm:grid-cols-3">
+        <form onSubmit={onSubmit} className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs font-semibold text-muted">
             Libellé
             <input
@@ -187,6 +202,23 @@ function ComptesSection() {
             </select>
           </label>
           <label className="text-xs font-semibold text-muted">
+            Compte comptable (classe 5)
+            <select
+              className="select mt-1"
+              value={form.compteComptableId}
+              onChange={(e) =>
+                setForm({ ...form, compteComptableId: e.target.value })
+              }
+            >
+              <option value="">Automatique (512 / 53 / 531)</option>
+              {comptesClasse5.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.numero} — {c.libelle}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-muted">
             Site (vide = global)
             <select
               className="select mt-1"
@@ -201,8 +233,8 @@ function ComptesSection() {
               ))}
             </select>
           </label>
-          {error && <p className="sm:col-span-3 text-sm text-danger">{error}</p>}
-          <div className="sm:col-span-3 flex gap-2">
+          {error && <p className="lg:col-span-4 text-sm text-danger">{error}</p>}
+          <div className="lg:col-span-4 flex gap-2">
             <button type="submit" className="btn btn-primary">
               Enregistrer
             </button>
@@ -217,6 +249,7 @@ function ComptesSection() {
           <tr>
             <th>Compte</th>
             <th>Type</th>
+            <th>Compte comptable</th>
             <th>Site</th>
             <th>Solde</th>
             <th />
@@ -225,7 +258,7 @@ function ComptesSection() {
         <tbody>
           {liste.length === 0 ? (
             <tr>
-              <td colSpan={5} className="text-sm text-muted">
+              <td colSpan={6} className="text-sm text-muted">
                 Aucun compte. Un point de vente en exigera au moins un.
               </td>
             </tr>
@@ -234,6 +267,11 @@ function ComptesSection() {
               <tr key={c.id} className={c.actif ? "" : "opacity-50"}>
                 <td>{c.libelle}</td>
                 <td>{TYPE_COMPTE_TRESORERIE_LABELS[c.type]}</td>
+                <td className="text-xs text-muted">
+                  {comptesClasse5.find((x) => x.id === c.compteComptableId)
+                    ? `${comptesClasse5.find((x) => x.id === c.compteComptableId)!.numero}`
+                    : "Auto"}
+                </td>
                 <td>
                   {c.siteId
                     ? pointsDeVente.find((s) => s.id === c.siteId)?.nom ?? c.siteId
@@ -253,6 +291,7 @@ function ComptesSection() {
                           libelle: c.libelle,
                           type: c.type,
                           siteId: c.siteId ?? "",
+                          compteComptableId: c.compteComptableId ?? "",
                         });
                         setOpen(true);
                       }}

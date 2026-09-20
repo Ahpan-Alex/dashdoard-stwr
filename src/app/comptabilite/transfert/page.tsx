@@ -9,6 +9,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   JOURNAL_ECRITURE_LABELS,
+  JOURNAUX_ECRITURE,
   filtrerEcrituresComptables,
 } from "@/lib/comptabilite";
 import { downloadCsv } from "@/lib/csv";
@@ -103,8 +104,11 @@ function TransfertContent() {
                 }
               >
                 <option value="tous">Tous</option>
-                <option value="vente">Vente</option>
-                <option value="achat">Achat</option>
+                {JOURNAUX_ECRITURE.map((j) => (
+                  <option key={j} value={j}>
+                    {JOURNAL_ECRITURE_LABELS[j]}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-xs font-semibold text-muted">

@@ -81,6 +81,8 @@ export type CompteTresorerie = {
   type: TypeCompteTresorerie;
   /** Absent = compte global (tous sites). */
   siteId?: string;
+  /** Compte de classe 5 (512 / 53 / 531…) pour le journal de trésorerie. */
+  compteComptableId?: string;
   actif: boolean;
   ordre: number;
 };
@@ -124,7 +126,7 @@ export type VentilationLotPaiement = {
   montant: number;
 };
 
-/** Pièce unique de paiement groupé fournisseur — facilité de saisie, pas d'écriture comptable propre. */
+/** Pièce unique de paiement groupé fournisseur — écriture de trésorerie au journal banque / caisse. */
 export type LotPaiementFournisseur = {
   id: string;
   numero: string;
@@ -1612,7 +1614,12 @@ export type CompteComptable = {
   roleCompte?: RoleCompteComptable;
 };
 
-export type JournalEcriture = "vente" | "achat";
+export type JournalEcriture =
+  | "vente"
+  | "achat"
+  | "banque"
+  | "caisse"
+  | "mobile_monnaie";
 
 export type SourceEcriture =
   | "facture"
@@ -1620,7 +1627,8 @@ export type SourceEcriture =
   | "avoir_achat"
   | "mission_achat"
   | "mission_achat_depense"
-  | "sortie_atelier";
+  | "sortie_atelier"
+  | "tresorerie";
 
 export type LigneEcritureComptable = {
   id: string;
@@ -1631,7 +1639,7 @@ export type LigneEcritureComptable = {
   credit: number;
 };
 
-/** Écriture générée à la validation d'une facture d'achat ou de vente. */
+/** Écriture générée à la validation (achat / vente) ou à l'encaissement (trésorerie). */
 export type EcritureComptable = {
   id: string;
   date: string;

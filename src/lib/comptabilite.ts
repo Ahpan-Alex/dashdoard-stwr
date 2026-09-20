@@ -12,11 +12,16 @@ import type {
   AchatLigne,
   AvoirAchat,
   Client,
+  Acompte,
   CompteComptable,
+  CompteTresorerie,
   EcritureComptable,
   Facture,
   Fournisseur,
   JournalEcriture,
+  LotPaiementFournisseur,
+  ModePaiementParam,
+  MouvementTresorerie,
   LigneEcritureComptable,
   MissionAchat,
   NatureDepenseMission,
@@ -27,7 +32,9 @@ import type {
   SortieAtelier,
   Tiers,
   TypeAchat,
+  TypeCompteTresorerie,
 } from "./types";
+import { tousMouvementsTresorerie } from "./tresorerie";
 import {
   produitEstVendable,
   typeAchatEstAttendu,
@@ -74,7 +81,7 @@ export function classeNumeroCompte(numero: string) {
 
 export function comptesParClasse(
   comptes: CompteComptable[],
-  classe: "2" | "6" | "7",
+  classe: "2" | "5" | "6" | "7",
 ) {
   return comptes
     .filter((c) => classeNumeroCompte(c.numero) === classe)
@@ -1223,7 +1230,173 @@ function ecritureMissionDepense(opts: {
 export const JOURNAL_ECRITURE_LABELS: Record<JournalEcriture, string> = {
   vente: "Vente",
   achat: "Achat",
+  banque: "Banque",
+  caisse: "Caisse",
+  mobile_monnaie: "Mobile monnaie",
 };
+
+export const JOURNAUX_ECRITURE: JournalEcriture[] = [
+  "vente",
+  "achat",
+  "banque",
+  "caisse",
+  "mobile_monnaie",
+];
+
+export function journalTresorerieDuType(
+  type: TypeCompteTresorerie,
+): JournalEcriture {
+  return type;
+}
+
+export function prefixeCompteTresorerie(type: TypeCompteTresorerie) {
+  if (type === "caisse") return "53";
+  if (type === "mobile_monnaie") return "531";
+  return "512";
+}
+
+export function compteComptableDuCompteTresorerie(
+  compte: CompteTresorerie | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!compte) return undefined;
+  if (compte.compteComptableId) {
+    const lie = comptes.find((c) => c.id === compte.compteComptableId);
+    if (lie && classeNumeroCompte(lie.numero) === "5") return lie;
+  }
+  const prefix = prefixeCompteTresorerie(compte.type);
+  return (
+    compteParPrefixe(comptes, prefix) ??
+    (compte.type === "mobile_monnaie" ? compteParPrefixe(comptes, "512") : undefined)
+  );
+}
+
+function compteClientPourId(
+  id: string | undefined,
+  clients: Client[],
+  tiers: Tiers[] | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!id) return compteParPrefixe(comptes, PREFIXE_COMPTE_CLIENT);
+  const client = clients.find((c) => c.id === id);
+  const fiche = tiers?.find((t) => t.id === id);
+  return (
+    compteClientDuTiers(fiche, comptes) ??
+    compteClientDuTiers(client, comptes) ??
+    compteParPrefixe(comptes, PREFIXE_COMPTE_CLIENT)
+  );
+}
+
+function compteFournisseurPourId(
+  id: string | undefined,
+  fournisseurs: Fournisseur[],
+  tiers: Tiers[] | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!id) return compteParPrefixe(comptes, PREFIXE_COMPTE_FOURNISSEUR);
+  const fournisseur = fournisseurs.find((f) => f.id === id);
+  const fiche = tiers?.find((t) => t.id === id);
+  return (
+    compteFournisseurDuTiers(fiche, comptes) ??
+    compteFournisseurDuTiers(fournisseur, comptes) ??
+    compteParPrefixe(comptes, PREFIXE_COMPTE_FOURNISSEUR)
+  );
+}
+
+export function ecritureDepuisMouvementTresorerie(opts: {
+  mouvement: MouvementTresorerie;
+  comptesTresorerie: CompteTresorerie[];
+  comptes: CompteComptable[];
+  factures: Facture[];
+  achats: Achat[];
+  acomptes: Acompte[];
+  lots: LotPaiementFournisseur[];
+  clients: Client[];
+  fournisseurs: Fournisseur[];
+  tiers?: Tiers[];
+}): EcritureComptable | null {
+  const m = opts.mouvement;
+  const montant = arrondiAr(Math.abs(m.montant));
+  if (montant <= 0) return null;
+  const caisse = opts.comptesTresorerie.find((c) => c.id === m.compteTresorerieId);
+  const compteTreso = compteComptableDuCompteTresorerie(caisse, opts.comptes);
+  if (!compteTreso?.numero) return null;
+
+  let contre: CompteComptable | undefined;
+  if (m.source === "facture") {
+    const f = opts.factures.find((x) => x.id === m.sourceId);
+    if (!f || !factureEstFiscale(f) || f.statut === "annulee") return null;
+    contre = compteClientPourId(f.clientId, opts.clients, opts.tiers, opts.comptes);
+  } else if (m.source === "acompte") {
+    const a = opts.acomptes.find((x) => x.id === m.sourceId);
+    if (!a || a.statut === "annule") return null;
+    contre = compteClientPourId(a.clientId, opts.clients, opts.tiers, opts.comptes);
+  } else if (m.source === "achat") {
+    const a = opts.achats.find((x) => x.id === m.sourceId);
+    if (!a || a.statut !== "valide") return null;
+    contre = compteFournisseurPourId(
+      a.fournisseurId,
+      opts.fournisseurs,
+      opts.tiers,
+      opts.comptes,
+    );
+  } else if (m.source === "avoir_achat") {
+    const parent = opts.achats.find((x) =>
+      (x.avoirs ?? []).some((av) => av.id === m.sourceId),
+    );
+    const avoir = parent?.avoirs.find((av) => av.id === m.sourceId);
+    if (!parent || parent.statut !== "valide" || avoir?.statut !== "valide") {
+      return null;
+    }
+    contre = compteFournisseurPourId(
+      parent.fournisseurId,
+      opts.fournisseurs,
+      opts.tiers,
+      opts.comptes,
+    );
+  } else if (m.source === "lot_paiement") {
+    const lot = opts.lots.find((x) => x.id === m.sourceId);
+    if (!lot || lot.statut !== "actif") return null;
+    contre = compteFournisseurPourId(
+      lot.fournisseurId,
+      opts.fournisseurs,
+      opts.tiers,
+      opts.comptes,
+    );
+  } else if (m.source === "mission") {
+    contre = compteAttente471(opts.comptes);
+  }
+  if (!contre?.numero) return null;
+
+  const entree = m.sens === "entree";
+  const prefix = `ecr-trs-${m.id}`;
+  const lignes = [
+    ligneEcriture(
+      `${prefix}-tr`,
+      compteTreso,
+      compteTreso.libelle,
+      entree ? montant : 0,
+      entree ? 0 : montant,
+    ),
+    ligneEcriture(
+      `${prefix}-ctp`,
+      contre,
+      contre.libelle,
+      entree ? 0 : montant,
+      entree ? montant : 0,
+    ),
+  ];
+  return {
+    id: prefix,
+    date: m.date,
+    libelle: m.libelle,
+    piece: m.reference || m.lignePaiementId,
+    journal: journalTresorerieDuType(caisse?.type ?? "banque"),
+    sourceType: "tresorerie",
+    sourceId: m.id,
+    lignes,
+  };
+}
 
 export function totauxEcriture(e: Pick<EcritureComptable, "lignes">) {
   return e.lignes.reduce(
@@ -1291,6 +1464,10 @@ export function regenererEcrituresComptables(opts: {
   naturesDepenseMission?: NatureDepenseMission[];
   sortiesAtelier?: SortieAtelier[];
   existantes?: EcritureComptable[];
+  comptesTresorerie?: CompteTresorerie[];
+  acomptes?: Acompte[];
+  lotsPaiementFournisseur?: LotPaiementFournisseur[];
+  modesPaiement?: ModePaiementParam[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
     return (opts.existantes ?? []).filter(ecritureEstTransferee);
@@ -1347,6 +1524,28 @@ export function regenererEcrituresComptables(opts: {
       sortie,
       produits: opts.produits,
       comptes: opts.comptesComptables,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
+  }
+  for (const mvt of tousMouvementsTresorerie({
+    achats: opts.achats,
+    factures: opts.factures,
+    acomptes: opts.acomptes ?? [],
+    missions: opts.missionsAchat,
+    lotsPaiement: opts.lotsPaiementFournisseur,
+    modes: opts.modesPaiement ?? [],
+  })) {
+    const e = ecritureDepuisMouvementTresorerie({
+      mouvement: mvt,
+      comptesTresorerie: opts.comptesTresorerie ?? [],
+      comptes: opts.comptesComptables,
+      factures: opts.factures,
+      achats: opts.achats,
+      acomptes: opts.acomptes ?? [],
+      lots: opts.lotsPaiementFournisseur ?? [],
+      clients: opts.clients,
+      fournisseurs: opts.fournisseurs,
+      tiers: opts.tiers,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
   }

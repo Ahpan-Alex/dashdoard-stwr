@@ -8,7 +8,6 @@ import {
   Boxes,
   MapPin,
   BookOpen,
-  Landmark,
   Users,
   FileText,
   ClipboardList,
@@ -345,12 +344,6 @@ const sections: { title: string; links: NavLink[] }[] = [
   {
     title: "Patrimoine",
     links: [
-      { href: "/elements-bilan", label: "Éléments du bilan", icon: Landmark },
-      {
-        href: "/compte-courant",
-        label: "Compte courant d'associé",
-        icon: ArrowLeftRight,
-      },
       { href: "/points-de-vente", label: "Sites", icon: MapPin },
       {
         href: "/parametres",

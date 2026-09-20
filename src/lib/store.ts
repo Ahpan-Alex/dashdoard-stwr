@@ -1199,10 +1199,13 @@ type Store = {
     libelle: string;
     type: CompteTresorerie["type"];
     siteId?: string;
+    compteComptableId?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   updateCompteTresorerie: (
     id: string,
-    data: Partial<Pick<CompteTresorerie, "libelle" | "type" | "siteId" | "actif" | "ordre">>,
+    data: Partial<
+      Pick<CompteTresorerie, "libelle" | "type" | "siteId" | "actif" | "ordre" | "compteComptableId">
+    >,
   ) => { ok: true } | { ok: false; reason: string };
   deleteCompteTresorerie: (id: string) => { ok: true } | { ok: false; reason: string };
 
@@ -1388,6 +1391,10 @@ function journalDepuis(state: {
   naturesDepenseMission?: NatureDepenseMission[];
   sortiesAtelier?: SortieAtelier[];
   ecrituresComptables?: EcritureComptable[];
+  comptesTresorerie?: CompteTresorerie[];
+  acomptes?: Acompte[];
+  lotsPaiementFournisseur?: LotPaiementFournisseur[];
+  modesPaiement?: ModePaiementParam[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
     factures: state.factures,
@@ -1402,6 +1409,10 @@ function journalDepuis(state: {
     naturesDepenseMission: state.naturesDepenseMission,
     sortiesAtelier: state.sortiesAtelier,
     existantes: state.ecrituresComptables,
+    comptesTresorerie: state.comptesTresorerie,
+    acomptes: state.acomptes,
+    lotsPaiementFournisseur: state.lotsPaiementFournisseur,
+    modesPaiement: state.modesPaiement,
   });
 }
 
@@ -1419,6 +1430,10 @@ function avecJournal<T extends Record<string, unknown>>(
     naturesDepenseMission?: NatureDepenseMission[];
     sortiesAtelier?: SortieAtelier[];
     ecrituresComptables?: EcritureComptable[];
+    comptesTresorerie?: CompteTresorerie[];
+    acomptes?: Acompte[];
+    lotsPaiementFournisseur?: LotPaiementFournisseur[];
+    modesPaiement?: ModePaiementParam[];
   },
   patch: T,
 ): T & {
@@ -2859,21 +2874,23 @@ export const useStore = create<Store>()((set, get) => ({
             reason: `Le paiement dépasse le solde restant (${Math.round(solde)} Ar).`,
           };
         }
-        set((s) => ({
-          achats: s.achats.map((a) =>
-            a.id === achatId
-              ? { ...a, paiements: [...creees, ...a.paiements] }
-              : a,
-          ),
-          journalActivites: [
-            entreeActivite("creation", "achat", {
-              entiteId: achatId,
-              libelle: prev.numero,
-              detail: creees.length > 1 ? `${creees.length} paiements` : "Paiement fournisseur",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) =>
+              a.id === achatId
+                ? { ...a, paiements: [...creees, ...a.paiements] }
+                : a,
+            ),
+            journalActivites: [
+              entreeActivite("creation", "achat", {
+                entiteId: achatId,
+                libelle: prev.numero,
+                detail: creees.length > 1 ? `${creees.length} paiements` : "Paiement fournisseur",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       supprimerPaiementAchat: (achatId, paiementId) => {
@@ -2889,21 +2906,23 @@ export const useStore = create<Store>()((set, get) => ({
             reason: `Ce règlement fait partie du lot ${lot?.numero ?? ligne.lotNumero ?? ""}. Annulez le paiement groupé en une seule action.`,
           };
         }
-        set((s) => ({
-          achats: s.achats.map((a) =>
-            a.id === achatId
-              ? { ...a, paiements: a.paiements.filter((p) => p.id !== paiementId) }
-              : a,
-          ),
-          journalActivites: [
-            entreeActivite("suppression", "achat", {
-              entiteId: achatId,
-              libelle: prev.numero,
-              detail: "Paiement fournisseur",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) =>
+              a.id === achatId
+                ? { ...a, paiements: a.paiements.filter((p) => p.id !== paiementId) }
+                : a,
+            ),
+            journalActivites: [
+              entreeActivite("suppression", "achat", {
+                entiteId: achatId,
+                libelle: prev.numero,
+                detail: "Paiement fournisseur",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       creerLotPaiementFournisseur: (data) => {
@@ -2994,22 +3013,24 @@ export const useStore = create<Store>()((set, get) => ({
           liste.push(ligne);
           paiementsParAchat.set(part.achatId, liste);
         }
-        set((s) => ({
-          lotsPaiementFournisseur: [lot, ...(s.lotsPaiementFournisseur ?? [])],
-          achats: s.achats.map((a) => {
-            const extra = paiementsParAchat.get(a.id);
-            if (!extra?.length) return a;
-            return { ...a, paiements: [...extra, ...a.paiements] };
-          }),
-          journalActivites: [
-            entreeActivite("creation", "lot_paiement", {
-              entiteId: id,
-              libelle: numero,
-              detail: `${lot.ventilations.length} facture(s) · ${fournisseur.nom}`,
+        set((s) =>
+          avecJournal(s, {
+            lotsPaiementFournisseur: [lot, ...(s.lotsPaiementFournisseur ?? [])],
+            achats: s.achats.map((a) => {
+              const extra = paiementsParAchat.get(a.id);
+              if (!extra?.length) return a;
+              return { ...a, paiements: [...extra, ...a.paiements] };
             }),
-            ...s.journalActivites,
-          ],
-        }));
+            journalActivites: [
+              entreeActivite("creation", "lot_paiement", {
+                entiteId: id,
+                libelle: numero,
+                detail: `${lot.ventilations.length} facture(s) · ${fournisseur.nom}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         tracerAudit(get(), {
           categorie: "statut_critique",
           action: "creation_lot_paiement",
@@ -3030,29 +3051,31 @@ export const useStore = create<Store>()((set, get) => ({
         if (prev.statut === "annule") {
           return { ok: false, reason: "Ce lot est déjà annulé." };
         }
-        set((s) => ({
-          lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
-            l.id === id
-              ? {
-                  ...l,
-                  statut: "annule" as const,
-                  dateAnnulation: new Date().toISOString(),
-                }
-              : l,
-          ),
-          achats: s.achats.map((a) => ({
-            ...a,
-            paiements: a.paiements.filter((p) => p.lotId !== id),
-          })),
-          journalActivites: [
-            entreeActivite("annulation", "lot_paiement", {
-              entiteId: id,
-              libelle: prev.numero,
-              detail: "Annulation groupée — soldes facture restaurés",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
+              l.id === id
+                ? {
+                    ...l,
+                    statut: "annule" as const,
+                    dateAnnulation: new Date().toISOString(),
+                  }
+                : l,
+            ),
+            achats: s.achats.map((a) => ({
+              ...a,
+              paiements: a.paiements.filter((p) => p.lotId !== id),
+            })),
+            journalActivites: [
+              entreeActivite("annulation", "lot_paiement", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: "Annulation groupée — soldes facture restaurés",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         tracerAudit(get(), {
           categorie: "statut_critique",
           action: "annulation_lot_paiement",
@@ -3076,24 +3099,26 @@ export const useStore = create<Store>()((set, get) => ({
         }
         const ligne = prev.lignes.find((p) => p.id === ligneId);
         if (!ligne) return { ok: false, reason: "Paiement introuvable." };
-        set((s) => ({
-          lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
-            l.id === lotId
-              ? {
-                  ...l,
-                  lignes: l.lignes.map((p) =>
-                    p.id === ligneId ? { ...p, statutCheque: statut } : p,
-                  ),
-                }
-              : l,
-          ),
-          achats: s.achats.map((a) => ({
-            ...a,
-            paiements: a.paiements.map((p) =>
-              p.lotLigneId === ligneId ? { ...p, statutCheque: statut } : p,
+        set((s) =>
+          avecJournal(s, {
+            lotsPaiementFournisseur: (s.lotsPaiementFournisseur ?? []).map((l) =>
+              l.id === lotId
+                ? {
+                    ...l,
+                    lignes: l.lignes.map((p) =>
+                      p.id === ligneId ? { ...p, statutCheque: statut } : p,
+                    ),
+                  }
+                : l,
             ),
-          })),
-        }));
+            achats: s.achats.map((a) => ({
+              ...a,
+              paiements: a.paiements.map((p) =>
+                p.lotLigneId === ligneId ? { ...p, statutCheque: statut } : p,
+              ),
+            })),
+          }),
+        );
         if (statut === "rejete" && ligne.statutCheque !== "rejete") {
           tracerAudit(get(), {
             categorie: "statut_critique",
@@ -3118,26 +3143,28 @@ export const useStore = create<Store>()((set, get) => ({
         if (ligne.lotId && ligne.lotLigneId) {
           return get().changerStatutChequeLot(ligne.lotId, ligne.lotLigneId, statut);
         }
-        set((s) => ({
-          achats: s.achats.map((a) =>
-            a.id === achatId
-              ? {
-                  ...a,
-                  paiements: a.paiements.map((p) =>
-                    p.id === paiementId ? { ...p, statutCheque: statut } : p,
-                  ),
-                }
-              : a,
-          ),
-          journalActivites: [
-            entreeActivite("modification", "achat", {
-              entiteId: achatId,
-              libelle: prev.numero,
-              detail: `Chèque ${statut}`,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) =>
+              a.id === achatId
+                ? {
+                    ...a,
+                    paiements: a.paiements.map((p) =>
+                      p.id === paiementId ? { ...p, statutCheque: statut } : p,
+                    ),
+                  }
+                : a,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "achat", {
+                entiteId: achatId,
+                libelle: prev.numero,
+                detail: `Chèque ${statut}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         if (statut === "rejete" && ligne.statutCheque !== "rejete") {
           tracerAudit(get(), {
             categorie: "statut_critique",
@@ -3172,28 +3199,30 @@ export const useStore = create<Store>()((set, get) => ({
         );
         if (motif) return { ok: false, reason: motif };
         const ligne = completerLignePaiement(data, uid("pay"), modes);
-        set((s) => ({
-          achats: s.achats.map((a) =>
-            a.id === achatId
-              ? {
-                  ...a,
-                  avoirs: a.avoirs.map((av) =>
-                    av.id === avoirId
-                      ? { ...av, paiements: [ligne, ...(av.paiements ?? [])] }
-                      : av,
-                  ),
-                }
-              : a,
-          ),
-          journalActivites: [
-            entreeActivite("creation", "achat", {
-              entiteId: achatId,
-              libelle: prev.numero,
-              detail: `Remboursement ${avoir.numero}`,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            achats: s.achats.map((a) =>
+              a.id === achatId
+                ? {
+                    ...a,
+                    avoirs: a.avoirs.map((av) =>
+                      av.id === avoirId
+                        ? { ...av, paiements: [ligne, ...(av.paiements ?? [])] }
+                        : av,
+                    ),
+                  }
+                : a,
+            ),
+            journalActivites: [
+              entreeActivite("creation", "achat", {
+                entiteId: achatId,
+                libelle: prev.numero,
+                detail: `Remboursement ${avoir.numero}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       ajouterAvoirAchat: (achatId, data) => {
@@ -5691,17 +5720,19 @@ export const useStore = create<Store>()((set, get) => ({
             ),
           ],
         };
-        set((s) => ({
-          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
-          journalActivites: [
-            entreeActivite("modification", "mission_achat", {
-              entiteId: id,
-              libelle: prev.numero,
-              detail: data.statutReglement === "regle" ? "Règlement de l'avance" : "Règlement annulé",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            journalActivites: [
+              entreeActivite("modification", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: data.statutReglement === "regle" ? "Règlement de l'avance" : "Règlement annulé",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
 
@@ -5861,17 +5892,19 @@ export const useStore = create<Store>()((set, get) => ({
             ),
           ],
         };
-        set((s) => ({
-          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
-          journalActivites: [
-            entreeActivite("modification", "mission_achat", {
-              entiteId: id,
-              libelle: prev.numero,
-              detail: `Remise de fonds ${Math.round(data.montant)} Ar`,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            journalActivites: [
+              entreeActivite("modification", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: `Remise de fonds ${Math.round(data.montant)} Ar`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
 
@@ -8787,22 +8820,24 @@ export const useStore = create<Store>()((set, get) => ({
 
       addAcompte: (acompte) => {
         const id = uid("aco");
-        set((state) => ({
-          acomptes: [{ ...acompte, id }, ...state.acomptes],
-          journalActivites: [
-            entreeActivite("creation", "acompte", {
-              entiteId: id,
-              libelle: acompte.numero,
-            }),
-            ...state.journalActivites,
-          ],
-        }));
+        set((state) =>
+          avecJournal(state, {
+            acomptes: [{ ...acompte, id }, ...state.acomptes],
+            journalActivites: [
+              entreeActivite("creation", "acompte", {
+                entiteId: id,
+                libelle: acompte.numero,
+              }),
+              ...state.journalActivites,
+            ],
+          }),
+        );
         return id;
       },
       updateAcompte: (id, data) =>
         set((state) => {
           const prev = state.acomptes.find((a) => a.id === id);
-          return {
+          return avecJournal(state, {
             acomptes: state.acomptes.map((a) =>
               a.id === id ? { ...a, ...data } : a,
             ),
@@ -8814,12 +8849,12 @@ export const useStore = create<Store>()((set, get) => ({
               ),
               ...state.journalActivites,
             ],
-          };
+          });
         }),
       deleteAcompte: (id) =>
         set((state) => {
           const prev = state.acomptes.find((a) => a.id === id);
-          return {
+          return avecJournal(state, {
             acomptes: state.acomptes.filter((a) => a.id !== id),
             journalActivites: [
               entreeActivite("suppression", "acompte", {
@@ -8828,7 +8863,7 @@ export const useStore = create<Store>()((set, get) => ({
               }),
               ...state.journalActivites,
             ],
-          };
+          });
         }),
       encaisserAcompte: (data) => {
         const montantTTC = Math.round(Number(data.montantTTC) || 0);
@@ -8955,31 +8990,33 @@ export const useStore = create<Store>()((set, get) => ({
         const netTTC = Math.max(0, t.totalTTC - avoirs);
         const statut =
           paye >= netTTC - 1 ? "payee" : paye > 0 ? "partiellement_payee" : prev.statut;
-        set((s) => ({
-          factures: s.factures.map((f) =>
-            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
-          ),
-          journalAudit: [
-            {
-              id: uid("aud"),
-              date: new Date().toISOString(),
-              action: "facture_paiement",
-              entite: "facture",
-              entiteId: factureId,
-              numero: prev.numero,
-              detail: `+${cumul} Ar`,
-            },
-            ...s.journalAudit,
-          ],
-          journalActivites: [
-            entreeActivite("creation", "facture", {
-              entiteId: factureId,
-              libelle: prev.numero,
-              detail: "Encaissement",
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            factures: s.factures.map((f) =>
+              f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+            ),
+            journalAudit: [
+              {
+                id: uid("aud"),
+                date: new Date().toISOString(),
+                action: "facture_paiement",
+                entite: "facture",
+                entiteId: factureId,
+                numero: prev.numero,
+                detail: `+${cumul} Ar`,
+              },
+              ...s.journalAudit,
+            ],
+            journalActivites: [
+              entreeActivite("creation", "facture", {
+                entiteId: factureId,
+                libelle: prev.numero,
+                detail: "Encaissement",
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true };
       },
       supprimerPaiementFacture: (factureId, paiementId) => {
@@ -9001,11 +9038,13 @@ export const useStore = create<Store>()((set, get) => ({
                 : prev.statut === "payee" || prev.statut === "partiellement_payee"
                   ? "validee"
                   : prev.statut;
-        set((s) => ({
-          factures: s.factures.map((f) =>
-            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
-          ),
-        }));
+        set((s) =>
+          avecJournal(s, {
+            factures: s.factures.map((f) =>
+              f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+            ),
+          }),
+        );
         return { ok: true };
       },
       changerStatutChequeFacture: (factureId, paiementId, statutCheque) => {
@@ -9022,11 +9061,13 @@ export const useStore = create<Store>()((set, get) => ({
         const netTTC = Math.max(0, t.totalTTC - avoirs);
         const statut =
           paye >= netTTC - 1 ? "payee" : paye > 0 ? "partiellement_payee" : prev.statut;
-        set((s) => ({
-          factures: s.factures.map((f) =>
-            f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
-          ),
-        }));
+        set((s) =>
+          avecJournal(s, {
+            factures: s.factures.map((f) =>
+              f.id === factureId ? { ...f, paiements, montantPaye: paye, statut } : f,
+            ),
+          }),
+        );
         if (statutCheque === "rejete" && prevLigne?.statutCheque !== "rejete") {
           tracerAudit(get(), {
             categorie: "statut_critique",
@@ -9115,26 +9156,29 @@ export const useStore = create<Store>()((set, get) => ({
         const id = uid("ctr");
         const ordre =
           (state.comptesTresorerie ?? []).reduce((m, c) => Math.max(m, c.ordre), 0) + 1;
-        set((s) => ({
-          comptesTresorerie: [
-            ...(s.comptesTresorerie ?? []),
-            {
-              id,
-              libelle: data.libelle.trim(),
-              type: data.type,
-              siteId: data.siteId || undefined,
-              actif: true,
-              ordre,
-            },
-          ],
-          journalActivites: [
-            entreeActivite("creation", "compte_tresorerie", {
-              entiteId: id,
-              libelle: data.libelle.trim(),
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            comptesTresorerie: [
+              ...(s.comptesTresorerie ?? []),
+              {
+                id,
+                libelle: data.libelle.trim(),
+                type: data.type,
+                siteId: data.siteId || undefined,
+                compteComptableId: data.compteComptableId || undefined,
+                actif: true,
+                ordre,
+              },
+            ],
+            journalActivites: [
+              entreeActivite("creation", "compte_tresorerie", {
+                entiteId: id,
+                libelle: data.libelle.trim(),
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true as const, id };
       },
       updateCompteTresorerie: (id, data) => {
@@ -9148,28 +9192,34 @@ export const useStore = create<Store>()((set, get) => ({
           id,
         );
         if (motif) return { ok: false as const, reason: motif };
-        set((s) => ({
-          comptesTresorerie: (s.comptesTresorerie ?? []).map((c) =>
-            c.id === id
-              ? {
-                  ...c,
-                  libelle,
-                  type: data.type ?? c.type,
-                  siteId:
-                    data.siteId !== undefined ? data.siteId || undefined : c.siteId,
-                  actif: data.actif ?? c.actif,
-                  ordre: data.ordre ?? c.ordre,
-                }
-              : c,
-          ),
-          journalActivites: [
-            entreeActivite("modification", "compte_tresorerie", {
-              entiteId: id,
-              libelle,
-            }),
-            ...s.journalActivites,
-          ],
-        }));
+        set((s) =>
+          avecJournal(s, {
+            comptesTresorerie: (s.comptesTresorerie ?? []).map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    libelle,
+                    type: data.type ?? c.type,
+                    siteId:
+                      data.siteId !== undefined ? data.siteId || undefined : c.siteId,
+                    compteComptableId:
+                      data.compteComptableId !== undefined
+                        ? data.compteComptableId || undefined
+                        : c.compteComptableId,
+                    actif: data.actif ?? c.actif,
+                    ordre: data.ordre ?? c.ordre,
+                  }
+                : c,
+            ),
+            journalActivites: [
+              entreeActivite("modification", "compte_tresorerie", {
+                entiteId: id,
+                libelle,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
         return { ok: true as const };
       },
       deleteCompteTresorerie: (id) => {

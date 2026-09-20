@@ -8,7 +8,6 @@ const MENUS = [
   { href: "/comptabilite/journaux", label: "Journaux" },
   { href: "/comptabilite/reclassement", label: "Reclassement 471" },
   { href: "/comptabilite/transfert", label: "Transfert" },
-  { href: "/parametres/bilan-initial", label: "Bilan initial" },
 ] as const;
 
 export function ComptabiliteSubnav() {
