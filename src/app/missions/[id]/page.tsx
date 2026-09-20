@@ -12,6 +12,7 @@ import { RequirePermission } from "@/components/require-permission";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { CompteTresorerieSelect } from "@/components/compte-tresorerie-select";
 import { useAuthStore } from "@/lib/auth-store";
+import { estAdministrateur } from "@/lib/auth/rbac";
 import {
   compteCompatibleOuVide,
   libelleCompteTresorerie,
@@ -95,6 +96,37 @@ const VALIDATION_LABELS: Record<MissionValidationAction, string> = {
   exception_justificatifs: "Exception justificatifs",
 };
 
+function BoutonModifierMission({
+  visible,
+  edition,
+  onToggle,
+}: {
+  visible: boolean;
+  edition: boolean;
+  onToggle: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <button
+      type="button"
+      className={edition ? "btn btn-secondary" : "btn btn-primary"}
+      onClick={onToggle}
+    >
+      {edition ? (
+        <>
+          <Check className="h-4 w-4" />
+          Terminer
+        </>
+      ) : (
+        <>
+          <Pencil className="h-4 w-4" />
+          Modifier
+        </>
+      )}
+    </button>
+  );
+}
+
 export default function MissionAchatDetailPage() {
   return (
     <RequirePermission permission={["missions.lire", "missions.gerer"]}>
@@ -173,7 +205,8 @@ function MissionDetail() {
   const user = useAuthStore((s) => s.user);
   const users = useAuthStore((s) => s.users);
   const refreshUsers = useAuthStore((s) => s.refreshUsers);
-  const gerer = hasPermission("missions.gerer");
+  const gerer =
+    hasPermission("missions.gerer") || estAdministrateur(user ?? { role: "" });
   const rapportRef = useRef<HTMLDivElement>(null);
 
   const [edition, setEdition] = useState(false);
@@ -313,25 +346,11 @@ function MissionDetail() {
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap gap-2">
-            {peutOuvrirEdition && (
-              <button
-                type="button"
-                className={edition ? "btn btn-secondary" : "btn btn-primary"}
-                onClick={() => setEdition((v) => !v)}
-              >
-                {edition ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Terminer
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="h-4 w-4" />
-                    Modifier
-                  </>
-                )}
-              </button>
-            )}
+            <BoutonModifierMission
+              visible={peutOuvrirEdition}
+              edition={edition}
+              onToggle={() => setEdition((v) => !v)}
+            />
             <DocumentPrintActions
               sheetRef={rapportRef}
               filename={`${mission.numero}-rapport`}
@@ -366,7 +385,26 @@ function MissionDetail() {
               ? "🟠 Écart à contrôler"
               : "🔴 Dépense ou article problématique"}
         </span>
+        <BoutonModifierMission
+          visible={peutOuvrirEdition}
+          edition={edition}
+          onToggle={() => setEdition((v) => !v)}
+        />
       </div>
+
+      {peutOuvrirEdition && !edition && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-sea-300 bg-sea-50 p-4">
+          <p className="text-sm text-ink">
+            Mission non clôturée : l’administrateur peut modifier l’acheteur, le
+            site, les dates et la liste prévisionnelle.
+          </p>
+          <BoutonModifierMission
+            visible
+            edition={edition}
+            onToggle={() => setEdition((v) => !v)}
+          />
+        </div>
+      )}
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">
@@ -436,11 +474,17 @@ function MissionDetail() {
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-lg font-semibold">En-tête</h2>
-          {peutOuvrirEdition && !edition && (
+          {peutOuvrirEdition ? (
+            <BoutonModifierMission
+              visible
+              edition={edition}
+              onToggle={() => setEdition((v) => !v)}
+            />
+          ) : verrouille ? (
             <p className="text-xs text-muted">
-              Mission non clôturée — cliquez sur Modifier pour changer l’acheteur, le site, les dates et le prévisionnel.
+              Mission clôturée, annulée ou rejetée : modification impossible.
             </p>
-          )}
+          ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
           <label className="block text-xs font-semibold text-muted">
