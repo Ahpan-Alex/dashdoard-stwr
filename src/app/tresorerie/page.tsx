@@ -82,7 +82,7 @@ function Contenu() {
                       : "Global"}
                   </td>
                   <td className="font-semibold">
-                    {formatCurrency(soldeCompteTresorerie(c.id, mouvements))}
+                    {formatCurrency(soldeCompteTresorerie(c.id, mouvements, c))}
                   </td>
                 </tr>
               ))

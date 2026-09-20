@@ -188,7 +188,7 @@ export default function StockInitialPage() {
           </p>
         </div>
         <div className="rounded-[var(--radius)] border border-line bg-card p-4">
-          <p className="text-xs text-muted">Bilan — stocks d&apos;ouverture</p>
+          <p className="text-xs text-muted">Stocks d&apos;ouverture</p>
           <p className="mt-1 font-display text-2xl font-semibold">
             {formatCurrency(bilanInitial.stocks)}
           </p>

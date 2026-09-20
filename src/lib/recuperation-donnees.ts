@@ -341,11 +341,13 @@ export const LOTS_RECUPERATION: LotRecuperation[] = [
     compter: (s) => s.comptesTresorerie.length,
     exporter: (s) =>
       downloadCsv("comptes-tresorerie.csv", [
-        ["Libellé", "Type", "Journal", "Site", "Actif"],
+        ["Libellé", "Type", "Journal", "Solde initial", "Sens", "Site", "Actif"],
         ...s.comptesTresorerie.map((c) => [
           c.libelle,
           c.type,
           c.journalTresorerieId ?? "",
+          c.soldeInitial ?? 0,
+          c.soldeInitialSens === "credit" ? "credit" : "debit",
           c.siteId ? nomSite(s, c.siteId) : "Tous sites",
           c.actif ? "oui" : "non",
         ]),

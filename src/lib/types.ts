@@ -85,6 +85,12 @@ export type CompteTresorerie = {
   compteComptableId?: string;
   /** Journal de trésorerie (BNI, Orange Money…). Absent = journal du type. */
   journalTresorerieId?: string;
+  /** Montant d'ouverture (toujours positif). 0 = pas de solde initial. */
+  soldeInitial?: number;
+  /** Débiteur = encaisse ; créditeur = découvert / à recouvrer. */
+  soldeInitialSens?: "debit" | "credit";
+  /** Date d'ouverture (YYYY-MM-DD). */
+  soldeInitialDate?: string;
   actif: boolean;
   ordre: number;
 };
@@ -1641,7 +1647,8 @@ export type SourceEcriture =
   | "mission_achat"
   | "mission_achat_depense"
   | "sortie_atelier"
-  | "tresorerie";
+  | "tresorerie"
+  | "solde_initial";
 
 export type LigneEcritureComptable = {
   id: string;

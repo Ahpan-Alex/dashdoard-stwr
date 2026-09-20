@@ -35,7 +35,7 @@ import type {
   TypeAchat,
   TypeCompteTresorerie,
 } from "./types";
-import { tousMouvementsTresorerie } from "./tresorerie";
+import { tousMouvementsTresorerie, soldeInitialSigne } from "./tresorerie";
 import {
   idJournalDedieCompte,
   journalTresorerieEstPartage,
@@ -1320,6 +1320,54 @@ export function compteComptableDuCompteTresorerie(
   );
 }
 
+export function compteContrepartieSoldeInitial(comptes: CompteComptable[]) {
+  return compteParPrefixe(comptes, "11") ?? compteAttente471(comptes);
+}
+
+export function ecritureDepuisSoldeInitialTresorerie(opts: {
+  compte: CompteTresorerie;
+  journauxTresorerie?: JournalTresorerie[];
+  comptes: CompteComptable[];
+}): EcritureComptable | null {
+  const compte = opts.compte;
+  const montant = arrondiAr(Math.abs(soldeInitialSigne(compte)));
+  if (montant <= 0) return null;
+  const compteTreso = compteComptableDuCompteTresorerie(compte, opts.comptes);
+  const contre = compteContrepartieSoldeInitial(opts.comptes);
+  if (!compteTreso?.numero || !contre?.numero) return null;
+  const debitTreso = (compte.soldeInitialSens ?? "debit") !== "credit";
+  const prefix = `ecr-si-${compte.id}`;
+  const date = (compte.soldeInitialDate || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
+  return {
+    id: prefix,
+    date,
+    libelle: `Solde initial — ${compte.libelle}`,
+    piece: `SI-${compte.libelle}`.slice(0, 40),
+    journal: journalEcritureDuCompteTresorerie(
+      compte,
+      opts.journauxTresorerie ?? [],
+    ),
+    sourceType: "solde_initial",
+    sourceId: compte.id,
+    lignes: [
+      ligneEcriture(
+        `${prefix}-tr`,
+        compteTreso,
+        compteTreso.libelle,
+        debitTreso ? montant : 0,
+        debitTreso ? 0 : montant,
+      ),
+      ligneEcriture(
+        `${prefix}-ctp`,
+        contre,
+        contre.libelle,
+        debitTreso ? 0 : montant,
+        debitTreso ? montant : 0,
+      ),
+    ],
+  };
+}
+
 function compteClientPourId(
   id: string | undefined,
   clients: Client[],
@@ -1601,6 +1649,14 @@ export function regenererEcrituresComptables(opts: {
       clients: opts.clients,
       fournisseurs: opts.fournisseurs,
       tiers: opts.tiers,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
+  }
+  for (const compte of opts.comptesTresorerie ?? []) {
+    const e = ecritureDepuisSoldeInitialTresorerie({
+      compte,
+      journauxTresorerie: opts.journauxTresorerie ?? [],
+      comptes: opts.comptesComptables,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
   }

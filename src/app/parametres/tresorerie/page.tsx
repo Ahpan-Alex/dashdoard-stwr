@@ -13,6 +13,7 @@ import {
   fenetreChequesProchesJours,
   modesPaiementTries,
   soldeCompteTresorerie,
+  soldeInitialSigne,
   tousMouvementsTresorerie,
 } from "@/lib/tresorerie";
 import { useStore } from "@/lib/store";
@@ -23,6 +24,9 @@ const COMPTE_VIDE = {
   type: "caisse" as TypeCompteTresorerie,
   siteId: "",
   compteComptableId: "",
+  soldeInitial: "",
+  soldeInitialSens: "debit" as "debit" | "credit",
+  soldeInitialDate: "",
 };
 
 export default function ParametresTresoreriePage() {
@@ -135,6 +139,9 @@ function ComptesSection() {
       type: form.type,
       siteId: form.siteId || undefined,
       compteComptableId: form.compteComptableId || undefined,
+      soldeInitial: Number(form.soldeInitial) || 0,
+      soldeInitialSens: form.soldeInitialSens,
+      soldeInitialDate: form.soldeInitialDate || undefined,
     };
     const res = editingId
       ? updateCompteTresorerie(editingId, payload)
@@ -157,9 +164,9 @@ function ComptesSection() {
         <div>
           <h2 className="font-display text-lg font-semibold">Comptes de trésorerie</h2>
           <p className="mt-1 text-sm text-muted">
-            Chaque compte (Caisse 1, BNI, Orange Money…) a son propre journal
-            comptable. Les ventes et les achats restent sur les journaux Vente
-            et Achat.
+            Chaque compte a son journal. Le solde initial (débiteur ou
+            créditeur) s&apos;ajoute au solde courant et génère une écriture
+            dans ce journal.
           </p>
         </div>
         <button
@@ -239,6 +246,45 @@ function ComptesSection() {
               ))}
             </select>
           </label>
+          <label className="text-xs font-semibold text-muted">
+            Solde initial
+            <input
+              type="number"
+              min={0}
+              step={1}
+              className="input mt-1"
+              value={form.soldeInitial}
+              onChange={(e) => setForm({ ...form, soldeInitial: e.target.value })}
+              placeholder="0"
+            />
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Sens
+            <select
+              className="select mt-1"
+              value={form.soldeInitialSens}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  soldeInitialSens: e.target.value as "debit" | "credit",
+                })
+              }
+            >
+              <option value="debit">Débiteur</option>
+              <option value="credit">Créditeur</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Date d&apos;ouverture
+            <input
+              type="date"
+              className="input mt-1"
+              value={form.soldeInitialDate}
+              onChange={(e) =>
+                setForm({ ...form, soldeInitialDate: e.target.value })
+              }
+            />
+          </label>
           {error && <p className="lg:col-span-4 text-sm text-danger">{error}</p>}
           <div className="lg:col-span-4 flex gap-2">
             <button type="submit" className="btn btn-primary">
@@ -258,6 +304,7 @@ function ComptesSection() {
             <th>Journal</th>
             <th>Compte comptable</th>
             <th>Site</th>
+            <th>Solde initial</th>
             <th>Solde</th>
             <th />
           </tr>
@@ -265,7 +312,7 @@ function ComptesSection() {
         <tbody>
           {liste.length === 0 ? (
             <tr>
-              <td colSpan={7} className="text-sm text-muted">
+              <td colSpan={8} className="text-sm text-muted">
                 Aucun compte. Un point de vente en exigera au moins un.
               </td>
             </tr>
@@ -290,8 +337,15 @@ function ComptesSection() {
                     ? pointsDeVente.find((s) => s.id === c.siteId)?.nom ?? c.siteId
                     : "Global"}
                 </td>
+                <td className="text-xs text-muted">
+                  {soldeInitialSigne(c) === 0
+                    ? "—"
+                    : `${formatCurrency(Math.abs(soldeInitialSigne(c)))} ${
+                        c.soldeInitialSens === "credit" ? "C" : "D"
+                      }`}
+                </td>
                 <td className="font-semibold">
-                  {formatCurrency(soldeCompteTresorerie(c.id, mouvements))}
+                  {formatCurrency(soldeCompteTresorerie(c.id, mouvements, c))}
                 </td>
                 <td>
                   <div className="flex flex-wrap gap-1">
@@ -305,6 +359,12 @@ function ComptesSection() {
                           type: c.type,
                           siteId: c.siteId ?? "",
                           compteComptableId: c.compteComptableId ?? "",
+                          soldeInitial:
+                            c.soldeInitial && c.soldeInitial > 0
+                              ? String(c.soldeInitial)
+                              : "",
+                          soldeInitialSens: c.soldeInitialSens === "credit" ? "credit" : "debit",
+                          soldeInitialDate: c.soldeInitialDate ?? "",
                         });
                         setOpen(true);
                       }}

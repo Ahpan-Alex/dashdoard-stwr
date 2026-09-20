@@ -481,13 +481,40 @@ export function tousMouvementsTresorerie(opts: {
   ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 }
 
+export function normaliserSoldeInitial(data: {
+  soldeInitial?: number;
+  soldeInitialSens?: "debit" | "credit";
+  soldeInitialDate?: string;
+}) {
+  const soldeInitial = Math.round(Math.abs(Number(data.soldeInitial) || 0));
+  return {
+    soldeInitial,
+    soldeInitialSens:
+      data.soldeInitialSens === "credit" ? ("credit" as const) : ("debit" as const),
+    soldeInitialDate:
+      soldeInitial > 0
+        ? data.soldeInitialDate || new Date().toISOString().slice(0, 10)
+        : undefined,
+  };
+}
+
+export function soldeInitialSigne(
+  compte: Pick<CompteTresorerie, "soldeInitial" | "soldeInitialSens"> | undefined,
+) {
+  const montant = Math.round(Math.abs(Number(compte?.soldeInitial) || 0));
+  if (montant <= 0) return 0;
+  return compte?.soldeInitialSens === "credit" ? -montant : montant;
+}
+
 export function soldeCompteTresorerie(
   compteId: string,
   mouvements: MouvementTresorerie[],
+  compte?: Pick<CompteTresorerie, "soldeInitial" | "soldeInitialSens">,
 ) {
-  return mouvements
+  const flux = mouvements
     .filter((m) => m.compteTresorerieId === compteId)
     .reduce((s, m) => s + m.montant, 0);
+  return soldeInitialSigne(compte) + flux;
 }
 
 export type ChequeEcheancier = {

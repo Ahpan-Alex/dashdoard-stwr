@@ -86,6 +86,7 @@ import {
   motifSaisieLignePaiement,
   motifSiteSansTresorerie,
   montantLignesPaiement,
+  normaliserSoldeInitial,
   type SaisieLignePaiement,
 } from "./tresorerie";
 import {
@@ -1210,6 +1211,9 @@ type Store = {
     siteId?: string;
     compteComptableId?: string;
     journalTresorerieId?: string;
+    soldeInitial?: number;
+    soldeInitialSens?: CompteTresorerie["soldeInitialSens"];
+    soldeInitialDate?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   updateCompteTresorerie: (
     id: string,
@@ -1223,6 +1227,9 @@ type Store = {
         | "ordre"
         | "compteComptableId"
         | "journalTresorerieId"
+        | "soldeInitial"
+        | "soldeInitialSens"
+        | "soldeInitialDate"
       >
     >,
   ) => { ok: true } | { ok: false; reason: string };
@@ -9202,6 +9209,7 @@ export const useStore = create<Store>()((set, get) => ({
         const id = uid("ctr");
         const ordre =
           (state.comptesTresorerie ?? []).reduce((m, c) => Math.max(m, c.ordre), 0) + 1;
+        const ouverture = normaliserSoldeInitial(data);
         set((s) =>
           avecJournal(s, {
             comptesTresorerie: [
@@ -9212,6 +9220,7 @@ export const useStore = create<Store>()((set, get) => ({
                 type: data.type,
                 siteId: data.siteId || undefined,
                 compteComptableId: data.compteComptableId || undefined,
+                ...ouverture,
                 actif: true,
                 ordre,
               },
@@ -9238,6 +9247,19 @@ export const useStore = create<Store>()((set, get) => ({
           id,
         );
         if (motif) return { ok: false as const, reason: motif };
+        const ouverture =
+          data.soldeInitial !== undefined ||
+          data.soldeInitialSens !== undefined ||
+          data.soldeInitialDate !== undefined
+            ? normaliserSoldeInitial({
+                soldeInitial: data.soldeInitial ?? prev.soldeInitial,
+                soldeInitialSens: data.soldeInitialSens ?? prev.soldeInitialSens,
+                soldeInitialDate:
+                  data.soldeInitialDate !== undefined
+                    ? data.soldeInitialDate
+                    : prev.soldeInitialDate,
+              })
+            : null;
         set((s) =>
           avecJournal(s, {
             comptesTresorerie: (s.comptesTresorerie ?? []).map((c) =>
@@ -9252,6 +9274,7 @@ export const useStore = create<Store>()((set, get) => ({
                       data.compteComptableId !== undefined
                         ? data.compteComptableId || undefined
                         : c.compteComptableId,
+                    ...(ouverture ?? {}),
                     actif: data.actif ?? c.actif,
                     ordre: data.ordre ?? c.ordre,
                   }
