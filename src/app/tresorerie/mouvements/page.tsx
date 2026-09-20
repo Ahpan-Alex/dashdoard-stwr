@@ -124,6 +124,7 @@ function Contenu() {
     lotsPaiementFournisseur,
     modesPaiement,
     comptesTresorerie,
+    operationsTresorerie,
   } = useStore();
   const modes = modesPaiement ?? [];
   const comptes = comptesTresorerieTries(comptesTresorerie ?? []);
@@ -156,8 +157,10 @@ function Contenu() {
         missions: missionsAchat,
         lotsPaiement: lotsPaiementFournisseur,
         modes,
+        operations: operationsTresorerie ?? [],
+        comptesTresorerie: comptes,
       }),
-    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modes],
+    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modes, operationsTresorerie, comptes],
   );
 
   const lignes = useMemo(

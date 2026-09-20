@@ -354,6 +354,27 @@ export const LOTS_RECUPERATION: LotRecuperation[] = [
       ]),
   },
   {
+    id: "operations-tresorerie",
+    titre: "Approvisionnements et retraits",
+    pourquoi: "Mouvements manuels de trésorerie (appro, retrait, virement interne).",
+    ouLabel: "Trésorerie → Appro / retrait",
+    ouHref: "/tresorerie/operations",
+    compter: (s) => (s.operationsTresorerie ?? []).length,
+    exporter: (s) =>
+      downloadCsv("operations-tresorerie.csv", [
+        ["Date", "Nature", "Compte", "Contrepartie", "Libellé", "Référence", "Montant"],
+        ...(s.operationsTresorerie ?? []).map((o) => [
+          o.date,
+          o.type,
+          o.compteTresorerieId,
+          o.compteLieId ?? "",
+          o.libelle,
+          o.reference ?? "",
+          o.montant,
+        ]),
+      ]),
+  },
+  {
     id: "journaux-tresorerie",
     titre: "Journaux de trésorerie",
     pourquoi: "Un journal par compte de trésorerie (caisse, banque, mobile money).",

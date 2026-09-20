@@ -171,7 +171,23 @@ export type SourceMouvementTresorerie =
   | "avoir_achat"
   | "acompte"
   | "mission"
-  | "lot_paiement";
+  | "lot_paiement"
+  | "operation";
+
+export type TypeOperationTresorerie = "approvisionnement" | "retrait";
+
+/** Approvisionnement, retrait ou virement interne entre deux comptes de trésorerie. */
+export type OperationTresorerie = {
+  id: string;
+  type: TypeOperationTresorerie;
+  date: string;
+  montant: number;
+  compteTresorerieId: string;
+  /** Autre compte : l'appro vient de / le retrait va vers. */
+  compteLieId?: string;
+  libelle: string;
+  reference?: string;
+};
 
 export type MouvementTresorerie = {
   id: string;
@@ -1591,6 +1607,7 @@ export type ActiviteEntite =
   | "compte_tresorerie"
   | "journal_tresorerie"
   | "mode_paiement"
+  | "operation_tresorerie"
   | "sortie_atelier"
   | "motif_sortie_atelier"
   | "emplacement_stock"
@@ -1650,6 +1667,7 @@ export type SourceEcriture =
   | "mission_achat_depense"
   | "sortie_atelier"
   | "tresorerie"
+  | "operation_tresorerie"
   | "solde_initial";
 
 export type LigneEcritureComptable = {
@@ -2052,6 +2070,7 @@ export type AppState = {
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
   journauxTresorerie: JournalTresorerie[];
+  operationsTresorerie: OperationTresorerie[];
   /** Lignes de relevé bancaire importées (rapprochement manuel). */
   lignesReleveBancaire: LigneReleveBancaire[];
   modesPaiement: ModePaiementParam[];

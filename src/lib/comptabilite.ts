@@ -26,6 +26,7 @@ import type {
   LigneEcritureComptable,
   MissionAchat,
   NatureDepenseMission,
+  OperationTresorerie,
   Parametres,
   Produit,
   RoleCompteComptable,
@@ -35,7 +36,7 @@ import type {
   TypeAchat,
   TypeCompteTresorerie,
 } from "./types";
-import { tousMouvementsTresorerie, soldeInitialSigne } from "./tresorerie";
+import { tousMouvementsTresorerie, soldeInitialSigne, libelleOperationTresorerie } from "./tresorerie";
 import {
   idJournalDedieCompte,
   journalTresorerieEstPartage,
@@ -1414,6 +1415,7 @@ export function ecritureDepuisMouvementTresorerie(opts: {
   tiers?: Tiers[];
 }): EcritureComptable | null {
   const m = opts.mouvement;
+  if (m.source === "operation") return null;
   const montant = arrondiAr(Math.abs(m.montant));
   if (montant <= 0) return null;
   const caisse = opts.comptesTresorerie.find((c) => c.id === m.compteTresorerieId);
@@ -1499,6 +1501,76 @@ export function ecritureDepuisMouvementTresorerie(opts: {
   };
 }
 
+export function ecritureDepuisOperationTresorerie(opts: {
+  operation: OperationTresorerie;
+  comptesTresorerie: CompteTresorerie[];
+  journauxTresorerie?: JournalTresorerie[];
+  comptes: CompteComptable[];
+}): EcritureComptable | null {
+  const op = opts.operation;
+  const montant = arrondiAr(Math.abs(op.montant));
+  if (montant <= 0) return null;
+  const principal = opts.comptesTresorerie.find(
+    (c) => c.id === op.compteTresorerieId,
+  );
+  const compteTreso = compteComptableDuCompteTresorerie(principal, opts.comptes);
+  if (!compteTreso?.numero) return null;
+  const prefix = `ecr-op-${op.id}`;
+  const libelle = libelleOperationTresorerie(op, opts.comptesTresorerie);
+  const journal = journalEcritureDuCompteTresorerie(
+    principal,
+    opts.journauxTresorerie ?? [],
+  );
+  if (op.compteLieId) {
+    const lie = opts.comptesTresorerie.find((c) => c.id === op.compteLieId);
+    const compteLie = compteComptableDuCompteTresorerie(lie, opts.comptes);
+    if (!compteLie?.numero || compteLie.id === compteTreso.id) return null;
+    const dest = op.type === "approvisionnement" ? compteTreso : compteLie;
+    const source = op.type === "approvisionnement" ? compteLie : compteTreso;
+    return {
+      id: prefix,
+      date: op.date,
+      libelle,
+      piece: op.reference || op.id,
+      journal,
+      sourceType: "operation_tresorerie",
+      sourceId: op.id,
+      lignes: [
+        ligneEcriture(`${prefix}-d`, dest, dest.libelle, montant, 0),
+        ligneEcriture(`${prefix}-s`, source, source.libelle, 0, montant),
+      ],
+    };
+  }
+  const contre = compteAttente471(opts.comptes);
+  if (!contre?.numero) return null;
+  const appro = op.type === "approvisionnement";
+  return {
+    id: prefix,
+    date: op.date,
+    libelle,
+    piece: op.reference || op.id,
+    journal,
+    sourceType: "operation_tresorerie",
+    sourceId: op.id,
+    lignes: [
+      ligneEcriture(
+        `${prefix}-tr`,
+        compteTreso,
+        compteTreso.libelle,
+        appro ? montant : 0,
+        appro ? 0 : montant,
+      ),
+      ligneEcriture(
+        `${prefix}-ctp`,
+        contre,
+        contre.libelle,
+        appro ? 0 : montant,
+        appro ? montant : 0,
+      ),
+    ],
+  };
+}
+
 export function totauxEcriture(e: Pick<EcritureComptable, "lignes">) {
   return e.lignes.reduce(
     (acc, l) => ({
@@ -1570,6 +1642,7 @@ export function regenererEcrituresComptables(opts: {
   acomptes?: Acompte[];
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
+  operationsTresorerie?: OperationTresorerie[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
     return (opts.existantes ?? []).filter(ecritureEstTransferee);
@@ -1636,6 +1709,8 @@ export function regenererEcrituresComptables(opts: {
     missions: opts.missionsAchat,
     lotsPaiement: opts.lotsPaiementFournisseur,
     modes: opts.modesPaiement ?? [],
+    operations: opts.operationsTresorerie,
+    comptesTresorerie: opts.comptesTresorerie,
   })) {
     const e = ecritureDepuisMouvementTresorerie({
       mouvement: mvt,
@@ -1649,6 +1724,15 @@ export function regenererEcrituresComptables(opts: {
       clients: opts.clients,
       fournisseurs: opts.fournisseurs,
       tiers: opts.tiers,
+    });
+    if (e && ecritureEstEquilibree(e)) generees.push(e);
+  }
+  for (const op of opts.operationsTresorerie ?? []) {
+    const e = ecritureDepuisOperationTresorerie({
+      operation: op,
+      comptesTresorerie: opts.comptesTresorerie ?? [],
+      journauxTresorerie: opts.journauxTresorerie ?? [],
+      comptes: opts.comptesComptables,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
   }

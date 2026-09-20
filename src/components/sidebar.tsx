@@ -302,6 +302,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         anyOf: ["factures.encaisser", "achats.lire", "comptabilite.lire"],
         children: [
           { href: "/tresorerie", label: "Soldes", exact: true },
+          { href: "/tresorerie/operations", label: "Appro / retrait" },
           { href: "/tresorerie/echeancier", label: "Échéancier" },
           { href: "/tresorerie/cheques-proches", label: "Chèques à échéance proche" },
           { href: "/tresorerie/mouvements", label: "Suivi" },

@@ -7,10 +7,12 @@ import type {
   LotPaiementFournisseur,
   ModePaiementParam,
   MouvementTresorerie,
+  OperationTresorerie,
   Parametres,
   PointDeVente,
   StatutChequeDiffere,
   TypeCompteTresorerie,
+  TypeOperationTresorerie,
 } from "./types";
 import { rolesSiteDuSite } from "./sites";
 
@@ -588,6 +590,96 @@ export function mouvementsDepuisMissions(
   return out;
 }
 
+export const TYPE_OPERATION_TRESORERIE_LABELS: Record<
+  TypeOperationTresorerie,
+  string
+> = {
+  approvisionnement: "Approvisionnement",
+  retrait: "Retrait",
+};
+
+export function motifOperationTresorerieInvalide(
+  data: {
+    montant: number;
+    compteTresorerieId: string;
+    compteLieId?: string;
+  },
+  comptes: CompteTresorerie[],
+) {
+  if (!(data.montant > 0)) return "Indiquez un montant positif.";
+  const compte = comptes.find((c) => c.id === data.compteTresorerieId);
+  if (!compte) return "Choisissez un compte de trésorerie.";
+  if (!compte.actif) return "Ce compte de trésorerie est inactif.";
+  if (!data.compteLieId) return null;
+  if (data.compteLieId === data.compteTresorerieId) {
+    return "Choisissez un autre compte en contrepartie.";
+  }
+  const lie = comptes.find((c) => c.id === data.compteLieId);
+  if (!lie) return "Compte de contrepartie introuvable.";
+  if (!lie.actif) return "Le compte de contrepartie est inactif.";
+  return null;
+}
+
+export function libelleOperationTresorerie(
+  op: Pick<
+    OperationTresorerie,
+    "type" | "libelle" | "compteTresorerieId" | "compteLieId"
+  >,
+  comptes: CompteTresorerie[],
+) {
+  const saisi = (op.libelle ?? "").trim();
+  if (saisi) return saisi;
+  const nom = libelleCompteTresorerie(op.compteTresorerieId, comptes);
+  const lie = op.compteLieId
+    ? libelleCompteTresorerie(op.compteLieId, comptes)
+    : "";
+  if (op.type === "approvisionnement") {
+    return lie ? `Approvisionnement depuis ${lie}` : `Approvisionnement — ${nom}`;
+  }
+  return lie ? `Retrait vers ${lie}` : `Retrait — ${nom}`;
+}
+
+export function mouvementsDepuisOperations(
+  operations: OperationTresorerie[],
+  comptes: CompteTresorerie[],
+): MouvementTresorerie[] {
+  const out: MouvementTresorerie[] = [];
+  for (const op of operations) {
+    const montant = Math.round(Math.abs(op.montant) || 0);
+    if (montant <= 0) continue;
+    const libelle = libelleOperationTresorerie(op, comptes);
+    const signed = op.type === "approvisionnement" ? montant : -montant;
+    out.push({
+      id: `op-${op.id}`,
+      date: op.date,
+      compteTresorerieId: op.compteTresorerieId,
+      montant: signed,
+      sens: signed < 0 ? "sortie" : "entree",
+      modePaiementId: "autre",
+      reference: op.reference,
+      libelle,
+      source: "operation",
+      sourceId: op.id,
+      lignePaiementId: op.id,
+    });
+    if (!op.compteLieId) continue;
+    out.push({
+      id: `op-${op.id}-lie`,
+      date: op.date,
+      compteTresorerieId: op.compteLieId,
+      montant: -signed,
+      sens: signed < 0 ? "entree" : "sortie",
+      modePaiementId: "autre",
+      reference: op.reference,
+      libelle,
+      source: "operation",
+      sourceId: op.id,
+      lignePaiementId: `${op.id}-lie`,
+    });
+  }
+  return out;
+}
+
 export function tousMouvementsTresorerie(opts: {
   achats: Achat[];
   factures: Facture[];
@@ -595,6 +687,8 @@ export function tousMouvementsTresorerie(opts: {
   missions?: MissionFondsTreso[];
   lotsPaiement?: LotPaiementFournisseur[];
   modes: ModePaiementParam[];
+  operations?: OperationTresorerie[];
+  comptesTresorerie?: CompteTresorerie[];
 }): MouvementTresorerie[] {
   return [
     ...mouvementsDepuisAchats(opts.achats, opts.modes),
@@ -602,6 +696,10 @@ export function tousMouvementsTresorerie(opts: {
     ...mouvementsDepuisFactures(opts.factures, opts.modes),
     ...mouvementsDepuisAcomptes(opts.acomptes, opts.modes),
     ...mouvementsDepuisMissions(opts.missions ?? [], opts.modes),
+    ...mouvementsDepuisOperations(
+      opts.operations ?? [],
+      opts.comptesTresorerie ?? [],
+    ),
   ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 }
 
@@ -905,6 +1003,7 @@ export function compteTresorerieUtilise(
     factures: Facture[];
     acomptes: Acompte[];
     missions?: MissionFondsTreso[];
+    operations?: OperationTresorerie[];
   },
 ) {
   for (const a of ctx.achats) {
@@ -923,6 +1022,9 @@ export function compteTresorerieUtilise(
     if ((m.mouvementsFonds ?? []).some((mv) => mv.compteTresorerieId === id)) {
       return true;
     }
+  }
+  for (const op of ctx.operations ?? []) {
+    if (op.compteTresorerieId === id || op.compteLieId === id) return true;
   }
   return false;
 }

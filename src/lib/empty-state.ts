@@ -102,6 +102,7 @@ export function emptyAppState(): AppState {
     sortiesAtelier: [],
     comptesTresorerie: [],
     journauxTresorerie: [],
+    operationsTresorerie: [],
     lignesReleveBancaire: [],
     modesPaiement: seedModesPaiement(),
     exercicesComptables: [],
@@ -184,6 +185,9 @@ export function pickAppState(state: AppState): AppState {
     })(),
     lignesReleveBancaire: Array.isArray(state.lignesReleveBancaire)
       ? state.lignesReleveBancaire
+      : [],
+    operationsTresorerie: Array.isArray(state.operationsTresorerie)
+      ? state.operationsTresorerie
       : [],
     modesPaiement: fusionnerModesPaiement(state.modesPaiement),
     exercicesComptables: Array.isArray(state.exercicesComptables)

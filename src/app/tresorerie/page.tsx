@@ -32,6 +32,7 @@ function Contenu() {
     missionsAchat,
     lotsPaiementFournisseur,
     modesPaiement,
+    operationsTresorerie,
   } = useStore();
   const mouvements = tousMouvementsTresorerie({
     achats,
@@ -40,6 +41,8 @@ function Contenu() {
     missions: missionsAchat,
     lotsPaiement: lotsPaiementFournisseur,
     modes: modesPaiement ?? [],
+    operations: operationsTresorerie ?? [],
+    comptesTresorerie,
   });
   const liste = comptesTresorerieTries(comptesTresorerie ?? []);
 
@@ -49,9 +52,14 @@ function Contenu() {
         title="Trésorerie"
         description="Soldes des comptes de caisse, banque et mobile monnaie. Les chèques différés n'affectent le solde qu'à l'encaissement."
         actions={
-          <Link href="/parametres/tresorerie" className="btn btn-secondary">
-            Paramétrer
-          </Link>
+          <>
+            <Link href="/tresorerie/operations" className="btn btn-primary">
+              Appro / retrait
+            </Link>
+            <Link href="/parametres/tresorerie" className="btn btn-secondary">
+              Paramétrer
+            </Link>
+          </>
         }
       />
       <div className="table-shell">

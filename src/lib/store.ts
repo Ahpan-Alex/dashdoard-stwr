@@ -85,6 +85,7 @@ import {
   motifCompteTresorerieInvalide,
   motifModeCompteTresorerie,
   motifModePaiementInvalide,
+  motifOperationTresorerieInvalide,
   motifSaisieLignePaiement,
   motifSiteSansTresorerie,
   montantLignesPaiement,
@@ -349,6 +350,7 @@ import type {
   TransformationCommerciale,
   TypeClient,
   NatureDepenseMission,
+  OperationTresorerie,
   UniteMesure,
   Vente,
   BesoinAchat,
@@ -410,6 +412,7 @@ type Store = {
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
   journauxTresorerie: JournalTresorerie[];
+  operationsTresorerie: OperationTresorerie[];
   lignesReleveBancaire: LigneReleveBancaire[];
   modesPaiement: ModePaiementParam[];
   exercicesComptables: ExerciceComptable[];
@@ -1208,6 +1211,19 @@ type Store = {
   ) => { ok: true } | { ok: false; reason: string };
   supprimerLigneReleve: (ligneId: string) => { ok: true } | { ok: false; reason: string };
 
+  addOperationTresorerie: (data: {
+    type: OperationTresorerie["type"];
+    date: string;
+    montant: number;
+    compteTresorerieId: string;
+    compteLieId?: string;
+    libelle?: string;
+    reference?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  deleteOperationTresorerie: (
+    id: string,
+  ) => { ok: true } | { ok: false; reason: string };
+
   addCompteTresorerie: (data: {
     libelle: string;
     type: CompteTresorerie["type"];
@@ -1444,6 +1460,7 @@ function journalDepuis(state: {
   acomptes?: Acompte[];
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
+  operationsTresorerie?: OperationTresorerie[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
     factures: state.factures,
@@ -1463,6 +1480,7 @@ function journalDepuis(state: {
     acomptes: state.acomptes,
     lotsPaiementFournisseur: state.lotsPaiementFournisseur,
     modesPaiement: state.modesPaiement,
+    operationsTresorerie: state.operationsTresorerie,
   });
 }
 
@@ -1485,6 +1503,7 @@ function avecJournal<T extends Record<string, unknown>>(
     acomptes?: Acompte[];
     lotsPaiementFournisseur?: LotPaiementFournisseur[];
     modesPaiement?: ModePaiementParam[];
+    operationsTresorerie?: OperationTresorerie[];
   },
   patch: T,
 ): T & {
@@ -9222,6 +9241,68 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true as const };
       },
 
+      addOperationTresorerie: (data) => {
+        const state = get();
+        const montant = Math.round(Math.abs(Number(data.montant) || 0));
+        const motif = motifOperationTresorerieInvalide(
+          {
+            montant,
+            compteTresorerieId: data.compteTresorerieId,
+            compteLieId: data.compteLieId || undefined,
+          },
+          state.comptesTresorerie ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("otr");
+        const operation: OperationTresorerie = {
+          id,
+          type: data.type,
+          date: data.date,
+          montant,
+          compteTresorerieId: data.compteTresorerieId,
+          compteLieId: data.compteLieId || undefined,
+          libelle: (data.libelle ?? "").trim(),
+          reference: (data.reference ?? "").trim() || undefined,
+        };
+        set((s) =>
+          avecJournal(s, {
+            operationsTresorerie: [operation, ...(s.operationsTresorerie ?? [])],
+            journalActivites: [
+              entreeActivite("creation", "operation_tresorerie", {
+                entiteId: id,
+                libelle:
+                  operation.libelle ||
+                  (operation.type === "approvisionnement"
+                    ? "Approvisionnement"
+                    : "Retrait"),
+                detail: `${montant} Ar`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true as const, id };
+      },
+      deleteOperationTresorerie: (id) => {
+        const prev = (get().operationsTresorerie ?? []).find((o) => o.id === id);
+        if (!prev) return { ok: false as const, reason: "Opération introuvable." };
+        set((s) =>
+          avecJournal(s, {
+            operationsTresorerie: (s.operationsTresorerie ?? []).filter(
+              (o) => o.id !== id,
+            ),
+            journalActivites: [
+              entreeActivite("suppression", "operation_tresorerie", {
+                entiteId: id,
+                libelle: prev.libelle || (prev.type === "approvisionnement" ? "Approvisionnement" : "Retrait"),
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true as const };
+      },
+
       addCompteTresorerie: (data) => {
         const state = get();
         const motif = motifCompteTresorerieInvalide(
@@ -9324,6 +9405,7 @@ export const useStore = create<Store>()((set, get) => ({
             factures: state.factures,
             acomptes: state.acomptes,
             missions: state.missionsAchat,
+            operations: state.operationsTresorerie ?? [],
           })
         ) {
           return {

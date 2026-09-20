@@ -100,6 +100,7 @@ function ComptesSection() {
     missionsAchat,
     lotsPaiementFournisseur,
     modesPaiement,
+    operationsTresorerie,
     comptesComptables,
     journauxTresorerie,
     addCompteTresorerie,
@@ -123,8 +124,10 @@ function ComptesSection() {
         missions: missionsAchat,
         lotsPaiement: lotsPaiementFournisseur,
         modes: modesPaiement ?? [],
+        operations: operationsTresorerie ?? [],
+        comptesTresorerie,
       }),
-    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modesPaiement],
+    [achats, factures, acomptes, missionsAchat, lotsPaiementFournisseur, modesPaiement, operationsTresorerie, comptesTresorerie],
   );
 
   function fermer() {
