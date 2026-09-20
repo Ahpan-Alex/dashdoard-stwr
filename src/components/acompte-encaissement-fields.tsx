@@ -1,9 +1,10 @@
 "use client";
 
+import { CompteTresorerieSelect } from "@/components/compte-tresorerie-select";
 import { formatCurrency } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import {
-  comptesTresorerieActifs,
+  compteCompatibleOuVide,
   modesPaiementActifs,
 } from "@/lib/tresorerie";
 import type { ModePaiement } from "@/lib/types";
@@ -18,7 +19,7 @@ export type SaisieAcompteForm = {
 
 export const SAISIE_ACOMPTE_VIDE: SaisieAcompteForm = {
   montant: "",
-  modePaiement: "virement",
+  modePaiement: "especes",
   compteTresorerieId: "",
   reference: "",
   genererFacture: true,
@@ -52,7 +53,6 @@ export function AcompteEncaissementFields({
   const totalAcomptes = existants + nouveau;
   const reste = Math.max(0, totalTTC - totalAcomptes);
   const modes = modesPaiementActifs(modesPaiement);
-  const comptes = comptesTresorerieActifs(comptesTresorerie);
 
   return (
     <div className="rounded-lg border border-line bg-sea-50/40 p-4">
@@ -83,12 +83,19 @@ export function AcompteEncaissementFields({
           <select
             className="select mt-1"
             value={value.modePaiement}
-            onChange={(e) =>
+            onChange={(e) => {
+              const modePaiement = e.target.value as ModePaiement;
               onChange({
                 ...value,
-                modePaiement: e.target.value as ModePaiement,
-              })
-            }
+                modePaiement,
+                compteTresorerieId: compteCompatibleOuVide(
+                  value.compteTresorerieId,
+                  modePaiement,
+                  comptesTresorerie,
+                  modesPaiement,
+                ),
+              });
+            }}
           >
             {modes.map((m) => (
               <option key={m.id} value={m.id}>
@@ -99,20 +106,13 @@ export function AcompteEncaissementFields({
         </label>
         <label className="block text-xs font-semibold text-muted">
           Compte de trésorerie (optionnel)
-          <select
-            className="select mt-1"
+          <CompteTresorerieSelect
+            modePaiement={value.modePaiement}
             value={value.compteTresorerieId}
-            onChange={(e) =>
-              onChange({ ...value, compteTresorerieId: e.target.value })
+            onChange={(compteTresorerieId) =>
+              onChange({ ...value, compteTresorerieId })
             }
-          >
-            <option value="">Pas de mouvement de trésorerie</option>
-            {comptes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.libelle}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label className="block text-xs font-semibold text-muted">
           Référence (facultatif)

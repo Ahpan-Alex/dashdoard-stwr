@@ -74,7 +74,14 @@ function Contenu() {
             ) : (
               liste.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.libelle}</td>
+                  <td>
+                    <Link
+                      href={`/tresorerie/mouvements?compte=${encodeURIComponent(c.id)}`}
+                      className="text-sea-800 hover:underline"
+                    >
+                      {c.libelle}
+                    </Link>
+                  </td>
                   <td>{TYPE_COMPTE_TRESORERIE_LABELS[c.type]}</td>
                   <td>
                     {c.siteId

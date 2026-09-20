@@ -20,6 +20,9 @@ export const TYPE_COMPTE_TRESORERIE_LABELS: Record<TypeCompteTresorerie, string>
   mobile_monnaie: "Mobile monnaie",
 };
 
+export const REGLE_MODE_COMPTE_TRESORERIE =
+  "Caisse : espèces uniquement. Banque : chèques, virement, carte et prélèvement. Mobile monnaie : transfert uniquement.";
+
 export const STATUT_CHEQUE_LABELS: Record<StatutChequeDiffere, string> = {
   en_attente: "En attente",
   encaisse: "Encaissé",
@@ -27,13 +30,14 @@ export const STATUT_CHEQUE_LABELS: Record<StatutChequeDiffere, string> = {
 };
 
 export const MODES_PAIEMENT_DEFAUT: Omit<ModePaiementParam, "ordre" | "actif">[] = [
-  { id: "cheque_comptant", libelle: "Chèque au comptant", necessiteEcheance: false },
-  { id: "cheque_differe", libelle: "Chèque à paiement différé", necessiteEcheance: true },
-  { id: "prelevement", libelle: "Prélèvement bancaire", necessiteEcheance: false },
-  { id: "virement", libelle: "Virement", necessiteEcheance: false },
-  { id: "especes", libelle: "Espèces", necessiteEcheance: false },
-  { id: "carte", libelle: "Carte bancaire", necessiteEcheance: false },
-  { id: "mobile_money", libelle: "Mobile monnaie", necessiteEcheance: false },
+  { id: "cheque_comptant", libelle: "Chèque au comptant", necessiteEcheance: false, typeCompteTresorerie: "banque" },
+  { id: "cheque_differe", libelle: "Chèque à paiement différé", necessiteEcheance: true, typeCompteTresorerie: "banque" },
+  { id: "prelevement", libelle: "Prélèvement bancaire", necessiteEcheance: false, typeCompteTresorerie: "banque" },
+  { id: "virement", libelle: "Virement", necessiteEcheance: false, typeCompteTresorerie: "banque" },
+  { id: "especes", libelle: "Espèces", necessiteEcheance: false, typeCompteTresorerie: "caisse" },
+  { id: "carte", libelle: "Carte bancaire", necessiteEcheance: false, typeCompteTresorerie: "banque" },
+  { id: "transfert", libelle: "Transfert", necessiteEcheance: false, typeCompteTresorerie: "mobile_monnaie" },
+  { id: "mobile_money", libelle: "Mobile monnaie", necessiteEcheance: false, typeCompteTresorerie: "mobile_monnaie" },
 ];
 
 /** Anciennes clés encore présentes dans les documents. */
@@ -45,8 +49,21 @@ export const MODES_PAIEMENT_LEGACY: Record<string, string> = {
   cheque_differe: "Chèque à paiement différé",
   prelevement: "Prélèvement bancaire",
   carte: "Carte bancaire",
+  transfert: "Transfert",
   mobile_money: "Mobile Money",
   autre: "Autre",
+};
+
+const TYPE_COMPTE_MODE_SYSTEME: Record<string, TypeCompteTresorerie> = {
+  especes: "caisse",
+  cheque: "banque",
+  cheque_comptant: "banque",
+  cheque_differe: "banque",
+  prelevement: "banque",
+  virement: "banque",
+  carte: "banque",
+  transfert: "mobile_monnaie",
+  mobile_money: "mobile_monnaie",
 };
 
 export function seedModesPaiement(): ModePaiementParam[] {
@@ -59,7 +76,25 @@ export function seedModesPaiement(): ModePaiementParam[] {
 
 export function fusionnerModesPaiement(existing?: ModePaiementParam[] | null) {
   if (existing == null || existing.length === 0) return seedModesPaiement();
-  return existing;
+  const stamped = existing.map((m) => ({
+    ...m,
+    typeCompteTresorerie:
+      TYPE_COMPTE_MODE_SYSTEME[m.id] ??
+      m.typeCompteTresorerie ??
+      infererTypeComptePourMode(m.id, m.libelle),
+  }));
+  if (!stamped.some((m) => m.id === "transfert")) {
+    const ordre = stamped.reduce((max, x) => Math.max(max, x.ordre), 0) + 1;
+    stamped.push({
+      id: "transfert",
+      libelle: "Transfert",
+      necessiteEcheance: false,
+      typeCompteTresorerie: "mobile_monnaie",
+      actif: true,
+      ordre,
+    });
+  }
+  return stamped;
 }
 
 export function modesPaiementTries(modes: ModePaiementParam[]) {
@@ -230,6 +265,81 @@ export type SaisieLignePaiement = {
   note?: string;
 };
 
+export function infererTypeComptePourMode(
+  modeId: string | undefined,
+  libelle?: string,
+): TypeCompteTresorerie {
+  const id = (modeId ?? "").toLocaleLowerCase("fr");
+  if (TYPE_COMPTE_MODE_SYSTEME[id]) return TYPE_COMPTE_MODE_SYSTEME[id];
+  if (id.includes("espece")) return "caisse";
+  if (id.includes("cheque") || id.includes("chèque")) return "banque";
+  if (id.includes("transfert")) return "mobile_monnaie";
+  if (id.includes("mobile") || id.includes("mvola") || id.includes("orange") || id.includes("airtel")) {
+    return "mobile_monnaie";
+  }
+  if (id.includes("virement")) return "banque";
+  if (id.includes("prelev") || id.includes("carte")) return "banque";
+  const l = (libelle ?? "").toLocaleLowerCase("fr");
+  if (/esp[eè]ce|liquide|cash/.test(l)) return "caisse";
+  if (/ch[eè]que/.test(l)) return "banque";
+  if (/transfert/.test(l)) return "mobile_monnaie";
+  if (/mobile|orange|mvola|airtel/.test(l)) return "mobile_monnaie";
+  if (/virement/.test(l)) return "banque";
+  if (/carte|pr[eé]l[eè]v/.test(l)) return "banque";
+  return "banque";
+}
+
+export function typeComptePourModePaiement(
+  modeId: string | undefined,
+  modes?: ModePaiementParam[],
+): TypeCompteTresorerie | undefined {
+  const key = (modeId ?? "").trim();
+  if (!key) return undefined;
+  const m = trouverModePaiement(modes, key);
+  if (m?.typeCompteTresorerie) return m.typeCompteTresorerie;
+  return infererTypeComptePourMode(key, m?.libelle);
+}
+
+export function comptesTresoreriePourMode(
+  comptes: CompteTresorerie[],
+  modeId: string | undefined,
+  modes?: ModePaiementParam[],
+  siteId?: string,
+) {
+  const base = siteId ? comptesPourSite(comptes, siteId) : comptesTresorerieActifs(comptes);
+  const type = typeComptePourModePaiement(modeId, modes);
+  if (!type) return base;
+  return base.filter((c) => c.type === type);
+}
+
+export function motifModeCompteTresorerie(
+  modeId: string | undefined,
+  compteId: string | undefined,
+  modes: ModePaiementParam[],
+  comptes: CompteTresorerie[],
+) {
+  if (!compteId) return null;
+  const compte = comptes.find((c) => c.id === compteId);
+  if (!compte) return "Compte de trésorerie introuvable.";
+  const type = typeComptePourModePaiement(modeId, modes);
+  if (type && compte.type !== type) {
+    return `Le paiement « ${libelleModePaiement(modeId, modes)} » s'enregistre uniquement sur un compte ${TYPE_COMPTE_TRESORERIE_LABELS[type]}.`;
+  }
+  return null;
+}
+
+export function compteCompatibleOuVide(
+  compteId: string | undefined,
+  modeId: string | undefined,
+  comptes: CompteTresorerie[],
+  modes: ModePaiementParam[],
+) {
+  if (!compteId) return "";
+  return motifModeCompteTresorerie(modeId, compteId, modes, comptes)
+    ? ""
+    : compteId;
+}
+
 export function motifSaisieLignePaiement(
   ligne: SaisieLignePaiement,
   modes: ModePaiementParam[],
@@ -242,7 +352,16 @@ export function motifSaisieLignePaiement(
     return "Indiquez la date d'échéance du chèque à paiement différé.";
   }
   const actifs = comptesTresorerieActifs(comptes);
+  const compatibles = comptesTresoreriePourMode(
+    comptes,
+    ligne.modePaiement,
+    modes,
+  );
   if ((opts?.compteObligatoire || actifs.length > 0) && !ligne.compteTresorerieId) {
+    const type = typeComptePourModePaiement(ligne.modePaiement, modes);
+    if (actifs.length > 0 && compatibles.length === 0) {
+      return `Créez un compte ${type ? TYPE_COMPTE_TRESORERIE_LABELS[type] : "de trésorerie"} pour enregistrer ce mode.`;
+    }
     return "Choisissez un compte de trésorerie.";
   }
   if (
@@ -251,7 +370,12 @@ export function motifSaisieLignePaiement(
   ) {
     return "Compte de trésorerie introuvable.";
   }
-  return null;
+  return motifModeCompteTresorerie(
+    ligne.modePaiement,
+    ligne.compteTresorerieId,
+    modes,
+    comptes,
+  );
 }
 
 export function completerLignePaiement(
@@ -515,6 +639,136 @@ export function soldeCompteTresorerie(
     .filter((m) => m.compteTresorerieId === compteId)
     .reduce((s, m) => s + m.montant, 0);
   return soldeInitialSigne(compte) + flux;
+}
+
+export type LigneSuiviTresorerie = {
+  id: string;
+  date: string;
+  libelle: string;
+  debit: number;
+  credit: number;
+  solde: number;
+  nature: "ouverture" | "reporte" | "operation";
+};
+
+type EvtSuiviTresorerie = {
+  id: string;
+  date: string;
+  libelle: string;
+  debit: number;
+  credit: number;
+  delta: number;
+  nature: "ouverture" | "operation";
+};
+
+function jourMouvement(date: string) {
+  return date.slice(0, 10);
+}
+
+/** Relevé d'un compte : solde initial, puis débit / crédit et solde après chaque opération. */
+export function lignesSuiviCompteTresorerie(
+  compte: Pick<
+    CompteTresorerie,
+    "id" | "soldeInitial" | "soldeInitialSens" | "soldeInitialDate"
+  >,
+  mouvements: MouvementTresorerie[],
+  opts?: { du?: string; au?: string; modePaiementId?: string },
+): LigneSuiviTresorerie[] {
+  const du = (opts?.du ?? "").slice(0, 10);
+  const au = (opts?.au ?? "").slice(0, 10);
+  const ops = mouvements
+    .filter((m) => m.compteTresorerieId === compte.id)
+    .filter((m) =>
+      opts?.modePaiementId ? m.modePaiementId === opts.modePaiementId : true,
+    )
+    .sort(
+      (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
+    );
+
+  const montantOuverture = Math.round(Math.abs(Number(compte.soldeInitial) || 0));
+  const dateOuverture =
+    compte.soldeInitialDate?.slice(0, 10) ||
+    ops[0]?.date.slice(0, 10) ||
+    new Date().toISOString().slice(0, 10);
+  const debitOuverture =
+    compte.soldeInitialSens === "credit" ? 0 : montantOuverture;
+  const creditOuverture =
+    compte.soldeInitialSens === "credit" ? montantOuverture : 0;
+
+  const evts: EvtSuiviTresorerie[] = [
+    {
+      id: `si-${compte.id}`,
+      date: dateOuverture,
+      libelle: "Solde initial",
+      debit: debitOuverture,
+      credit: creditOuverture,
+      delta: debitOuverture - creditOuverture,
+      nature: "ouverture",
+    },
+  ];
+  for (const m of ops) {
+    const debit = m.montant > 0 ? Math.round(m.montant) : 0;
+    const credit = m.montant < 0 ? Math.round(-m.montant) : 0;
+    evts.push({
+      id: m.id,
+      date: m.date,
+      libelle: m.reference ? `${m.libelle} (${m.reference})` : m.libelle,
+      debit,
+      credit,
+      delta: Math.round(m.montant),
+      nature: "operation",
+    });
+  }
+  evts.sort((a, b) => {
+    const ja = jourMouvement(a.date);
+    const jb = jourMouvement(b.date);
+    if (ja !== jb) return ja.localeCompare(jb);
+    if (a.nature === "ouverture" && b.nature !== "ouverture") return -1;
+    if (b.nature === "ouverture" && a.nature !== "ouverture") return 1;
+    return a.id.localeCompare(b.id);
+  });
+
+  const out: LigneSuiviTresorerie[] = [];
+  let solde = 0;
+  let ignorees = false;
+  let reporteEmis = false;
+
+  function pousserReporte() {
+    if (reporteEmis || !du || !ignorees) return;
+    reporteEmis = true;
+    out.push({
+      id: `rep-${compte.id}`,
+      date: du,
+      libelle: "Solde reporté",
+      debit: solde > 0 ? solde : 0,
+      credit: solde < 0 ? -solde : 0,
+      solde,
+      nature: "reporte",
+    });
+  }
+
+  for (const e of evts) {
+    const jour = jourMouvement(e.date);
+    if (du && jour < du) {
+      solde += e.delta;
+      ignorees = true;
+      continue;
+    }
+    if (au && jour > au) break;
+    pousserReporte();
+    solde += e.delta;
+    out.push({
+      id: e.id,
+      date: e.date,
+      libelle: e.libelle,
+      debit: e.debit,
+      credit: e.credit,
+      solde,
+      nature: e.nature,
+    });
+  }
+  pousserReporte();
+  return out;
 }
 
 export type ChequeEcheancier = {

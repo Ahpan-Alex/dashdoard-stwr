@@ -9,8 +9,10 @@ import { comptesParClasse } from "@/lib/comptabilite";
 import { libelleJournalTresorerie } from "@/lib/journaux-tresorerie";
 import {
   TYPE_COMPTE_TRESORERIE_LABELS,
+  REGLE_MODE_COMPTE_TRESORERIE,
   comptesTresorerieTries,
   fenetreChequesProchesJours,
+  infererTypeComptePourMode,
   modesPaiementTries,
   soldeCompteTresorerie,
   soldeInitialSigne,
@@ -166,7 +168,8 @@ function ComptesSection() {
           <p className="mt-1 text-sm text-muted">
             Chaque compte a son journal. Le solde initial (débiteur ou
             créditeur) s&apos;ajoute au solde courant et génère une écriture
-            dans ce journal.
+            dans ce journal. Espèces → caisse, chèques et virement → banque,
+            transfert → mobile monnaie.
           </p>
         </div>
         <button
@@ -404,6 +407,7 @@ function ModesSection() {
     useStore();
   const [libelle, setLibelle] = useState("");
   const [echeance, setEcheance] = useState(false);
+  const [typeCompte, setTypeCompte] = useState<TypeCompteTresorerie>("caisse");
   const [error, setError] = useState<string | null>(null);
   const liste = useMemo(
     () => modesPaiementTries(modesPaiement ?? []),
@@ -412,28 +416,56 @@ function ModesSection() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const res = addModePaiement({ libelle, necessiteEcheance: echeance });
+    const res = addModePaiement({
+      libelle,
+      necessiteEcheance: echeance,
+      typeCompteTresorerie: typeCompte,
+    });
     if (!res.ok) {
       setError(res.reason);
       return;
     }
     setLibelle("");
     setEcheance(false);
+    setTypeCompte("caisse");
     setError(null);
   }
 
   return (
     <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-      <h2 className="mb-3 font-display text-lg font-semibold">Modes de paiement</h2>
+      <h2 className="mb-1 font-display text-lg font-semibold">Modes de paiement</h2>
+      <p className="mb-3 text-sm text-muted">{REGLE_MODE_COMPTE_TRESORERIE}</p>
       <form onSubmit={onSubmit} className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-xs font-semibold text-muted">
           Libellé
           <input
             className="input mt-1"
             value={libelle}
-            onChange={(e) => setLibelle(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setLibelle(next);
+              setTypeCompte(infererTypeComptePourMode("", next));
+            }}
             placeholder="Ex. Chèque visé"
           />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Compte associé
+          <select
+            className="select mt-1"
+            value={typeCompte}
+            onChange={(e) =>
+              setTypeCompte(e.target.value as TypeCompteTresorerie)
+            }
+          >
+            {(Object.keys(TYPE_COMPTE_TRESORERIE_LABELS) as TypeCompteTresorerie[]).map(
+              (t) => (
+                <option key={t} value={t}>
+                  {TYPE_COMPTE_TRESORERIE_LABELS[t]}
+                </option>
+              ),
+            )}
+          </select>
         </label>
         <label className="flex items-center gap-2 text-xs font-semibold text-muted">
           <input
@@ -453,6 +485,7 @@ function ModesSection() {
         <thead>
           <tr>
             <th>Mode</th>
+            <th>Compte associé</th>
             <th>Échéance</th>
             <th />
           </tr>
@@ -461,6 +494,28 @@ function ModesSection() {
           {liste.map((m: ModePaiementParam) => (
             <tr key={m.id} className={m.actif ? "" : "opacity-50"}>
               <td>{m.libelle}</td>
+              <td>
+                <select
+                  className="select"
+                  value={
+                    m.typeCompteTresorerie ??
+                    infererTypeComptePourMode(m.id, m.libelle)
+                  }
+                  onChange={(e) =>
+                    updateModePaiement(m.id, {
+                      typeCompteTresorerie: e.target.value as TypeCompteTresorerie,
+                    })
+                  }
+                >
+                  {(Object.keys(TYPE_COMPTE_TRESORERIE_LABELS) as TypeCompteTresorerie[]).map(
+                    (t) => (
+                      <option key={t} value={t}>
+                        {TYPE_COMPTE_TRESORERIE_LABELS[t]}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </td>
               <td>{m.necessiteEcheance ? "Oui" : "Non"}</td>
               <td>
                 <div className="flex flex-wrap gap-1">

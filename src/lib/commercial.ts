@@ -1104,6 +1104,7 @@ export const MODES_PAIEMENT: Record<string, string> = {
   cheque_differe: "Chèque à paiement différé",
   prelevement: "Prélèvement bancaire",
   carte: "Carte bancaire",
+  transfert: "Transfert",
   mobile_money: "Mobile monnaie",
   autre: "Autre",
 };

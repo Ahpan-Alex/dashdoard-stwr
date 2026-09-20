@@ -115,6 +115,8 @@ export type ModePaiementParam = {
   actif: boolean;
   /** Vrai pour le chèque à paiement différé. */
   necessiteEcheance: boolean;
+  /** Compte de trésorerie qui reçoit ce mode (caisse / banque / mobile money). */
+  typeCompteTresorerie?: TypeCompteTresorerie;
   ordre: number;
 };
 

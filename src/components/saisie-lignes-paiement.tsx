@@ -4,7 +4,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import {
-  comptesPourSite,
+  compteCompatibleOuVide,
+  comptesTresoreriePourMode,
   libelleModePaiement,
   modeNecessiteEcheance,
   modesPaiementActifs,
@@ -44,7 +45,6 @@ export function SaisieLignesPaiement({
   const modes = useStore((s) => s.modesPaiement ?? []);
   const comptes = useStore((s) => s.comptesTresorerie ?? []);
   const actifs = modesPaiementActifs(modes);
-  const comptesSite = comptesPourSite(comptes, siteId);
   const [date, setDate] = useState(jourLocalISO());
   const [lignes, setLignes] = useState(() => [
     {
@@ -54,21 +54,43 @@ export function SaisieLignesPaiement({
     },
   ]);
 
-  const defautMode = actifs.find((m) => m.id === "virement")?.id ?? actifs[0]?.id ?? "";
-  const defautCompte = comptesSite[0]?.id ?? "";
+  const defautMode = actifs.find((m) => m.id === "especes")?.id ?? actifs[0]?.id ?? "";
 
   const lignesHydratees = useMemo(
     () =>
-      lignes.map((l) => ({
-        ...l,
-        modePaiement: l.modePaiement || defautMode,
-        compteTresorerieId: l.compteTresorerieId || defautCompte,
-      })),
-    [lignes, defautMode, defautCompte],
+      lignes.map((l) => {
+        const modePaiement = l.modePaiement || defautMode;
+        const compatibles = comptesTresoreriePourMode(
+          comptes,
+          modePaiement,
+          modes,
+          siteId,
+        );
+        const compteTresorerieId =
+          compteCompatibleOuVide(l.compteTresorerieId, modePaiement, comptes, modes) ||
+          compatibles[0]?.id ||
+          "";
+        return { ...l, modePaiement, compteTresorerieId };
+      }),
+    [lignes, defautMode, comptes, modes, siteId],
   );
 
   function patch(i: number, next: Partial<(typeof lignes)[0]>) {
-    setLignes((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...next } : l)));
+    setLignes((prev) =>
+      prev.map((l, idx) => {
+        if (idx !== i) return l;
+        const merged = { ...l, ...next };
+        if (next.modePaiement) {
+          merged.compteTresorerieId = compteCompatibleOuVide(
+            merged.compteTresorerieId,
+            next.modePaiement,
+            comptes,
+            modes,
+          );
+        }
+        return merged;
+      }),
+    );
   }
 
   return (
@@ -84,6 +106,12 @@ export function SaisieLignesPaiement({
       </label>
       {lignesHydratees.map((l, i) => {
         const echeance = modeNecessiteEcheance(modes, l.modePaiement);
+        const comptesMode = comptesTresoreriePourMode(
+          comptes,
+          l.modePaiement,
+          modes,
+          siteId,
+        );
         return (
           <div
             key={i}
@@ -121,7 +149,7 @@ export function SaisieLignesPaiement({
                 onChange={(e) => patch(i, { compteTresorerieId: e.target.value })}
               >
                 <option value="">—</option>
-                {comptesSite.map((c) => (
+                {comptesMode.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.libelle} ({TYPE_COMPTE_TRESORERIE_LABELS[c.type]})
                   </option>

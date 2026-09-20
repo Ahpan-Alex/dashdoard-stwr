@@ -10,9 +10,13 @@ import { MissionRapportDocument } from "@/components/mission-rapport";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { SelecteurArticle } from "@/components/selecteur-article";
+import { CompteTresorerieSelect } from "@/components/compte-tresorerie-select";
 import { useAuthStore } from "@/lib/auth-store";
 import { MODES_PAIEMENT } from "@/lib/commercial";
-import { modesPaiementActifs } from "@/lib/tresorerie";
+import {
+  compteCompatibleOuVide,
+  modesPaiementActifs,
+} from "@/lib/tresorerie";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { jourLocalISO } from "@/lib/inventaire";
@@ -746,9 +750,19 @@ function MissionDetail() {
               <select
                 className="select mt-1"
                 value={fondsForm.modePaiement}
-                onChange={(e) =>
-                  setFondsForm({ ...fondsForm, modePaiement: e.target.value })
-                }
+                onChange={(e) => {
+                  const modePaiement = e.target.value;
+                  setFondsForm({
+                    ...fondsForm,
+                    modePaiement,
+                    compteTresorerieId: compteCompatibleOuVide(
+                      fondsForm.compteTresorerieId,
+                      modePaiement,
+                      comptesTresorerie,
+                      modesPaiement,
+                    ),
+                  });
+                }}
               >
                 {modesPaiementActifs(modesPaiement).map((m) => (
                   <option key={m.id} value={m.id}>
@@ -759,22 +773,13 @@ function MissionDetail() {
             </label>
             <label className="block text-xs font-semibold text-muted">
               Compte de trésorerie (optionnel)
-              <select
-                className="select mt-1"
+              <CompteTresorerieSelect
+                modePaiement={fondsForm.modePaiement}
                 value={fondsForm.compteTresorerieId}
-                onChange={(e) =>
-                  setFondsForm({ ...fondsForm, compteTresorerieId: e.target.value })
+                onChange={(compteTresorerieId) =>
+                  setFondsForm({ ...fondsForm, compteTresorerieId })
                 }
-              >
-                <option value="">Pas de mouvement de trésorerie</option>
-                {comptesTresorerie
-                  .filter((c) => c.actif)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.libelle}
-                    </option>
-                  ))}
-              </select>
+              />
             </label>
             <label className="block text-xs font-semibold text-muted">
               Source / compte de trésorerie

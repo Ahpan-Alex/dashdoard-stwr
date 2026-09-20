@@ -60,8 +60,9 @@ import {
 } from "@/components/remise-saisie";
 import { LigneDimensionsSaisie, ResumeSurfaceLigne } from "@/components/ligne-dimensions-saisie";
 import { champsSurfaceLigne } from "@/lib/surface-vente";
+import { CompteTresorerieSelect } from "@/components/compte-tresorerie-select";
 import {
-  comptesTresorerieActifs,
+  compteCompatibleOuVide,
   modesPaiementActifs,
 } from "@/lib/tresorerie";
 import type {
@@ -144,7 +145,7 @@ export default function FacturesPage() {
     note: "",
     commentaireLibre: "",
     acomptePaye: "0",
-    modePaiement: "virement" as ModePaiement,
+    modePaiement: "especes" as ModePaiement,
     compteTresorerieId: "",
     referencePaiement: "",
     genererFactureAcompte: true,
@@ -240,7 +241,9 @@ export default function FacturesPage() {
       note: "",
       commentaireLibre: "",
       acomptePaye: "0",
-      modePaiement: "virement",
+      modePaiement: "especes",
+      compteTresorerieId: "",
+      referencePaiement: "",
       genererFactureAcompte: true,
     }));
   }
@@ -1337,12 +1340,19 @@ export default function FacturesPage() {
                     <select
                       className="select mt-1"
                       value={form.modePaiement}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const modePaiement = e.target.value as ModePaiement;
                         setForm({
                           ...form,
-                          modePaiement: e.target.value as ModePaiement,
-                        })
-                      }
+                          modePaiement,
+                          compteTresorerieId: compteCompatibleOuVide(
+                            form.compteTresorerieId,
+                            modePaiement,
+                            comptesTresorerie ?? [],
+                            modesPaiement ?? [],
+                          ),
+                        });
+                      }}
                     >
                       {modesPaiementActifs(modesPaiement ?? []).map((m) => (
                         <option key={m.id} value={m.id}>
@@ -1353,23 +1363,13 @@ export default function FacturesPage() {
                   </label>
                   <label className="block text-xs font-semibold text-muted">
                     Compte de trésorerie (optionnel)
-                    <select
-                      className="select mt-1"
+                    <CompteTresorerieSelect
+                      modePaiement={form.modePaiement}
                       value={form.compteTresorerieId}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          compteTresorerieId: e.target.value,
-                        })
+                      onChange={(compteTresorerieId) =>
+                        setForm({ ...form, compteTresorerieId })
                       }
-                    >
-                      <option value="">Pas de mouvement de trésorerie</option>
-                      {comptesTresorerieActifs(comptesTresorerie ?? []).map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.libelle}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
                   <label className="block text-xs font-semibold text-muted">
                     Référence (facultatif)

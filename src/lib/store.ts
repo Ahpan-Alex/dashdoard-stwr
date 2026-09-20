@@ -81,7 +81,9 @@ import {
   completerLignePaiement,
   compteTresorerieUtilise,
   modePaiementUtilise,
+  infererTypeComptePourMode,
   motifCompteTresorerieInvalide,
+  motifModeCompteTresorerie,
   motifModePaiementInvalide,
   motifSaisieLignePaiement,
   motifSiteSansTresorerie,
@@ -340,6 +342,7 @@ import type {
   TarifClient,
   TransfertComptable,
   Tiers,
+  TypeCompteTresorerie,
   TransfertStock,
   TransfertStockLigne,
   TransfertMatiereOf,
@@ -1251,10 +1254,16 @@ type Store = {
   addModePaiement: (data: {
     libelle: string;
     necessiteEcheance?: boolean;
+    typeCompteTresorerie?: TypeCompteTresorerie;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   updateModePaiement: (
     id: string,
-    data: Partial<Pick<ModePaiementParam, "libelle" | "necessiteEcheance" | "actif" | "ordre">>,
+    data: Partial<
+      Pick<
+        ModePaiementParam,
+        "libelle" | "necessiteEcheance" | "actif" | "ordre" | "typeCompteTresorerie"
+      >
+    >,
   ) => { ok: true } | { ok: false; reason: string };
   deleteModePaiement: (id: string) => { ok: true } | { ok: false; reason: string };
 
@@ -5914,6 +5923,13 @@ export const useStore = create<Store>()((set, get) => ({
         if (!(data.montant > 0)) {
           return { ok: false, reason: "Indiquez un montant remis positif." };
         }
+        const motifCompte = motifModeCompteTresorerie(
+          data.modePaiement,
+          data.compteTresorerieId,
+          get().modesPaiement ?? [],
+          get().comptesTresorerie ?? [],
+        );
+        if (motifCompte) return { ok: false, reason: motifCompte };
         const actor = getActiviteActor();
         const mouvement: MissionMouvementFonds = {
           id: uid("misf"),
@@ -8924,6 +8940,13 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Montant d'acompte invalide." };
         }
         const state = get();
+        const motifCompte = motifModeCompteTresorerie(
+          data.modePaiement,
+          data.compteTresorerieId,
+          state.modesPaiement ?? [],
+          state.comptesTresorerie ?? [],
+        );
+        if (motifCompte) return { ok: false, reason: motifCompte };
         const assujetti = appliqueTVA(state.parametres);
         const { ht } = splitTTC(
           montantTTC,
@@ -9444,13 +9467,17 @@ export const useStore = create<Store>()((set, get) => ({
         const id = uid("mdp");
         const ordre =
           (state.modesPaiement ?? []).reduce((m, x) => Math.max(m, x.ordre), 0) + 1;
+        const libelle = data.libelle.trim();
         set((s) => ({
           modesPaiement: [
             ...(s.modesPaiement ?? []),
             {
               id,
-              libelle: data.libelle.trim(),
+              libelle,
               necessiteEcheance: Boolean(data.necessiteEcheance),
+              typeCompteTresorerie:
+                data.typeCompteTresorerie ??
+                infererTypeComptePourMode(id, libelle),
               actif: true,
               ordre,
             },
@@ -9479,6 +9506,8 @@ export const useStore = create<Store>()((set, get) => ({
                   ...m,
                   libelle,
                   necessiteEcheance: data.necessiteEcheance ?? m.necessiteEcheance,
+                  typeCompteTresorerie:
+                    data.typeCompteTresorerie ?? m.typeCompteTresorerie,
                   actif: data.actif ?? m.actif,
                   ordre: data.ordre ?? m.ordre,
                 }

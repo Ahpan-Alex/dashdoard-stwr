@@ -304,7 +304,7 @@ const sections: { title: string; links: NavLink[] }[] = [
           { href: "/tresorerie", label: "Soldes", exact: true },
           { href: "/tresorerie/echeancier", label: "Échéancier" },
           { href: "/tresorerie/cheques-proches", label: "Chèques à échéance proche" },
-          { href: "/tresorerie/mouvements", label: "Mouvements" },
+          { href: "/tresorerie/mouvements", label: "Suivi" },
           { href: "/tresorerie/rapprochement", label: "Rapprochement" },
         ],
       },
