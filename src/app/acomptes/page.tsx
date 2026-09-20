@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
@@ -17,7 +18,7 @@ import {
   modesPaiementActifs,
 } from "@/lib/tresorerie";
 import { useAffichageTable } from "@/lib/use-affichage-table";
-import type { ModePaiement } from "@/lib/types";
+import type { Acompte, ModePaiement } from "@/lib/types";
 
 type FiltreAcompte = "tous" | "enregistre" | "impute" | "annule";
 
@@ -33,6 +34,49 @@ function filtreDepuisQuery(statut: string | null): FiltreAcompte {
     return statut as FiltreAcompte;
   }
   return "tous";
+}
+
+type FormAcompte = {
+  clientId: string;
+  date: string;
+  montantTTC: string;
+  modePaiement: ModePaiement;
+  compteTresorerieId: string;
+  reference: string;
+  devisId: string;
+  commandeId: string;
+  genererFacture: boolean;
+  note: string;
+};
+
+function formVide(clientId = ""): FormAcompte {
+  return {
+    clientId,
+    date: new Date().toISOString().slice(0, 10),
+    montantTTC: "",
+    modePaiement: "especes",
+    compteTresorerieId: "",
+    reference: "",
+    devisId: "",
+    commandeId: "",
+    genererFacture: true,
+    note: "",
+  };
+}
+
+function formDepuisAcompte(a: Acompte, dupliquer = false): FormAcompte {
+  return {
+    clientId: a.clientId,
+    date: dupliquer ? new Date().toISOString().slice(0, 10) : a.date.slice(0, 10),
+    montantTTC: String(a.montantTTC),
+    modePaiement: a.modePaiement,
+    compteTresorerieId: a.compteTresorerieId ?? "",
+    reference: a.reference ?? "",
+    devisId: a.devisId ?? "",
+    commandeId: a.commandeId ?? "",
+    genererFacture: dupliquer,
+    note: a.note ?? "",
+  };
 }
 
 export default function AcomptesPage() {
@@ -62,18 +106,10 @@ export default function AcomptesPage() {
   }, [searchParams]);
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    clientId: clients[0]?.id ?? "",
-    date: new Date().toISOString().slice(0, 10),
-    montantTTC: "",
-    modePaiement: "especes" as ModePaiement,
-    compteTresorerieId: "",
-    reference: "",
-    devisId: "",
-    commandeId: "",
-    genererFacture: true,
-    note: "",
-  });
+  const [editionId, setEditionId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormAcompte>(() =>
+    formVide(clients[0]?.id ?? ""),
+  );
 
   const acomptesDuPos = useMemo(
     () =>
@@ -114,10 +150,38 @@ export default function AcomptesPage() {
     [acomptesFiltres, factures, commandes, devis, clients, modesPaiement],
   );
 
+  function fermerFormulaire() {
+    setOpen(false);
+    setEditionId(null);
+    setForm(formVide(clients[0]?.id ?? ""));
+  }
+
+  function ouvrirCreation() {
+    setEditionId(null);
+    setForm(formVide(clients[0]?.id ?? ""));
+    setOpen(true);
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     const montantTTC = Number(form.montantTTC);
     if (!form.clientId || montantTTC <= 0) return;
+
+    if (editionId) {
+      updateAcompte(editionId, {
+        clientId: form.clientId,
+        date: new Date(`${form.date}T12:00:00`).toISOString(),
+        montantTTC,
+        modePaiement: form.modePaiement,
+        compteTresorerieId: form.compteTresorerieId || undefined,
+        reference: form.reference || undefined,
+        devisId: form.devisId || undefined,
+        commandeId: form.commandeId || undefined,
+        note: form.note || undefined,
+      });
+      fermerFormulaire();
+      return;
+    }
 
     const cmd = commandes.find((c) => c.id === form.commandeId);
     const d = devis.find((x) => x.id === form.devisId);
@@ -149,8 +213,7 @@ export default function AcomptesPage() {
       return;
     }
 
-    setOpen(false);
-    setForm((f) => ({ ...f, montantTTC: "", note: "" }));
+    fermerFormulaire();
   }
 
   return (
@@ -159,7 +222,7 @@ export default function AcomptesPage() {
         title="Acomptes"
         description="Enregistrement des acomptes avec émission automatique de facture d'acompte (législation MG)."
         actions={
-          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+          <button className="btn btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
             Nouvel acompte
           </button>
@@ -308,6 +371,7 @@ export default function AcomptesPage() {
                 ))}
             </select>
           </label>
+          {!editionId && (
           <label className="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-3">
             <input
               type="checkbox"
@@ -319,6 +383,7 @@ export default function AcomptesPage() {
             Générer automatiquement la facture d&apos;acompte (recommandé —
             législation MG)
           </label>
+          )}
           <label className="block text-xs font-semibold text-muted sm:col-span-2 lg:col-span-3">
             Note
             <input
@@ -329,12 +394,12 @@ export default function AcomptesPage() {
           </label>
           <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
             <button type="submit" className="btn btn-primary">
-              Enregistrer l&apos;acompte
+              {editionId ? "Mettre à jour" : "Enregistrer l'acompte"}
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setOpen(false)}
+              onClick={fermerFormulaire}
             >
               Annuler
             </button>
@@ -373,7 +438,7 @@ export default function AcomptesPage() {
               <ThCol id="mode" show={visible}>Mode</ThCol>
               <ThCol id="liens" show={visible}>Liens</ThCol>
               <ThCol id="statut" show={visible}>Statut</ThCol>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -428,16 +493,43 @@ export default function AcomptesPage() {
                       </select>
                     </TdCol>
                     <td>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => {
-                          if (confirm(`Supprimer ${a.numero} ?`)) {
-                            deleteAcompte(a.id);
+                      <div className="flex flex-wrap items-center gap-1">
+                        <IconButton
+                          label={
+                            a.statut === "enregistre"
+                              ? "Modifier"
+                              : "Modification réservée aux acomptes enregistrés"
                           }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-danger" />
-                      </button>
+                          disabled={a.statut !== "enregistre"}
+                          onClick={() => {
+                            setEditionId(a.id);
+                            setForm(formDepuisAcompte(a));
+                            setOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Dupliquer"
+                          onClick={() => {
+                            setEditionId(null);
+                            setForm(formDepuisAcompte(a, true));
+                            setOpen(true);
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Supprimer"
+                          onClick={() => {
+                            if (confirm(`Supprimer ${a.numero} ?`)) {
+                              deleteAcompte(a.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-danger" />
+                        </IconButton>
+                      </div>
                     </td>
                   </tr>
                 );

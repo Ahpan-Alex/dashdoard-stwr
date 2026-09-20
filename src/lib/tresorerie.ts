@@ -552,6 +552,7 @@ export type MissionFondsTreso = {
     modePaiement?: string;
     compteTresorerieId?: string;
     reference?: string;
+    annule?: boolean;
   }[];
   achatsRealises?: {
     id: string;
@@ -571,6 +572,7 @@ export function mouvementsDepuisMissions(
   for (const m of missions) {
     for (const mv of m.mouvementsFonds ?? []) {
       if (!mv.compteTresorerieId) continue;
+      if (mv.annule) continue;
       const sortie = mv.type === "remise" || mv.type === "remboursement";
       const entree = mv.type === "restitution";
       if (!sortie && !entree) continue;

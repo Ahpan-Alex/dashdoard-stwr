@@ -61,6 +61,7 @@ import {
   nextCodeClient,
   nextNumero,
   rebuildVentesDepuisFactures,
+  regenererEntreesAvoirsClient,
   splitTTC,
   totauxFacture,
   resteAPayer,
@@ -537,6 +538,9 @@ type Store = {
   validerAchat: (id: string) => { ok: boolean; reason?: string };
   annulerAchat: (id: string) => { ok: boolean; reason?: string };
   deleteAchat: (id: string) => { ok: boolean; reason?: string };
+  dupliquerAchat: (
+    id: string,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
   ajouterLivraisonAchat: (
     achatId: string,
     data: {
@@ -1538,6 +1542,7 @@ function avecJournal<T extends Record<string, unknown>>(
     missionsAchat?: MissionAchat[];
     naturesDepenseMission?: NatureDepenseMission[];
     sortiesAtelier?: SortieAtelier[];
+    entrees?: EntreeStock[];
     ecrituresComptables?: EcritureComptable[];
     comptesTresorerie?: CompteTresorerie[];
     journauxTresorerie?: JournalTresorerie[];
@@ -1570,8 +1575,14 @@ function avecJournal<T extends Record<string, unknown>>(
     glTreso.comptesTresorerie,
     merged.journauxTresorerie ?? [],
   );
+  const entrees = regenererEntreesAvoirsClient(
+    ((patch as { entrees?: EntreeStock[] }).entrees ?? state.entrees ?? []) as EntreeStock[],
+    (merged.factures as Facture[]) ?? [],
+    (merged.produits as Produit[]) ?? [],
+  );
   return {
     ...patch,
+    entrees,
     comptesTresorerie: assures.comptes,
     journauxTresorerie: assures.journaux,
     parametres: seeded.parametres,
@@ -1580,6 +1591,7 @@ function avecJournal<T extends Record<string, unknown>>(
     ecrituresComptables: journalDepuis({
       ...merged,
       ...seeded,
+      entrees,
       comptesComptables: glTreso.comptes,
       comptesMissionAcheteur: comptes467.comptesMissionAcheteur,
       comptesTresorerie: assures.comptes,
@@ -2937,6 +2949,31 @@ export const useStore = create<Store>()((set, get) => ({
           }),
         );
         return { ok: true };
+      },
+      dupliquerAchat: (id) => {
+        const prev = get().achats.find((a) => a.id === id);
+        if (!prev) return { ok: false, reason: "Achat introuvable." };
+        const date = new Date().toISOString().slice(0, 10);
+        const nouveauId = get().addAchat({
+          numero: "",
+          fournisseurId: prev.fournisseurId,
+          pointDeVenteId: prev.pointDeVenteId,
+          date,
+          echeance: prev.echeance,
+          statut: "brouillon",
+          tauxTVA: prev.tauxTVA,
+          lignes: prev.lignes.map((l) => ({
+            ...l,
+            id: uid("alg"),
+            besoinAchatId: undefined,
+          })),
+          note: prev.note,
+          validiteJours: prev.validiteJours,
+          modePaiement: prev.modePaiement,
+          destinationAchat: prev.destinationAchat,
+          commandeId: prev.commandeId,
+        });
+        return { ok: true, id: nouveauId };
       },
       ajouterLivraisonAchat: (achatId, data) => {
         const state = get();
@@ -6214,7 +6251,7 @@ export const useStore = create<Store>()((set, get) => ({
         };
         const mouvements = [...(prev.mouvementsFonds ?? []), mouvement];
         const remis = mouvements
-          .filter((x) => x.type === "remise")
+          .filter((x) => x.type === "remise" && !x.annule)
           .reduce((s, x) => s + x.montant, 0);
         const next: MissionAchat = {
           ...prev,
@@ -6237,7 +6274,7 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite("modification", "mission_achat", {
                 entiteId: id,
                 libelle: prev.numero,
-                detail: `Remise de fonds ${Math.round(data.montant)} Ar`,
+                detail: `Remise de fonds ${Math.round(data.montant)} Ar · ${mouvement.id}`,
               }),
               ...s.journalActivites,
             ],
@@ -6263,13 +6300,25 @@ export const useStore = create<Store>()((set, get) => ({
         if (cible.type !== "remise") {
           return { ok: false, reason: "Seule une remise de fonds à l'acheteur peut être annulée ici." };
         }
-        const mouvements = (prev.mouvementsFonds ?? []).filter((mv) => mv.id !== mouvementId);
+        if (cible.annule) {
+          return { ok: false, reason: "Ce décaissement est déjà annulé." };
+        }
+        const actor = getActiviteActor();
+        const mouvements = (prev.mouvementsFonds ?? []).map((mv) =>
+          mv.id === mouvementId
+            ? {
+                ...mv,
+                annule: true,
+                dateAnnulation: new Date().toISOString(),
+                note: [mv.note, "Annulé"].filter(Boolean).join(" · "),
+              }
+            : mv,
+        );
         const remis = mouvements
-          .filter((x) => x.type === "remise")
+          .filter((x) => x.type === "remise" && !x.annule)
           .reduce((s, x) => s + Math.max(0, x.montant), 0);
         let statut = prev.statut;
         if (remis <= 0 && prev.statut === "fonds_remis") statut = "validee";
-        const actor = getActiviteActor();
         const next: MissionAchat = {
           ...prev,
           statut,
@@ -6293,7 +6342,15 @@ export const useStore = create<Store>()((set, get) => ({
                 libelle: prev.numero,
                 detail: `Annulation décaissement ${Math.round(cible.montant)} Ar`,
               }),
-              ...s.journalActivites,
+              ...s.journalActivites.filter(
+                (j) =>
+                  !(
+                    j.entite === "mission_achat" &&
+                    j.entiteId === id &&
+                    typeof j.detail === "string" &&
+                    j.detail.includes(cible.id)
+                  ),
+              ),
             ],
           }),
         );

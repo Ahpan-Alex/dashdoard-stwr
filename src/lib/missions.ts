@@ -108,7 +108,7 @@ export function missionPeutEtreSupprimee(m: MissionAchat) {
     return false;
   }
   const fondsRemis = (m.mouvementsFonds ?? []).some(
-    (x) => x.type === "remise" && x.montant > 0,
+    (x) => x.type === "remise" && !x.annule && x.montant > 0,
   );
   const achatSaisi = (m.achatsRealises ?? []).some((l) => l.quantite > 0);
   return !fondsRemis && !achatSaisi;
@@ -185,7 +185,9 @@ export function fondsValidesMission(m: MissionAchat) {
 }
 
 export function fondsRemisMission(m: MissionAchat) {
-  const remises = (m.mouvementsFonds ?? []).filter((x) => x.type === "remise");
+  const remises = (m.mouvementsFonds ?? []).filter(
+    (x) => x.type === "remise" && !x.annule,
+  );
   if (remises.length) return remises.reduce((s, x) => s + Math.max(0, x.montant), 0);
   return Math.max(0, m.montantAvance);
 }

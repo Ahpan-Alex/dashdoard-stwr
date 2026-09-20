@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AcompteEncaissementFields,
   SAISIE_ACOMPTE_VIDE,
@@ -28,6 +29,18 @@ import { devisPeutEtreTransforme } from "@/lib/transformation-document";
 import { useModelePourType } from "@/lib/use-modele";
 
 export default function CommandesPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <CommandesContent />
+    </Suspense>
+  );
+}
+
+function CommandesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const retourOf = searchParams.get("retour") === "of";
+  const clientQuery = searchParams.get("clientId") ?? "";
   const {
     commandes,
     devis,
@@ -58,7 +71,10 @@ export default function CommandesPage() {
     note: string;
   }>({ lignes: [], remiseGlobale: 0, remiseGlobaleMode: "montant", note: "" });
   const [meta, setMeta] = useState({
-    clientId: clients[0]?.id ?? "",
+    clientId:
+      clientQuery && clients.some((c) => c.id === clientQuery)
+        ? clientQuery
+        : (clients[0]?.id ?? ""),
     pointDeVenteId: pointDeVenteSaisieDefaut(pointsDeVente, pointDeVenteActifId),
     devisId: "",
     date: new Date().toISOString().slice(0, 10),
@@ -69,6 +85,14 @@ export default function CommandesPage() {
 
   const modele = useModelePourType("commande");
   const assujettiTVA = appliqueTVA(parametres);
+
+  useEffect(() => {
+    if (!clientQuery) return;
+    if (!clients.some((c) => c.id === clientQuery)) return;
+    setMeta((m) =>
+      m.clientId === clientQuery ? m : { ...m, clientId: clientQuery },
+    );
+  }, [clientQuery, clients]);
 
   function ouvrirFormulaire() {
     if (meta.devisId) annulerTransformation("devis", meta.devisId);
@@ -156,6 +180,21 @@ export default function CommandesPage() {
 
       <CommandesSubnav />
 
+      {retourOf && (
+        <div className="mb-4 rounded-[var(--radius)] border border-sea-200 bg-sea-50 px-4 py-3 text-sm text-sea-950">
+          Commande pour l&apos;ordre de fabrication en cours
+          {meta.clientId
+            ? ` — client ${libelleClient(
+                clients.find((c) => c.id === meta.clientId) ?? {
+                  code: "",
+                  nom: "",
+                },
+              )}`
+            : ""}
+          . Après confirmation, vous revenez à l&apos;OF.
+        </div>
+      )}
+
       {open ? (
         <div className="mb-6 rounded-[var(--radius)] border border-sea-200 bg-card p-5">
           <DocumentSaisieWizard
@@ -202,6 +241,10 @@ export default function CommandesPage() {
             confirmLabel="Confirmer la commande"
             onCancel={() => {
               if (meta.devisId) annulerTransformation("devis", meta.devisId);
+              if (retourOf) {
+                router.push("/fabrication?creer=1");
+                return;
+              }
               setOpen(false);
             }}
             onConfirm={({ lignes, remiseGlobale, remiseGlobaleMode, note }) => {
@@ -263,6 +306,12 @@ export default function CommandesPage() {
                   statutSource: "transforme",
                 });
                 if (!fin.ok) alert(fin.reason);
+              }
+              if (retourOf) {
+                router.push(
+                  `/fabrication?creer=1&commandeId=${encodeURIComponent(commandeId)}&clientId=${encodeURIComponent(meta.clientId)}`,
+                );
+                return;
               }
               setOpen(false);
             }}

@@ -478,7 +478,8 @@ export type EntreeStock = {
     | "of_annulation"
     | "mission_achat"
     | "mission_achat_annulation"
-    | "sortie_atelier";
+    | "sortie_atelier"
+    | "retour_client";
   /** Achat fournisseur d'origine (livraison ou retour). */
   achatId?: string;
   livraisonId?: string;
@@ -489,6 +490,8 @@ export type EntreeStock = {
   ofId?: string;
   /** Mission d'achat (avance de caisse) d'origine. */
   missionAchatId?: string;
+  /** Facture d'avoir client (retour physique en stock). */
+  factureAvoirId?: string;
   /** Sortie atelier (consommables / pièces d'usure, hors OF). */
   sortieAtelierId?: string;
   /** Date limite de consommation du lot (si le produit gère la péremption). */
@@ -1987,6 +1990,9 @@ export type MissionMouvementFonds = {
   responsableNom?: string;
   reference?: string;
   note?: string;
+  /** Décaissement annulé : masqué partout sauf l'historique de la mission. */
+  annule?: boolean;
+  dateAnnulation?: string;
 };
 
 export type MissionValidationAction =

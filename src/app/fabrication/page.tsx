@@ -1,12 +1,15 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { Factory, Plus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { SelecteurClient } from "@/components/selecteur-client";
 import { StatCard } from "@/components/stat-card";
+import { DESTINATION_ACHAT_LABELS } from "@/lib/achats";
+import { COMMANDE_STATUTS, libelleClient } from "@/lib/commercial";
 import {
   ateliersVisibles,
   OF_STATUT_LABELS,
@@ -29,7 +32,44 @@ import { useStore } from "@/lib/store";
 import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
 import { BadgeDelai } from "@/components/badge-delai";
 import { etatDelaiOf } from "@/lib/delais-alerte";
-import type { OrdreFabricationStatut, TypeNomenclature } from "@/lib/types";
+import type {
+  DestinationAchat,
+  OrdreFabricationStatut,
+  TypeNomenclature,
+} from "@/lib/types";
+
+const OF_BROUILLON_KEY = "negoo.of.creation";
+
+type BrouillonOf = {
+  atelierId: string;
+  produitId: string;
+  qte: string;
+  source: TypeNomenclature;
+  cloturePrevue: string;
+  largeur: string;
+  hauteur: string;
+  destination: DestinationAchat | "";
+  clientId: string;
+  commandeId: string;
+};
+
+function lireBrouillonOf(): BrouillonOf | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(OF_BROUILLON_KEY);
+    return raw ? (JSON.parse(raw) as BrouillonOf) : null;
+  } catch {
+    return null;
+  }
+}
+
+function sauverBrouillonOf(b: BrouillonOf) {
+  sessionStorage.setItem(OF_BROUILLON_KEY, JSON.stringify(b));
+}
+
+function viderBrouillonOf() {
+  sessionStorage.removeItem(OF_BROUILLON_KEY);
+}
 
 function badgeOf(statut: OrdreFabricationStatut) {
   if (statut === "cloture") return "badge-success";
@@ -39,11 +79,32 @@ function badgeOf(statut: OrdreFabricationStatut) {
 }
 
 export default function FabricationPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <FabricationListe />
+    </Suspense>
+  );
+}
+
+function FabricationListe() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { ordresFabrication, produits, commandes, creerOrdreFabrication, bonsATirer, parametresAlertes } = useStore();
   const { visibles, rattache, actif } = useSitesVisibles();
   const ateliers = ateliersVisibles(visibles, rattache);
-  const [creer, setCreer] = useState(false);
+  const [creer, setCreer] = useState(
+    () =>
+      searchParams.get("creer") === "1" || Boolean(searchParams.get("commandeId")),
+  );
+
+  useEffect(() => {
+    if (
+      searchParams.get("creer") === "1" ||
+      searchParams.get("commandeId")
+    ) {
+      setCreer(true);
+    }
+  }, [searchParams]);
 
   const liste = useMemo(
     () =>
@@ -86,6 +147,7 @@ export default function FabricationPage() {
               alert(res.reason);
               return;
             }
+            viderBrouillonOf();
             setCreer(false);
             router.push(`/fabrication/${res.id}`);
           }}
@@ -202,8 +264,11 @@ function FormulaireOf({
     dimensionHauteur?: number;
   }) => void;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const catalogue = useStore((s) => s.produits);
   const commandesBrutes = useStore((s) => s.commandes);
+  const clients = useStore((s) => s.clients ?? []);
   const produits = useMemo(
     () => (catalogue ?? []).filter((p) => p?.actif && produitEstFabrique(p)),
     [catalogue],
@@ -213,20 +278,56 @@ function FormulaireOf({
       (commandesBrutes ?? []).filter((c) => c.statut !== "annulee" && c.statut !== "livree"),
     [commandesBrutes],
   );
-  const [atelierId, setAtelierId] = useState(defautAtelier);
-  const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
-  const [qte, setQte] = useState("1");
-  const [source, setSource] = useState<TypeNomenclature>("automatique");
-  const [commandeId, setCommandeId] = useState("");
-  const [cloturePrevue, setCloturePrevue] = useState("");
-  const [largeur, setLargeur] = useState("");
-  const [hauteur, setHauteur] = useState("");
+  const brouillon = lireBrouillonOf();
+  const [atelierId, setAtelierId] = useState(
+    brouillon?.atelierId || defautAtelier,
+  );
+  const [produitId, setProduitId] = useState(
+    brouillon?.produitId || produits[0]?.id || "",
+  );
+  const [qte, setQte] = useState(brouillon?.qte || "1");
+  const [source, setSource] = useState<TypeNomenclature>(
+    brouillon?.source || "automatique",
+  );
+  const [destination, setDestination] = useState<DestinationAchat | "">(
+    searchParams.get("commandeId") || brouillon?.commandeId
+      ? "projet_client"
+      : brouillon?.destination || "approvisionnement_stock",
+  );
+  const [clientId, setClientId] = useState(
+    searchParams.get("clientId") || brouillon?.clientId || "",
+  );
+  const [commandeId, setCommandeId] = useState(
+    searchParams.get("commandeId") || brouillon?.commandeId || "",
+  );
+  const [cloturePrevue, setCloturePrevue] = useState(
+    brouillon?.cloturePrevue || "",
+  );
+  const [largeur, setLargeur] = useState(brouillon?.largeur || "");
+  const [hauteur, setHauteur] = useState(brouillon?.hauteur || "");
+
+  useEffect(() => {
+    const cmdId = searchParams.get("commandeId");
+    const cliId = searchParams.get("clientId");
+    if (cliId) setClientId(cliId);
+    if (!cmdId) return;
+    const cmd = (commandesBrutes ?? []).find((c) => c.id === cmdId);
+    if (!cmd) {
+      setCommandeId(cmdId);
+      setDestination("projet_client");
+      return;
+    }
+    setCommandeId(cmd.id);
+    setClientId(cmd.clientId);
+    setDestination("projet_client");
+  }, [searchParams, commandesBrutes]);
 
   const produit = produits.find((p) => p.id === produitId);
   const alt = produit ? nomenclatureParType(produit, "alternative") : undefined;
   const nomenc = produit ? nomenclatureParType(produit, source) : undefined;
   const exigeDim = nomenclatureExigeDimension(nomenc?.lignes ?? []);
   const commande = commandes.find((c) => c.id === commandeId);
+  const commandesDuClient = commandes.filter((c) => c.clientId === clientId);
   const dimCmd =
     commandeId && produitId
       ? dimensionDepuisCommande(commande, produitId)
@@ -237,9 +338,49 @@ function FormulaireOf({
     ? motifDimensionNomenclatureManquante(nomenc?.lignes ?? [], L, H)
     : null;
 
+  function snapshotBrouillon(): BrouillonOf {
+    return {
+      atelierId,
+      produitId,
+      qte,
+      source,
+      cloturePrevue,
+      largeur,
+      hauteur,
+      destination,
+      clientId,
+      commandeId,
+    };
+  }
+
+  function allerVersCommande() {
+    if (!clientId) {
+      alert("Choisissez d'abord le client du projet.");
+      return;
+    }
+    sauverBrouillonOf(snapshotBrouillon());
+    router.push(
+      `/commandes?clientId=${encodeURIComponent(clientId)}&retour=of`,
+    );
+  }
+
   function onForm(e: FormEvent) {
     e.preventDefault();
     if (!atelierId || !produitId) return;
+    if (destination === "projet_client") {
+      if (!clientId) {
+        alert("Choisissez ou recherchez le client du projet.");
+        return;
+      }
+      if (!commandeId) {
+        if (commandesDuClient.length === 0) {
+          allerVersCommande();
+          return;
+        }
+        alert("Sélectionnez la commande client, ou créez-en une.");
+        return;
+      }
+    }
     if (motifDim) {
       alert(motifDim);
       return;
@@ -249,7 +390,8 @@ function FormulaireOf({
       produitId,
       quantitePrevue: Number(qte) || 0,
       nomenclatureSource: source,
-      commandeId: commandeId || undefined,
+      commandeId:
+        destination === "projet_client" ? commandeId || undefined : undefined,
       dateCloturePrevue: cloturePrevue ? isoMidiDepuisJour(cloturePrevue) : undefined,
       dimensionLargeur: L > 0 ? L : undefined,
       dimensionHauteur: H > 0 ? H : undefined,
@@ -326,21 +468,92 @@ function FormulaireOf({
             {alt && <option value="alternative">{alt.nom}</option>}
           </select>
         </label>
-        <label className="block text-xs font-semibold text-muted">
-          Commande client (MTO, optionnel)
-          <select
-            className="select mt-1"
-            value={commandeId}
-            onChange={(e) => setCommandeId(e.target.value)}
-          >
-            <option value="">Réappro stock (MTS)</option>
-            {commandes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.numero}
-              </option>
-            ))}
-          </select>
-        </label>
+        <fieldset className="sm:col-span-2">
+          <legend className="text-xs font-semibold text-muted">Destination</legend>
+          <div className="mt-2 flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="destination-of"
+                checked={destination === "projet_client"}
+                onChange={() => setDestination("projet_client")}
+              />
+              {DESTINATION_ACHAT_LABELS.projet_client}
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="destination-of"
+                checked={destination === "approvisionnement_stock"}
+                onChange={() => {
+                  setDestination("approvisionnement_stock");
+                  setClientId("");
+                  setCommandeId("");
+                }}
+              />
+              {DESTINATION_ACHAT_LABELS.approvisionnement_stock}
+            </label>
+          </div>
+        </fieldset>
+        {destination === "projet_client" && (
+          <div className="sm:col-span-2 space-y-3">
+            <SelecteurClient
+              clients={clients}
+              value={clientId}
+              onChange={(id) => {
+                setClientId(id);
+                setCommandeId("");
+              }}
+            />
+            {clientId && (
+              <>
+                {commandesDuClient.length > 0 ? (
+                  <label className="block text-xs font-semibold text-muted">
+                    Commande du client
+                    <select
+                      className="select mt-1"
+                      value={commandeId}
+                      onChange={(e) => setCommandeId(e.target.value)}
+                    >
+                      <option value="">— Choisir —</option>
+                      {commandesDuClient.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.numero}
+                          {COMMANDE_STATUTS[c.statut]
+                            ? ` (${COMMANDE_STATUTS[c.statut]})`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    Aucune commande ouverte pour{" "}
+                    <strong>
+                      {libelleClient(
+                        clients.find((c) => c.id === clientId) ?? {
+                          code: "",
+                          nom: "ce client",
+                        },
+                      )}
+                    </strong>
+                    . Créez-la pour lier l&apos;OF au projet.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className={`btn ${commandesDuClient.length > 0 ? "btn-secondary" : "btn-primary"}`}
+                  onClick={allerVersCommande}
+                >
+                  <Plus className="h-4 w-4" />
+                  {commandesDuClient.length > 0
+                    ? "Créer une nouvelle commande"
+                    : "Créer la commande de ce client"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <label className="block text-xs font-semibold text-muted">
           Clôture prévue
           <input

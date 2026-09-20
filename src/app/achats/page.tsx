@@ -6,15 +6,19 @@ import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
+  CheckCircle2,
+  Copy,
   FileDown,
   Info,
   PackagePlus,
+  Pencil,
   Plus,
   ShoppingCart,
   Trash2,
   Truck,
   Undo2,
 } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
 import { ApercuBonCommandeFournisseur } from "@/components/apercu-bon-commande-fournisseur";
 import { RepartitionOfLigne } from "@/components/repartition-of-ligne";
 import { SaisieLignesPaiement } from "@/components/saisie-lignes-paiement";
@@ -122,6 +126,9 @@ function AchatsListe() {
     pointDeVenteActifId,
     parametres,
     addAchat,
+    validerAchat,
+    deleteAchat,
+    dupliquerAchat,
     assurerComptesComptablesDefaut,
   } = useStore();
   const commandes = useStore((s) => s.commandes ?? []);
@@ -157,6 +164,8 @@ function AchatsListe() {
   useEffect(() => {
     const id = searchParams.get("id");
     if (id) setSelectionId(id);
+    const produit = searchParams.get("produit");
+    if (produit) setFiltreProduit(produit);
   }, [searchParams]);
 
   const achatSelectionne = achats.find((a) => a.id === selectionId);
@@ -540,7 +549,7 @@ function AchatsListe() {
                 <ThCol id="livraison" show={visible}>Livraison</ThCol>
                 <ThCol id="paiement" show={visible}>Paiement</ThCol>
                 <ThCol id="solde" show={visible}>Solde</ThCol>
-                <th />
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -548,9 +557,20 @@ function AchatsListe() {
                 const tot = totauxAchat(a);
                 const liv = statutLivraisonAchat(a);
                 const pay = statutPaiementAchat(a);
+                const brouillon = a.statut === "brouillon";
+                const peutSupprimer = a.statut !== "valide";
+                const peutValider = brouillon && a.lignes.length > 0;
                 return (
                   <tr key={a.id}>
-                    <TdCol id="numero" show={visible} className="font-medium">{a.numero}</TdCol>
+                    <TdCol id="numero" show={visible} className="font-medium">
+                      <button
+                        type="button"
+                        className="font-semibold text-sea-800"
+                        onClick={() => setSelectionId(a.id)}
+                      >
+                        {a.numero}
+                      </button>
+                    </TdCol>
                     <TdCol id="date" show={visible}>{formatDate(a.date)}</TdCol>
                     <TdCol id="fournisseur" show={visible}>{nomFrn(a.fournisseurId)}</TdCol>
                     <TdCol id="pointDeVente" show={visible}>{nomPdv(a.pointDeVenteId)}</TdCol>
@@ -568,14 +588,64 @@ function AchatsListe() {
                     <TdCol id="solde" show={visible} className="font-semibold">
                       {formatCurrency(soldeAchat(a))}
                     </TdCol>
-                    <td className="text-right">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setSelectionId(a.id)}
-                      >
-                        Ouvrir
-                      </button>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <IconButton
+                          label="Modifier"
+                          onClick={() => setSelectionId(a.id)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Dupliquer"
+                          onClick={() => {
+                            const res = dupliquerAchat(a.id);
+                            if (!res.ok) {
+                              alert(res.reason);
+                              return;
+                            }
+                            setSelectionId(res.id);
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label={
+                            peutSupprimer
+                              ? "Supprimer"
+                              : "Impossible : achat validé — annulez-le"
+                          }
+                          disabled={!peutSupprimer}
+                          onClick={() => {
+                            if (!confirm(`Supprimer ${a.numero} ?`)) return;
+                            const res = deleteAchat(a.id);
+                            if (!res.ok) alert(res.reason);
+                          }}
+                        >
+                          <Trash2
+                            className={`h-4 w-4 ${
+                              peutSupprimer ? "text-danger" : "text-muted"
+                            }`}
+                          />
+                        </IconButton>
+                        <IconButton
+                          label={
+                            peutValider
+                              ? "Valider"
+                              : brouillon
+                                ? "Ajoutez au moins un article"
+                                : "Validation impossible à ce statut"
+                          }
+                          disabled={!peutValider}
+                          onClick={() => {
+                            if (!confirm(`Valider ${a.numero} ?`)) return;
+                            const res = validerAchat(a.id);
+                            if (!res.ok) alert(res.reason);
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </IconButton>
+                      </div>
                     </td>
                   </tr>
                 );

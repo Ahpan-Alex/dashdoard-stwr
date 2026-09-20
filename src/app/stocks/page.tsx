@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Boxes, Scale } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, ArrowLeftRight, Boxes, Pencil, Scale, ShoppingCart } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
@@ -28,6 +29,7 @@ function ligneAlerteStock(ligne: {
 
 function StocksContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const highlightProduit = searchParams.get("produit");
   const highlightPdv = searchParams.get("pdv");
   const {
@@ -262,12 +264,13 @@ function StocksContent() {
                 <ThCol id="reserve" show={visible}>Réservé</ThCol>
                 <ThCol id="valeurAchat" show={visible}>Valeur achat</ThCol>
                 <ThCol id="valeurVente" show={visible}>Valeur vente</ThCol>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {stocks.length === 0 ? (
                 <tr>
-                  <td colSpan={colSpan(false)} className="text-muted">
+                  <td colSpan={colSpan()} className="text-muted">
                     Aucun stock.
                   </td>
                 </tr>
@@ -334,6 +337,42 @@ function StocksContent() {
                     </TdCol>
                     <TdCol id="valeurAchat" show={visible}>{formatCurrency(ligne.valeurAchat)}</TdCol>
                     <TdCol id="valeurVente" show={visible}>{formatCurrency(ligne.valeurVente)}</TdCol>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <IconButton
+                          label="Modifier l'article"
+                          onClick={() =>
+                            router.push(
+                              `/parametres/produits?produit=${encodeURIComponent(ligne.produit.id)}`,
+                            )
+                          }
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Commander"
+                          onClick={() =>
+                            router.push(
+                              `/achats?produit=${encodeURIComponent(ligne.produit.id)}`,
+                            )
+                          }
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Transférer"
+                          onClick={() => router.push("/transferts")}
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Inventaire"
+                          onClick={() => router.push("/inventaires")}
+                        >
+                          <Scale className="h-4 w-4" />
+                        </IconButton>
+                      </div>
+                    </td>
                   </tr>
                 );
               })

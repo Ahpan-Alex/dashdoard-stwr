@@ -901,7 +901,7 @@ function MissionDetail() {
             <span className="font-semibold">{formatCurrency(mission.montantAvance)}</span>
           </p>
         </div>
-        {(mission.mouvementsFonds ?? []).length > 0 && (
+        {(mission.mouvementsFonds ?? []).filter((mv) => !mv.annule).length > 0 && (
           <div className="table-shell mb-4">
             <table className="data">
               <thead>
@@ -917,7 +917,9 @@ function MissionDetail() {
                 </tr>
               </thead>
               <tbody>
-                {(mission.mouvementsFonds ?? []).map((mv) => (
+                {(mission.mouvementsFonds ?? [])
+                  .filter((mv) => !mv.annule)
+                  .map((mv) => (
                   <tr key={mv.id}>
                     <td>{formatDate(mv.date)}</td>
                     <td>{MISSION_FONDS_TYPE_LABELS[mv.type] ?? mv.type}</td>

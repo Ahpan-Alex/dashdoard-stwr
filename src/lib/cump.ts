@@ -167,6 +167,8 @@ export function evenementsCumpProduit(opts: {
       continue;
     }
     if (!inclus(v.date)) continue;
+    // Les avoirs clients reviennent en stock via origine `retour_client`.
+    if (v.quantite < 0) continue;
     events.push({
       date: v.date,
       ordre: 1,

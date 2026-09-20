@@ -16,6 +16,7 @@ import type {
   ModeRemise,
   Parametres,
   RegimeFiscal,
+  Produit,
   TarifClient,
   TypeLigneDocument,
   Vente,
@@ -1195,4 +1196,146 @@ export function rebuildVentesDepuisFactures(factures: Facture[]): Vente[] {
     });
   }
   return out;
+}
+
+/**
+ * Lignes d'avoir rattachées aux articles de la facture d'origine.
+ * Sans ça, un avoir « forfait » ne remet rien en stock.
+ */
+export function lignesAvoirDepuisFacture(
+  parent: Facture,
+  opts: {
+    mode: "total" | "partiel";
+    montantTTC: number;
+    motif?: string;
+    parametres: Parametres;
+    factures: Facture[];
+    acomptes?: Acompte[];
+  },
+): LigneDocument[] {
+  const produits = parent.lignes.filter(
+    (l) => isLigneProduit(l) && l.produitId && Math.abs(l.quantite) > 0,
+  );
+  const max = montantAvoirRestantTTC(
+    parent,
+    opts.factures,
+    opts.parametres,
+    opts.acomptes,
+  );
+  const montant = Math.min(Math.max(0, opts.montantTTC), max);
+  const motif = opts.motif?.trim();
+
+  if (produits.length === 0) {
+    const ht = htDepuisTTC(
+      montant,
+      parent.tauxTVA ?? opts.parametres.tauxTVA,
+      appliqueTVA(opts.parametres),
+    );
+    return [
+      {
+        id: "av-1",
+        type: "produit",
+        designation:
+          motif ||
+          `Avoir ${opts.mode === "total" ? "total" : "partiel"} sur ${parent.numero}`,
+        quantite: 1,
+        prixUnitaire: ht,
+        unite: "u",
+      },
+    ];
+  }
+
+  const dejaParProduit = new Map<string, number>();
+  for (const av of opts.factures) {
+    if (av.type !== "avoir" || av.factureParenteId !== parent.id) continue;
+    if (!factureImpacteExploitation(av)) continue;
+    for (const l of av.lignes) {
+      if (!l.produitId) continue;
+      dejaParProduit.set(
+        l.produitId,
+        (dejaParProduit.get(l.produitId) ?? 0) + Math.abs(l.quantite),
+      );
+    }
+  }
+
+  const restants = produits
+    .map((l) => {
+      const deja = dejaParProduit.get(l.produitId!) ?? 0;
+      return { ...l, quantite: Math.max(0, Math.abs(l.quantite) - deja) };
+    })
+    .filter((l) => l.quantite > 1e-9);
+
+  if (restants.length === 0) {
+    const ht = htDepuisTTC(
+      montant,
+      parent.tauxTVA ?? opts.parametres.tauxTVA,
+      appliqueTVA(opts.parametres),
+    );
+    return [
+      {
+        id: "av-1",
+        type: "produit",
+        designation: motif || `Avoir sur ${parent.numero}`,
+        quantite: 1,
+        prixUnitaire: ht,
+        unite: "u",
+      },
+    ];
+  }
+
+  const total = opts.mode === "total" || montant >= max - 1;
+  const ratio = total || max <= 0 ? 1 : montant / max;
+
+  return restants
+    .map((l, i) => {
+      const qte = Math.round(l.quantite * ratio * 1000) / 1000;
+      if (qte <= 0) return null;
+      return {
+        ...l,
+        id: `av-${i}`,
+        quantite: qte,
+      } as LigneDocument;
+    })
+    .filter((l): l is LigneDocument => Boolean(l));
+}
+
+/** Entrées de stock générées par les avoirs clients fiscaux. */
+export function entreesDepuisAvoirsClient(
+  factures: Facture[],
+  produits: Produit[],
+): EntreeStock[] {
+  const out: EntreeStock[] = [];
+  for (const f of factures) {
+    if (f.type !== "avoir" || !factureImpacteExploitation(f)) continue;
+    for (const l of f.lignes) {
+      if (!isLigneProduit(l) || !l.produitId || !(Math.abs(l.quantite) > 0)) {
+        continue;
+      }
+      const prod = produits.find((p) => p.id === l.produitId);
+      const qte = Math.abs(l.quantite);
+      out.push({
+        id: `ent-avr-cli-${f.id}-${l.id}`,
+        pointDeVenteId: f.pointDeVenteId,
+        produitId: l.produitId,
+        quantite: qte,
+        prixAchatUnitaire: l.cumpFigee ?? prod?.prixAchat ?? 0,
+        prixVenteUnitaire: prod?.prixVenteHT ?? l.prixUnitaire,
+        fournisseur: "Retour client",
+        date: f.dateValidation || f.date,
+        origine: "retour_client",
+        factureAvoirId: f.id,
+        note: `${f.numero}${f.factureParenteId ? ` — retour ${f.numero}` : ""}`,
+      });
+    }
+  }
+  return out;
+}
+
+export function regenererEntreesAvoirsClient(
+  entrees: EntreeStock[],
+  factures: Facture[],
+  produits: Produit[],
+): EntreeStock[] {
+  const hors = entrees.filter((e) => e.origine !== "retour_client");
+  return [...hors, ...entreesDepuisAvoirsClient(factures, produits)];
 }

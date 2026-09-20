@@ -603,7 +603,10 @@ export function calculerStocks(
 
       const quantiteVendue = ventesFiltrees
         .filter(
-          (v) => v.pointDeVenteId === pdvId && v.produitId === produit.id,
+          (v) =>
+            v.pointDeVenteId === pdvId &&
+            v.produitId === produit.id &&
+            v.quantite > 0,
         )
         .reduce((s, v) => s + v.quantite, 0);
 

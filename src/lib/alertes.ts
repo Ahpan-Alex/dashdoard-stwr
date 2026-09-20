@@ -456,7 +456,10 @@ export function lotsRestantsFifo(
   let consomme =
     ventes
       .filter(
-        (v) => v.produitId === produitId && v.pointDeVenteId === pointDeVenteId,
+        (v) =>
+          v.produitId === produitId &&
+          v.pointDeVenteId === pointDeVenteId &&
+          v.quantite > 0,
       )
       .reduce((s, v) => s + v.quantite, 0) +
     entrees
@@ -1090,7 +1093,9 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
       }
       if (m.statutReglement === "regle") continue;
       if (fondsValidesMission(m) <= 0.5 && fondsRemisMission(m) <= 0.5) continue;
-      const remises = (m.mouvementsFonds ?? []).filter((x) => x.type === "remise");
+      const remises = (m.mouvementsFonds ?? []).filter(
+        (x) => x.type === "remise" && !x.annule,
+      );
       const ref =
         remises.map((x) => x.date).sort().at(-1) ??
         m.date ??

@@ -26,8 +26,8 @@ import {
   FACTURE_STATUTS,
   FACTURE_TYPES,
   appliqueTVA,
-  htDepuisTTC,
   libelleClient,
+  lignesAvoirDepuisFacture,
   montantAvoirRestantTTC,
   resteAPayer,
   statutApresAvoir,
@@ -367,36 +367,17 @@ export default function ListeFacturesPage() {
     }
 
     const taux = factureAvoir.tauxTVA ?? parametres.tauxTVA;
-    const avoirsExistants = totalAvoirsSurFacture(
-      factureAvoir.id,
-      factures,
+    const lignesAvoir: LigneDocument[] = lignesAvoirDepuisFacture(factureAvoir, {
+      mode: modeAvoir,
+      montantTTC,
+      motif: motifAvoir,
       parametres,
-    );
-    let lignesAvoir: LigneDocument[];
-
-    if (
-      modeAvoir === "total" &&
-      montantTTC >= max - 1 &&
-      avoirsExistants <= 0
-    ) {
-      lignesAvoir = factureAvoir.lignes.map((l, i) => ({
-        ...l,
-        id: `av-${i}`,
-      }));
-    } else {
-      const ht = htDepuisTTC(montantTTC, taux, assujetti);
-      lignesAvoir = [
-        {
-          id: "av-1",
-          type: "produit",
-          designation:
-            motifAvoir.trim() ||
-            `Avoir ${modeAvoir === "total" ? "total" : "partiel"} sur ${factureAvoir.numero}`,
-          quantite: 1,
-          prixUnitaire: ht,
-          unite: "u",
-        },
-      ];
+      factures,
+      acomptes,
+    });
+    if (lignesAvoir.length === 0) {
+      alert("Impossible de constituer les lignes d'avoir.");
+      return;
     }
 
     const numero = nextNumeroDocumentCommercial({

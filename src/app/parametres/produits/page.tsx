@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Ban, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
@@ -140,6 +141,14 @@ function formDepuisProduit(
 }
 
 export default function ParametresProduitsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <ParametresProduitsContent />
+    </Suspense>
+  );
+}
+
+function ParametresProduitsContent() {
   const {
     produits,
     categoriesProduits,
@@ -188,6 +197,8 @@ export default function ParametresProduitsPage() {
     "actifs",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const produitQueryTraite = useRef<string | null>(null);
   const [ficheOnglet, setFicheOnglet] = useState<
     "tarifs" | "historique" | "fournisseurs" | "cout"
   >("tarifs");
@@ -423,6 +434,16 @@ export default function ParametresProduitsPage() {
       .getElementById("fiche-produit")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  useEffect(() => {
+    const id = searchParams.get("produit");
+    if (!id || produitQueryTraite.current === id) return;
+    const p = produits.find((x) => x.id === id);
+    if (!p) return;
+    produitQueryTraite.current = id;
+    if (!p.actif) setFiltreActif("tous");
+    demarrerEdition(p);
+  }, [searchParams, produits]);
 
   function onSubmitProduit(e: FormEvent) {
     e.preventDefault();
