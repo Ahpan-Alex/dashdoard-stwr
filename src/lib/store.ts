@@ -229,7 +229,6 @@ import {
   motifDepenseDiverseInvalide,
   motifLigneMissionInvalide,
   nextNumeroMission,
-  peutModifierDossierMission,
   peutSaisirMission,
   regenererEntreesMission,
   soldeMission,
@@ -878,7 +877,13 @@ type Store = {
   annulerMissionAchat: (id: string) => { ok: boolean; reason?: string };
   reglerMissionAchat: (
     id: string,
-    data: { statutReglement: MissionReglementStatut; dateReglement?: string },
+    data: {
+      statutReglement: MissionReglementStatut;
+      dateReglement?: string;
+      modePaiement?: string;
+      compteTresorerieId?: string;
+      reference?: string;
+    },
   ) => { ok: boolean; reason?: string };
 
   creerDemandePrix: (data: {
@@ -5509,16 +5514,6 @@ export const useStore = create<Store>()((set, get) => ({
               };
             }
           }
-        } else if (!peutModifierDossierMission(prev)) {
-          const structureKeys = headerKeys.filter((k) => k !== "montantAvance");
-          for (const k of structureKeys) {
-            if (data[k] !== undefined) {
-              return {
-                ok: false,
-                reason: "Une mission validée ne peut plus être modifiée librement.",
-              };
-            }
-          }
         }
         let lignesPrevisionnelles = data.lignesPrevisionnelles ?? prev.lignesPrevisionnelles;
         if (data.lignesPrevisionnelles) {
@@ -5807,15 +5802,34 @@ export const useStore = create<Store>()((set, get) => ({
           return { ok: false, reason: "Indiquez la date de règlement." };
         }
         const actor = getActiviteActor();
-        const mouvements = [...(prev.mouvementsFonds ?? [])];
-        if (data.statutReglement === "regle" && prev.statutReglement !== "regle") {
+        let mouvements = [...(prev.mouvementsFonds ?? [])];
+        if (data.statutReglement !== "regle") {
+          mouvements = mouvements.filter(
+            (mv) => mv.type !== "restitution" && mv.type !== "remboursement",
+          );
+        } else if (prev.statutReglement !== "regle") {
           const solde = soldeMission(prev);
           if (Math.abs(solde) >= 0.5) {
+            const motifPaiement = motifSaisieLignePaiement(
+              {
+                montant: Math.abs(solde),
+                modePaiement: data.modePaiement ?? "",
+                compteTresorerieId: data.compteTresorerieId,
+                date: data.dateReglement ?? new Date().toISOString(),
+              },
+              get().modesPaiement ?? [],
+              get().comptesTresorerie ?? [],
+              { compteObligatoire: true },
+            );
+            if (motifPaiement) return { ok: false, reason: motifPaiement };
             mouvements.push({
               id: uid("misf"),
               type: solde > 0 ? "restitution" : "remboursement",
               montant: Math.abs(solde),
               date: data.dateReglement ?? new Date().toISOString(),
+              modePaiement: data.modePaiement,
+              compteTresorerieId: data.compteTresorerieId,
+              reference: data.reference,
               responsableUserId: actor.id,
               responsableNom: actor.nom,
             });
@@ -5976,13 +5990,18 @@ export const useStore = create<Store>()((set, get) => ({
         if (!(data.montant > 0)) {
           return { ok: false, reason: "Indiquez un montant remis positif." };
         }
-        const motifCompte = motifModeCompteTresorerie(
-          data.modePaiement,
-          data.compteTresorerieId,
+        const motifPaiement = motifSaisieLignePaiement(
+          {
+            montant: data.montant,
+            modePaiement: data.modePaiement ?? "",
+            compteTresorerieId: data.compteTresorerieId,
+            date: data.date,
+          },
           get().modesPaiement ?? [],
           get().comptesTresorerie ?? [],
+          { compteObligatoire: true },
         );
-        if (motifCompte) return { ok: false, reason: motifCompte };
+        if (motifPaiement) return { ok: false, reason: motifPaiement };
         const actor = getActiviteActor();
         const mouvement: MissionMouvementFonds = {
           id: uid("misf"),

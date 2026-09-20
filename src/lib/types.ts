@@ -1979,7 +1979,7 @@ export type MissionMouvementFonds = {
   date: string;
   modePaiement?: string;
   compteSource?: string;
-  /** Compte de trésorerie (optionnel — l'existant reste informatif sans ce champ). */
+  /** Compte de trésorerie : obligatoire pour un décaissement, une restitution ou un remboursement. */
   compteTresorerieId?: string;
   responsableUserId?: string;
   responsableNom?: string;

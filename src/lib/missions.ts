@@ -330,15 +330,21 @@ export function peutSaisirMission(
   mission: Pick<MissionAchat, "acheteurUserId" | "statut">,
   opts: { userId?: string; gerer: boolean },
 ) {
+  if (missionEstVerrouillee(mission)) return false;
+  if (opts.gerer) {
+    return (
+      mission.statut === "validee" ||
+      MISSION_STATUTS_EXECUTION.includes(mission.statut)
+    );
+  }
   if (!MISSION_STATUTS_EXECUTION.includes(mission.statut)) return false;
-  if (opts.gerer) return true;
   return Boolean(opts.userId && opts.userId === mission.acheteurUserId);
 }
 
 export function peutModifierDossierMission(
   mission: Pick<MissionAchat, "statut">,
 ) {
-  return mission.statut === "brouillon";
+  return !missionEstVerrouillee(mission);
 }
 
 export function listerMouvementsBloquantAnnulationMission(

@@ -15,6 +15,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { MODES_PAIEMENT } from "@/lib/commercial";
 import {
   compteCompatibleOuVide,
+  libelleModePaiement,
   modesPaiementActifs,
 } from "@/lib/tresorerie";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -176,6 +177,13 @@ function MissionDetail() {
     date: jourLocalISO(),
     modePaiement: "especes",
     compteSource: "",
+    compteTresorerieId: "",
+    reference: "",
+  });
+  const [reglementForm, setReglementForm] = useState({
+    statut: "" as "" | "non_regle" | "regle",
+    date: jourLocalISO(),
+    modePaiement: "especes",
     compteTresorerieId: "",
     reference: "",
   });
@@ -684,7 +692,9 @@ function MissionDetail() {
       </section>
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-        <h2 className="mb-3 font-display text-lg font-semibold">Fonds remis à l&apos;acheteur</h2>
+        <h2 className="mb-3 font-display text-lg font-semibold">
+          Décaissement — fonds remis à l&apos;acheteur
+        </h2>
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
           <p>
             Demandés
@@ -729,10 +739,15 @@ function MissionDetail() {
                     <td>{formatCurrency(mv.montant)}</td>
                     <td>
                       {mv.modePaiement
-                        ? MODES_PAIEMENT[mv.modePaiement] ?? mv.modePaiement
+                        ? libelleModePaiement(mv.modePaiement, modesPaiement)
                         : "—"}
                     </td>
-                    <td>{mv.compteSource || "—"}</td>
+                    <td>
+                      {comptesTresorerie.find((c) => c.id === mv.compteTresorerieId)
+                        ?.libelle ||
+                        mv.compteSource ||
+                        "—"}
+                    </td>
                     <td>{mv.reference || "—"}</td>
                     <td>{mv.responsableNom || "—"}</td>
                   </tr>
@@ -813,13 +828,15 @@ function MissionDetail() {
               </select>
             </label>
             <label className="block text-xs font-semibold text-muted">
-              Compte de trésorerie (optionnel)
+              Compte de trésorerie
               <CompteTresorerieSelect
                 modePaiement={fondsForm.modePaiement}
                 value={fondsForm.compteTresorerieId}
                 onChange={(compteTresorerieId) =>
                   setFondsForm({ ...fondsForm, compteTresorerieId })
                 }
+                allowEmpty
+                emptyLabel="— Choisir le compte —"
               />
             </label>
             <label className="block text-xs font-semibold text-muted">
@@ -844,10 +861,19 @@ function MissionDetail() {
             </label>
             <div className="flex items-end">
               <button type="submit" className="btn btn-primary">
-                Enregistrer la remise
+                Enregistrer le décaissement
               </button>
             </div>
           </form>
+        )}
+        {gerer &&
+          (mission.statut === "validee" ||
+            mission.statut === "fonds_remis" ||
+            mission.statut === "en_cours") && (
+          <p className="mt-3 text-xs text-muted">
+            Le décaissement sort du compte de trésorerie choisi et passe en
+            comptabilité (compte 471 en attente de justificatifs).
+          </p>
         )}
       </section>
 
@@ -1614,8 +1640,9 @@ function MissionDetail() {
           <p>À rembourser à l&apos;acheteur : {formatCurrency(fin.aRembourser)}</p>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Solde = fonds remis − dépenses justifiées. Aucun mouvement de
-          trésorerie n&apos;est généré automatiquement.
+          Solde = fonds remis − dépenses justifiées. Le décaissement et la
+          restitution (ou le remboursement) s&apos;enregistrent sur un compte de
+          trésorerie : caisse / banque / mobile money et journal comptable 471.
         </p>
 
         {gerer &&
@@ -1624,20 +1651,19 @@ function MissionDetail() {
             mission.statut === "en_cours" ||
             mission.statut === "fonds_remis") && (
             <form
-              className="mt-4 grid gap-3 sm:grid-cols-3"
+              className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
               onSubmit={(e: FormEvent) => {
                 e.preventDefault();
-                const form = e.currentTarget as HTMLFormElement;
-                const statut = (
-                  form.elements.namedItem("reglement") as HTMLSelectElement
-                ).value as "non_regle" | "regle";
-                const dateReglement = (
-                  form.elements.namedItem("dateReglement") as HTMLInputElement
-                ).value;
+                const statut = (reglementForm.statut ||
+                  mission.statutReglement) as "non_regle" | "regle";
                 run(
                   reglerMissionAchat(mission.id, {
                     statutReglement: statut,
-                    dateReglement: statut === "regle" ? dateReglement : undefined,
+                    dateReglement:
+                      statut === "regle" ? reglementForm.date : undefined,
+                    modePaiement: reglementForm.modePaiement,
+                    compteTresorerieId: reglementForm.compteTresorerieId,
+                    reference: reglementForm.reference.trim() || undefined,
                   }),
                 );
               }}
@@ -1645,25 +1671,96 @@ function MissionDetail() {
               <label className="block text-xs font-semibold text-muted">
                 Régularisation des fonds
                 <select
-                  name="reglement"
                   className="select mt-1"
-                  defaultValue={mission.statutReglement}
+                  value={reglementForm.statut || mission.statutReglement}
+                  onChange={(e) =>
+                    setReglementForm({
+                      ...reglementForm,
+                      statut: e.target.value as "non_regle" | "regle",
+                    })
+                  }
                 >
                   <option value="non_regle">Non réglé</option>
-                  <option value="regle">Réglé (restitution / remboursement fait)</option>
+                  <option value="regle">
+                    {fin.aRestituer > 0
+                      ? "Réglé — restitution du solde par l'acheteur"
+                      : fin.aRembourser > 0
+                        ? "Réglé — remboursement à l'acheteur"
+                        : "Réglé (solde nul)"}
+                  </option>
                 </select>
               </label>
               <label className="block text-xs font-semibold text-muted">
                 Date
                 <input
-                  name="dateReglement"
                   type="date"
                   className="input mt-1"
-                  defaultValue={
-                    mission.dateReglement?.slice(0, 10) ?? jourLocalISO()
+                  value={reglementForm.date}
+                  onChange={(e) =>
+                    setReglementForm({ ...reglementForm, date: e.target.value })
                   }
                 />
               </label>
+              {(reglementForm.statut || mission.statutReglement) === "regle" &&
+                mission.statutReglement !== "regle" &&
+                Math.abs(fin.solde) >= 0.5 && (
+                  <>
+                    <label className="block text-xs font-semibold text-muted">
+                      Mode
+                      <select
+                        className="select mt-1"
+                        value={reglementForm.modePaiement}
+                        onChange={(e) => {
+                          const modePaiement = e.target.value;
+                          setReglementForm({
+                            ...reglementForm,
+                            modePaiement,
+                            compteTresorerieId: compteCompatibleOuVide(
+                              reglementForm.compteTresorerieId,
+                              modePaiement,
+                              comptesTresorerie,
+                              modesPaiement,
+                            ),
+                          });
+                        }}
+                      >
+                        {modesPaiementActifs(modesPaiement).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.libelle}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-xs font-semibold text-muted">
+                      Compte de trésorerie
+                      <CompteTresorerieSelect
+                        modePaiement={reglementForm.modePaiement}
+                        value={reglementForm.compteTresorerieId}
+                        onChange={(compteTresorerieId) =>
+                          setReglementForm({
+                            ...reglementForm,
+                            compteTresorerieId,
+                          })
+                        }
+                        allowEmpty
+                        emptyLabel="— Choisir le compte —"
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-muted">
+                      Référence
+                      <input
+                        className="input mt-1"
+                        value={reglementForm.reference}
+                        onChange={(e) =>
+                          setReglementForm({
+                            ...reglementForm,
+                            reference: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </>
+                )}
               <div className="flex items-end">
                 <button type="submit" className="btn btn-primary">
                   Enregistrer

@@ -576,6 +576,14 @@ export function mouvementsDepuisMissions(
       };
       if (!ligneGenereMouvement(ligne, modes)) continue;
       const signed = sortie ? -Math.abs(mv.montant) : Math.abs(mv.montant);
+      const libelleType =
+        mv.type === "remise"
+          ? "Décaissement"
+          : mv.type === "restitution"
+            ? "Restitution de solde"
+            : mv.type === "remboursement"
+              ? "Remboursement à l'acheteur"
+              : mv.type;
       out.push({
         id: mvId("mission", mv.id),
         date: dateMouvementLigne(ligne),
@@ -584,7 +592,7 @@ export function mouvementsDepuisMissions(
         sens: signed < 0 ? "sortie" : "entree",
         modePaiementId: ligne.modePaiement,
         reference: mv.reference,
-        libelle: `Mission ${m.numero ?? m.id} · ${mv.type}`,
+        libelle: `Mission ${m.numero ?? m.id} · ${libelleType}`,
         source: "mission",
         sourceId: m.id,
         lignePaiementId: mv.id,
