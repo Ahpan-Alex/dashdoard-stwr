@@ -35,15 +35,13 @@ function montantCellule(n: number) {
 function TableauSuivi({ lignes }: { lignes: LigneSuiviTresorerie[] }) {
   const totaux = lignes.reduce(
     (acc, l) => {
-      if (l.nature === "operation") {
-        acc.debit += l.debit;
-        acc.credit += l.credit;
-      }
+      acc.debit += l.debit;
+      acc.credit += l.credit;
       return acc;
     },
     { debit: 0, credit: 0 },
   );
-  const soldeFinal = lignes[lignes.length - 1]?.solde ?? 0;
+  const soldeFinal = totaux.debit - totaux.credit;
 
   return (
     <div className="table-shell">
