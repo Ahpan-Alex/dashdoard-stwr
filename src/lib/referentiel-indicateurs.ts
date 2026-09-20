@@ -134,6 +134,11 @@ export const REFERENTIEL_INDICATEURS = {
     definition:
       "Chaque changement de statut et chaque sauvegarde manuelle crée une version (qui / quand / contenu). Le document n'est pas fiscal : l'export PDF reflète l'état courant, fidèle à l'aperçu (couleurs et mise en forme du modèle).",
   },
+  relances_impayes: {
+    titre: "Relances impayés",
+    definition:
+      "Factures fiscales encore dues (reste à payer > 0). La file « aujourd'hui » regroupe les échéances dépassées, les factures jamais relancées, et celles dont la prochaine relance est due. Chaque relance est historisée (qui, quand, canal, note).",
+  },
 } as const;
 
 export type IdIndicateur = keyof typeof REFERENTIEL_INDICATEURS;

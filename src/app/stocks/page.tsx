@@ -40,6 +40,8 @@ function StocksContent() {
     achats,
     ordresFabrication,
     transfertsMatiereOf,
+    commandes,
+    factures,
   } = useStore();
   const { visibles, actif } = useSitesVisibles();
   const { visible, colSpan } = useAffichageTable("stocks");
@@ -47,6 +49,8 @@ function StocksContent() {
     achats,
     ordresFabrication,
     transfertsMatiereOf: transfertsMatiereOf ?? [],
+    commandes,
+    factures,
   };
 
   const stocks = calculerStocks(
@@ -255,7 +259,7 @@ function StocksContent() {
                 <ThCol id="vendues" show={visible}>Vendues</ThCol>
                 <ThCol id="restant" show={visible}>Restant</ThCol>
                 <ThCol id="disponible" show={visible}>Disponible</ThCol>
-                <ThCol id="reserve" show={visible}>Réservé OF</ThCol>
+                <ThCol id="reserve" show={visible}>Réservé</ThCol>
                 <ThCol id="valeurAchat" show={visible}>Valeur achat</ThCol>
                 <ThCol id="valeurVente" show={visible}>Valeur vente</ThCol>
               </tr>

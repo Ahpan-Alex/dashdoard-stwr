@@ -21,6 +21,7 @@ import { useStore } from "@/lib/store";
 import { produitsEnAlerteMargeTheorique } from "@/lib/cout-theorique";
 import { BadgeMargeTheorique } from "@/components/badge-marge-theorique";
 import { libelleProduit } from "@/lib/produits";
+import { fileRelancesImpayes } from "@/lib/relances-impayes";
 
 export default function DashboardGeneralPage() {
   const debut = useDashboardFiltres((s) => s.debut);
@@ -43,6 +44,7 @@ export default function DashboardGeneralPage() {
     parametresAlertes,
     ventes,
     pointsDeVente,
+    relancesImpayes,
   } = useStore();
 
   const { mois, annee } = caMoisEtAnnee(
@@ -85,6 +87,12 @@ export default function DashboardGeneralPage() {
     parametres,
   });
   const critiques = alertesMarge.filter((a) => a.niveau === "critique").length;
+  const nRelancesAujourdhui = fileRelancesImpayes({
+    factures,
+    acomptes,
+    parametres,
+    relances: relancesImpayes ?? [],
+  }).filter((l) => l.aRelancerAujourdhui).length;
 
   return (
     <div>
@@ -249,16 +257,20 @@ export default function DashboardGeneralPage() {
           </p>
         </div>
         <div className="rounded-[var(--radius)] border border-line bg-card p-5">
-          <h2 className="mb-1 font-display text-lg font-semibold">Liens</h2>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold">
+            Relances impayés
+            <IndicateurInfo indicateur="relances_impayes" />
+          </h2>
+          <p className="mt-3 text-2xl font-semibold">{nRelancesAujourdhui}</p>
           <p className="mt-1 text-sm text-muted">
-            Rapports déjà existants, non dupliqués ici.
+            Facture{nRelancesAujourdhui > 1 ? "s" : ""} à relancer aujourd&apos;hui.
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-sm">
+            <Link href="/relances" className="text-sea-800 underline">
+              Ouvrir la file
+            </Link>
             <Link href="/tableau-de-bord/ca-objectifs" className="text-sea-800 underline">
               Objectifs de CA
-            </Link>
-            <Link href="/tableau-de-bord/rapport-journalier" className="text-sea-800 underline">
-              Rapport de fin de journée
             </Link>
             <Link href="/dashboard/ventes" className="text-sea-800 underline">
               Ventes &amp; rentabilité

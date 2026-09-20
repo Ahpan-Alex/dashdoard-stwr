@@ -993,10 +993,14 @@ function FormSortie({
   const achats = useStore((s) => s.achats);
   const ofs = useStore((s) => s.ordresFabrication);
   const transfertsMatiereOf = useStore((s) => s.transfertsMatiereOf ?? []);
+  const commandes = useStore((s) => s.commandes);
+  const facturesStore = useStore((s) => s.factures);
   const ctxReservation = {
     achats,
     ordresFabrication: ofs,
     transfertsMatiereOf,
+    commandes,
+    factures: facturesStore,
   };
 
   const siteSource = sites.find((s) => s.id === siteSourceId);

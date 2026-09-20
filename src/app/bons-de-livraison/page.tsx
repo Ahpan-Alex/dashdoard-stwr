@@ -145,6 +145,7 @@ export default function BonsDeLivraisonPage() {
             initialRemiseGlobale={seed.remiseGlobale}
             initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
+            horsCommandeId={meta.commandeId || undefined}
             previewMeta={{
               type: "bon_de_livraison",
               numero: numeroPieceSuivant(

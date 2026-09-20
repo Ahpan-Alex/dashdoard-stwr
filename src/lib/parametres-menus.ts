@@ -63,6 +63,19 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
         label: "Catalogue de produits et articles",
         description: "Familles, fiches articles, circuit achat / vente.",
         permission: "produits.lire",
+        children: [
+          {
+            href: "/parametres/produits",
+            label: "Fiches articles",
+            exact: true,
+            permission: "produits.lire",
+          },
+          {
+            href: "/parametres/produits/import",
+            label: "Import catalogue",
+            permission: "produits.gerer",
+          },
+        ],
       },
       {
         href: "/parametres/unites",

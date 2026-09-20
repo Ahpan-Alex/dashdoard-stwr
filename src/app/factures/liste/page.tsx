@@ -657,6 +657,7 @@ export default function ListeFacturesPage() {
             initialRemiseGlobale={seed.remiseGlobale}
             initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
+            horsCommandeId={editDoc.commandeId}
             previewMeta={{
               type: "facture",
               numero: editDoc.numero,

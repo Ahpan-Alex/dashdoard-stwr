@@ -158,6 +158,9 @@ export default function FacturesPage() {
     achats,
     ordresFabrication,
     transfertsMatiereOf: transfertsMatiereOf ?? [],
+    commandes,
+    factures,
+    horsCommandeId: form.commandeId || undefined,
   };
   const reserveOf = (produitId: string) =>
     form.pointDeVenteId

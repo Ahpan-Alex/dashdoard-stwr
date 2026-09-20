@@ -597,6 +597,11 @@ export default function ParametresProduitsPage() {
         title="Catalogue de produits et articles"
         description="Articles pour l'achat, produits pour la vente. Familles, code unique, tarifs — désactivation pour préserver l'historique."
         showPosSelector={false}
+        actions={
+          <Link href="/parametres/produits/import" className="btn btn-secondary">
+            Import CSV / Excel
+          </Link>
+        }
       />
 
       {moduleCompta && aMigrer.length > 0 && (

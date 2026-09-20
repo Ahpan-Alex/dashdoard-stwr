@@ -2,11 +2,14 @@ import { quantiteLivreeProduit, quantiteRetourneeProduit } from "./achats";
 import { nextNumero } from "./commercial";
 import { quantiteStockChronologique } from "./cump";
 import type { OptsNumeroDocument } from "./exercices";
+import { quantiteReserveeCommandes } from "./reservation-commande";
 import type {
   Achat,
   AchatLigne,
   AchatRepartitionOf,
+  Commande,
   EntreeStock,
+  Facture,
   Inventaire,
   OrdreFabrication,
   TransfertMatiereOf,
@@ -58,6 +61,10 @@ export type CtxReservationOf = {
   achats: Achat[];
   ordresFabrication: OrdreFabrication[];
   transfertsMatiereOf: TransfertMatiereOf[];
+  commandes?: Commande[];
+  factures?: Facture[];
+  /** Commande en cours d'édition : sa propre qty n'est pas redéduite. */
+  horsCommandeId?: string;
 };
 
 export type LigneReservationOf = {
@@ -187,6 +194,13 @@ export function quantiteReserveeProduitSite(
   for (const ofId of ofs) {
     total += quantiteReserveeOf(produitId, siteId, ofId, ctx);
   }
+  total += quantiteReserveeCommandes(
+    produitId,
+    siteId,
+    ctx.commandes ?? [],
+    ctx.factures ?? [],
+    ctx.horsCommandeId,
+  );
   return total;
 }
 
@@ -207,7 +221,7 @@ export function stockPhysique(
   });
 }
 
-/** Stock non affecté à un OF (disponible magasin / autres usages). */
+/** Stock non affecté à un OF ni à une commande client. */
 export function stockLibreDisponible(
   produitId: string,
   siteId: string,

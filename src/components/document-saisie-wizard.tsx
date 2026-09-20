@@ -153,6 +153,8 @@ type Props = {
   initialRemiseGlobale?: number;
   initialRemiseGlobaleMode?: ModeRemise;
   initialNote?: string;
+  /** Exclure cette commande du stock réservé (édition / BL / facture liés). */
+  horsCommandeId?: string;
   acomptesDetail?: {
     numero: string;
     date: string;
@@ -185,16 +187,22 @@ export function DocumentSaisieWizard({
   initialRemiseGlobale = 0,
   initialRemiseGlobaleMode = "montant",
   initialNote = "",
+  horsCommandeId,
   acomptesDetail = [],
 }: Props) {
   const inventaires = useStore((s) => s.inventaires);
   const achats = useStore((s) => s.achats);
   const ofs = useStore((s) => s.ordresFabrication);
   const transfertsMatiereOf = useStore((s) => s.transfertsMatiereOf ?? []);
+  const commandes = useStore((s) => s.commandes);
+  const factures = useStore((s) => s.factures);
   const ctxReservation = {
     achats,
     ordresFabrication: ofs,
     transfertsMatiereOf,
+    commandes,
+    factures,
+    horsCommandeId,
   };
   const reserveOf = (produitId: string) =>
     pointDeVenteId

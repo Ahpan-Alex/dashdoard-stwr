@@ -11,6 +11,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Bell,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -77,6 +78,12 @@ const cards = [
     title: "Factures",
     description: "Standard, acompte, solde (MG)",
     icon: ScrollText,
+  },
+  {
+    href: "/relances",
+    title: "Relances impayés",
+    description: "File à relancer + historique",
+    icon: Bell,
   },
 ];
 

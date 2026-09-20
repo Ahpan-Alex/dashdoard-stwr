@@ -40,12 +40,16 @@ function DashboardStockContent() {
     transfertsMatiereOf,
     bonsDePreparation,
     parametres,
+    commandes,
+    factures,
   } = useStore();
 
   const ctxReservation = {
     achats,
     ordresFabrication,
     transfertsMatiereOf: transfertsMatiereOf ?? [],
+    commandes,
+    factures,
   };
 
   const valo = valorisationStockParNatureEtSite(
@@ -93,7 +97,7 @@ function DashboardStockContent() {
             <IndicateurInfo>
               Stock actuel valorisé au CUMP, regroupé par nature d&apos;article
               (matière première, semi-fini, fini). Le disponible exclut les
-              quantités réservées à un OF.
+              quantités réservées à un OF ou à une commande.
             </IndicateurInfo>
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
@@ -120,7 +124,7 @@ function DashboardStockContent() {
             Valorisation par site
             <IndicateurInfo>
               Même valorisation CUMP, ventilée par site (filtre site en
-              en-tête). Disponible = stock non affecté à un OF.
+              en-tête). Disponible = stock non affecté à un OF ni à une commande.
             </IndicateurInfo>
           </h2>
           <ul className="mt-3 space-y-2 text-sm">

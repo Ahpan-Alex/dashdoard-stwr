@@ -15,7 +15,6 @@ import type {
   LigneDocument,
   ModeRemise,
   Parametres,
-  RapportFinJournee,
   RegimeFiscal,
   TarifClient,
   TypeLigneDocument,
@@ -905,7 +904,6 @@ export function motifLienPointDeVente(
     entrees: EntreeStock[];
     ventes: Vente[];
     immobilisations: Pick<Immobilisation, "pointDeVenteId">[];
-    rapportsFinJournee: Pick<RapportFinJournee, "pointDeVenteId">[];
     achats?: { pointDeVenteId: string; lignes?: { repartitions?: { pointDeVenteId: string; quantite: number }[] }[] }[];
     transfertsStock?: { siteSourceId: string; siteDestinataireId: string }[];
     ordresFabrication?: { atelierId: string; sorties?: { siteSourceId: string }[]; retoursMatieres?: { siteDestinataireId: string }[] }[];
@@ -935,9 +933,6 @@ export function motifLienPointDeVente(
   }
   if (ctx.immobilisations.some((i) => i.pointDeVenteId === pdvId)) {
     return "Ce point de vente a des immobilisations. Suppression impossible.";
-  }
-  if (ctx.rapportsFinJournee.some((r) => r.pointDeVenteId === pdvId)) {
-    return "Ce point de vente a des rapports de clôture. Suppression impossible.";
   }
   if (
     (ctx.achats ?? []).some(

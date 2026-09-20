@@ -23,7 +23,8 @@ export type TableAffichageId =
   | "missions"
   | "missions_suivi"
   | "missions_synthese"
-  | "bats";
+  | "bats"
+  | "relances";
 
 export type ColonneAffichage = {
   id: string;
@@ -206,7 +207,7 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("vendues", "Vendues", 20),
       col("restant", "Restant", 22, true),
       col("disponible", "Disponible", 22),
-      col("reserve", "Réservé OF", 22),
+      col("reserve", "Réservé", 22),
       col("valeurAchat", "Valeur achat", 26),
       col("valeurVente", "Valeur vente", 26),
     ],
@@ -339,6 +340,20 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("statut", "Statut", 28, true),
       col("version", "Version active", 22),
       col("dateValidation", "Date de validation", 28),
+    ],
+  },
+  {
+    id: "relances",
+    label: "Relances impayés",
+    colonnes: [
+      col("facture", "Facture", 24, true),
+      col("client", "Client", 32, true),
+      col("reste", "Reste dû", 24, true),
+      col("echeance", "Échéance", 22),
+      col("retard", "Retard", 18),
+      col("tranche", "Tranche", 22),
+      col("derniere", "Dernière relance", 28),
+      col("prochaine", "Prochaine", 22),
     ],
   },
 ];

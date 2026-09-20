@@ -1462,27 +1462,6 @@ export type Acompte = {
   note?: string;
 };
 
-/**
- * Saisie de clôture journalière (écarts / pertes) par point de vente.
- * Les ventes et la marge sont calculées automatiquement.
- */
-export type RapportFinJournee = {
-  id: string;
-  /** Jour civil YYYY-MM-DD */
-  dateJour: string;
-  pointDeVenteId: string;
-  /** Écart de stock inventaire (négatif = manque) — Ar */
-  ecartStockAr: number;
-  /** Vol constaté — Ar */
-  volAr: number;
-  /** Écart de caisse (négatif = manque) — Ar */
-  ecartCaisseAr: number;
-  /** Invendus / casse / pertes fraîcheur — Ar */
-  invenduAr: number;
-  note?: string;
-  updatedAt: string;
-};
-
 /** Catégorie de justification d'un écart d'inventaire. */
 export type CategorieEcartInventaire =
   | "casse"
@@ -1522,6 +1501,27 @@ export type Inventaire = {
 };
 
 /** Entité concernée par une action tracée dans l'historique. */
+export type RelanceImpayeeCanal =
+  | "email"
+  | "telephone"
+  | "whatsapp"
+  | "visite"
+  | "courrier";
+
+/** Suivi d'une relance sur une facture encore due. */
+export type RelanceImpayee = {
+  id: string;
+  factureId: string;
+  clientId: string;
+  date: string;
+  canal: RelanceImpayeeCanal;
+  note?: string;
+  /** Prochaine action prévue (YYYY-MM-DD). */
+  prochaineRelance?: string;
+  userId?: string;
+  userNom?: string;
+};
+
 export type ActiviteEntite =
   | "client"
   | "produit"
@@ -1559,6 +1559,7 @@ export type ActiviteEntite =
   | "mode_paiement"
   | "sortie_atelier"
   | "motif_sortie_atelier"
+  | "relance_impayee"
   | "autre";
 
 /** Nature de l'action tracée. */
@@ -2012,7 +2013,7 @@ export type AppState = {
   journalAudit: JournalAudit[];
   entrees: EntreeStock[];
   ventes: Vente[];
-  rapportsFinJournee: RapportFinJournee[];
+  relancesImpayes: RelanceImpayee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];

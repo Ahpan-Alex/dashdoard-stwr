@@ -538,6 +538,7 @@ export default function ListeCommandesPage() {
             initialRemiseGlobale={seed.remiseGlobale}
             initialRemiseGlobaleMode={seed.remiseGlobaleMode}
             initialNote={seed.note}
+            horsCommandeId={editId ?? undefined}
             showAcomptes={
               acomptesPourDocument(acomptes, {
                 commandeId: editId ?? undefined,

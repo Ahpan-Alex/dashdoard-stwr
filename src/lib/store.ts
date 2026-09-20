@@ -102,6 +102,7 @@ import {
   stockDisponiblePourOf,
   stockLibreDisponible,
 } from "./repartition-achat-of";
+import { ctxReservationDepuisEtat } from "./reservation-commande";
 import {
   motifBesoinAchatInvalide,
   nextNumeroBesoinAchat,
@@ -312,11 +313,13 @@ import type {
   ModePaiement,
   ModePaiementParam,
   MouvementCompteCourant,
+  NomenclatureProduit,
   Parametres,
   PointDeVente,
   Produit,
+  RelanceImpayee,
+  RelanceImpayeeCanal,
   RoleCompteComptable,
-  RapportFinJournee,
   SourceTransformation,
   SortieAtelier,
   StatutChequeDiffere,
@@ -396,7 +399,7 @@ type Store = {
   journalAudit: JournalAudit[];
   entrees: EntreeStock[];
   ventes: Vente[];
-  rapportsFinJournee: RapportFinJournee[];
+  relancesImpayes: RelanceImpayee[];
   inventaires: Inventaire[];
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];
@@ -914,12 +917,6 @@ type Store = {
   addVente: (vente: Omit<Vente, "id">) => void;
   deleteVente: (id: string) => void;
 
-  /** Crée ou met à jour la clôture du jour pour un PDV. */
-  upsertRapportFinJournee: (
-    data: Omit<RapportFinJournee, "id" | "updatedAt"> & { id?: string },
-  ) => void;
-  deleteRapportFinJournee: (id: string) => void;
-
   addCategorieProduit: (cat: Omit<CategorieProduit, "id">) => void;
   updateCategorieProduit: (id: string, data: Partial<CategorieProduit>) => void;
   deleteCategorieProduit: (id: string) => { ok: boolean; reason?: string };
@@ -1047,6 +1044,21 @@ type Store = {
   }) =>
     | { ok: true; id: string; compteManquant: boolean }
     | { ok: false; reason: string };
+  importerLigneArticle: (input: {
+    mode: "creer" | "fusionner";
+    payload: Omit<Produit, "id">;
+    fusionId?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  importerNomenclaturesProduit: (
+    produitId: string,
+    nomenclatures: NomenclatureProduit[],
+  ) => { ok: true } | { ok: false; reason: string };
+  ajouterRelanceImpayee: (data: {
+    factureId: string;
+    canal: RelanceImpayeeCanal;
+    note?: string;
+    prochaineRelance?: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
   deleteTiers: (id: string) => { ok: boolean; reason?: string };
   /** Accessible à tout utilisateur connecté (pas réservé à l'admin). */
   updatePlafondCredit: (id: string, plafondCredit: number) => { ok: boolean; reason?: string };
@@ -2381,7 +2393,6 @@ export const useStore = create<Store>()((set, get) => ({
           entrees: state.entrees,
           ventes: state.ventes,
           immobilisations: state.immobilisations,
-          rapportsFinJournee: state.rapportsFinJournee,
           achats: state.achats,
           transfertsStock: state.transfertsStock,
           ordresFabrication: state.ordresFabrication,
@@ -3333,11 +3344,7 @@ export const useStore = create<Store>()((set, get) => ({
           },
         );
         if (motifStock) return { ok: false, reason: motifStock };
-        const ctxRes = {
-          achats: state.achats,
-          ordresFabrication: state.ordresFabrication,
-          transfertsMatiereOf: state.transfertsMatiereOf ?? [],
-        };
+        const ctxRes = ctxReservationDepuisEtat(state);
         for (const l of lignes) {
           const libre = stockLibreDisponible(
             l.produitId,
@@ -3350,7 +3357,7 @@ export const useStore = create<Store>()((set, get) => ({
           if (libre + 1e-9 < l.quantite) {
             return {
               ok: false,
-              reason: `Stock libre insuffisant (disponible : ${libre}). Le reste est réservé à des OF.`,
+              reason: `Stock libre insuffisant (disponible : ${libre}). Le reste est réservé à des OF ou des commandes.`,
             };
           }
         }
@@ -6166,49 +6173,36 @@ export const useStore = create<Store>()((set, get) => ({
           ventes: state.ventes.filter((v) => v.id !== id),
         })),
 
-      upsertRapportFinJournee: (data) =>
-        set((state) => {
-          const updatedAt = new Date().toISOString();
-          const existing =
-            (data.id
-              ? state.rapportsFinJournee.find((r) => r.id === data.id)
-              : undefined) ??
-            state.rapportsFinJournee.find(
-              (r) =>
-                r.dateJour === data.dateJour &&
-                r.pointDeVenteId === data.pointDeVenteId,
-            );
-          if (existing) {
-            return {
-              rapportsFinJournee: state.rapportsFinJournee.map((r) =>
-                r.id === existing.id
-                  ? {
-                      ...r,
-                      ...data,
-                      id: existing.id,
-                      updatedAt,
-                    }
-                  : r,
-              ),
-            };
-          }
-          return {
-            rapportsFinJournee: [
-              {
-                ...data,
-                id: uid("rfj"),
-                updatedAt,
-              },
-              ...state.rapportsFinJournee,
-            ],
-          };
-        }),
-      deleteRapportFinJournee: (id) =>
-        set((state) => ({
-          rapportsFinJournee: state.rapportsFinJournee.filter(
-            (r) => r.id !== id,
-          ),
-        })),
+      ajouterRelanceImpayee: (data) => {
+        const state = get();
+        const facture = state.factures.find((f) => f.id === data.factureId);
+        if (!facture) return { ok: false, reason: "Facture introuvable." };
+        const actor = getActiviteActor();
+        const id = uid("rel");
+        const relance: RelanceImpayee = {
+          id,
+          factureId: facture.id,
+          clientId: facture.clientId,
+          date: new Date().toISOString(),
+          canal: data.canal,
+          note: data.note?.trim() || undefined,
+          prochaineRelance: data.prochaineRelance?.trim() || undefined,
+          userId: actor.id,
+          userNom: actor.nom,
+        };
+        set((s) => ({
+          relancesImpayes: [relance, ...(s.relancesImpayes ?? [])],
+          journalActivites: [
+            entreeActivite("autre", "relance_impayee", {
+              entiteId: id,
+              libelle: facture.numero,
+              detail: data.canal,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
 
       addProduit: (produit) => {
         const state = get();
@@ -6259,6 +6253,21 @@ export const useStore = create<Store>()((set, get) => ({
           ],
         }));
         return { ok: true as const, id: nouveau.id };
+      },
+      importerLigneArticle: (input) => {
+        if (input.mode === "fusionner") {
+          const fusionId = input.fusionId;
+          if (!fusionId) return { ok: false, reason: "Article à fusionner manquant." };
+          const res = get().updateProduit(fusionId, input.payload);
+          if (!res.ok) return { ok: false, reason: res.reason ?? "Échec de la fusion." };
+          return { ok: true as const, id: fusionId };
+        }
+        return get().addProduit(input.payload);
+      },
+      importerNomenclaturesProduit: (produitId, nomenclatures) => {
+        const res = get().updateProduit(produitId, { nomenclatures });
+        if (!res.ok) return { ok: false, reason: res.reason ?? "Nomenclature refusée." };
+        return { ok: true as const };
       },
       updateProduit: (id, data, opts) => {
         const state = get();

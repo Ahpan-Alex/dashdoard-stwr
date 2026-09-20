@@ -264,21 +264,27 @@ const sections: { title: string; links: NavLink[] }[] = [
         icon: Wallet,
         permission: "factures.lire",
       },
-      {
-        href: "/factures",
-        label: "Factures",
-        icon: ScrollText,
-        permission: "factures.lire",
-        children: [
-          { href: "/factures", label: "Nouvelle facture", exact: true },
-          { href: "/factures/liste", label: "Liste des factures" },
           {
-            href: "/factures/journal",
-            label: "Journal d'audit",
-            permission: "audit.lire",
+            href: "/factures",
+            label: "Factures",
+            icon: ScrollText,
+            permission: "factures.lire",
+            children: [
+              { href: "/factures", label: "Nouvelle facture", exact: true },
+              { href: "/factures/liste", label: "Liste des factures" },
+              {
+                href: "/factures/journal",
+                label: "Journal d'audit",
+                permission: "audit.lire",
+              },
+            ],
           },
-        ],
-      },
+          {
+            href: "/relances",
+            label: "Relances impayés",
+            icon: Bell,
+            permission: "factures.lire",
+          },
     ],
   },
   {
