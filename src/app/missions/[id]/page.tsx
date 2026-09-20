@@ -1,7 +1,7 @@
 "use client";
 
-import { Component, FormEvent, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { Component, FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
@@ -12,15 +12,15 @@ import { RequirePermission } from "@/components/require-permission";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { CompteTresorerieSelect } from "@/components/compte-tresorerie-select";
 import { useAuthStore } from "@/lib/auth-store";
-import { MODES_PAIEMENT } from "@/lib/commercial";
 import {
   compteCompatibleOuVide,
+  libelleCompteTresorerie,
   libelleModePaiement,
   modesPaiementActifs,
 } from "@/lib/tresorerie";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { createId } from "@/lib/id";
-import { jourLocalISO } from "@/lib/inventaire";
+import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import {
   achatEstJustifie,
   anomaliesMission,
@@ -54,7 +54,10 @@ import {
   depenseEstNatureLibre,
   naturesDepenseActives,
 } from "@/lib/natures-depense-mission";
-import { depenseEnAttenteReclassement } from "@/lib/comptabilite";
+import {
+  compteMissionDuAcheteur,
+  depenseEnAttenteReclassement,
+} from "@/lib/comptabilite";
 import { produitEstAchetable } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
 import { estFournisseur } from "@/lib/tiers";
@@ -149,6 +152,8 @@ function MissionDetail() {
   );
   const comptesTresorerie = useStore((s) => s.comptesTresorerie ?? []);
   const modesPaiement = useStore((s) => s.modesPaiement ?? []);
+  const comptesComptables = useStore((s) => s.comptesComptables ?? []);
+  const comptesMissionAcheteur = useStore((s) => s.comptesMissionAcheteur ?? []);
   const parametres = useStore((s) => s.parametres);
   const journal = useStore((s) =>
     (s.journalActivites ?? []).filter(
@@ -166,9 +171,12 @@ function MissionDetail() {
   const addTiers = useStore((s) => s.addTiers);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const user = useAuthStore((s) => s.user);
+  const users = useAuthStore((s) => s.users);
+  const refreshUsers = useAuthStore((s) => s.refreshUsers);
   const gerer = hasPermission("missions.gerer");
   const rapportRef = useRef<HTMLDivElement>(null);
 
+  const [edition, setEdition] = useState(false);
   const [clotureOpen, setClotureOpen] = useState(false);
   const [exceptionJustificatifs, setExceptionJustificatifs] = useState(false);
   const [nouveauFrnLigneId, setNouveauFrnLigneId] = useState<string | null>(null);
@@ -188,6 +196,10 @@ function MissionDetail() {
     reference: "",
   });
 
+  useEffect(() => {
+    if (gerer) void refreshUsers();
+  }, [gerer, refreshUsers]);
+
   if (!mission) {
     return (
       <div>
@@ -201,8 +213,26 @@ function MissionDetail() {
 
   const doc = mission;
   const verrouille = missionEstVerrouillee(doc);
-  const dossierEditable = gerer && peutModifierDossierMission(doc);
+  const peutOuvrirEdition = gerer && peutModifierDossierMission(doc);
+  const dossierEditable = peutOuvrirEdition && edition;
   const saisie = peutSaisirMission(doc, { gerer, userId: user?.id });
+  const compte467 = compteMissionDuAcheteur(
+    doc.acheteurUserId,
+    comptesMissionAcheteur,
+    comptesComptables,
+  );
+  const acheteurs = (() => {
+    const actifs = users.filter((u) => u.actif);
+    if (actifs.some((u) => u.id === doc.acheteurUserId)) return actifs;
+    const courant = users.find((u) => u.id === doc.acheteurUserId);
+    return courant ? [courant, ...actifs] : actifs;
+  })();
+  const sites = (() => {
+    const actifs = pointsDeVente.filter((s) => s.actif);
+    if (actifs.some((s) => s.id === doc.siteDestinataireId)) return actifs;
+    const courant = pointsDeVente.find((s) => s.id === doc.siteDestinataireId);
+    return courant ? [courant, ...actifs] : actifs;
+  })();
   const achetable = produits.filter(
     (p) => p?.actif && produitEstAchetable(p, categoriesProduits),
   );
@@ -283,6 +313,25 @@ function MissionDetail() {
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap gap-2">
+            {peutOuvrirEdition && (
+              <button
+                type="button"
+                className={edition ? "btn btn-secondary" : "btn btn-primary"}
+                onClick={() => setEdition((v) => !v)}
+              >
+                {edition ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Terminer
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-4 w-4" />
+                    Modifier
+                  </>
+                )}
+              </button>
+            )}
             <DocumentPrintActions
               sheetRef={rapportRef}
               filename={`${mission.numero}-rapport`}
@@ -385,18 +434,78 @@ function MissionDetail() {
       )}
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-        <h2 className="mb-3 font-display text-lg font-semibold">En-tête</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold">En-tête</h2>
+          {peutOuvrirEdition && !edition && (
+            <p className="text-xs text-muted">
+              Mission non clôturée — cliquez sur Modifier pour changer l’acheteur, le site, les dates et le prévisionnel.
+            </p>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+          <label className="block text-xs font-semibold text-muted">
+            Acheteur
+            {dossierEditable ? (
+              <select
+                className="input mt-1"
+                value={mission.acheteurUserId}
+                onChange={(e) => {
+                  const u = acheteurs.find((x) => x.id === e.target.value);
+                  if (!u) return;
+                  const res = modifierMissionAchat(mission.id, {
+                    acheteurUserId: u.id,
+                    acheteurNom: u.nom,
+                  });
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                {acheteurs.length === 0 ? (
+                  <option value={mission.acheteurUserId}>
+                    {mission.acheteurNom}
+                  </option>
+                ) : (
+                  acheteurs.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nom}
+                    </option>
+                  ))
+                )}
+              </select>
+            ) : (
+              <span className="mt-1 block text-sm font-normal text-ink">
+                {mission.acheteurNom}
+              </span>
+            )}
+          </label>
           <p>
-            <span className="text-xs font-semibold uppercase text-muted">Acheteur</span>
+            <span className="text-xs font-semibold uppercase text-muted">
+              Compte 467
+            </span>
             <br />
-            {mission.acheteurNom}
+            {compte467
+              ? `${compte467.numero} — ${compte467.libelle}`
+              : "Créé automatiquement au suivi comptable"}
           </p>
-          <p>
-            <span className="text-xs font-semibold uppercase text-muted">Création</span>
-            <br />
-            {formatDate(mission.date)}
-          </p>
+          <label className="block text-xs font-semibold text-muted">
+            Date de création
+            {dossierEditable ? (
+              <input
+                type="date"
+                className="input mt-1"
+                value={String(mission.date || "").slice(0, 10)}
+                onChange={(e) => {
+                  const res = modifierMissionAchat(mission.id, {
+                    date: isoMidiDepuisJour(e.target.value),
+                  });
+                  if (!res.ok) alert(res.reason);
+                }}
+              />
+            ) : (
+              <span className="mt-1 block text-sm font-normal text-ink">
+                {formatDate(mission.date)}
+              </span>
+            )}
+          </label>
           <label className="block text-xs font-semibold text-muted">
             Date prévue
             {dossierEditable ? (
@@ -414,13 +523,31 @@ function MissionDetail() {
               </span>
             )}
           </label>
-          <p>
-            <span className="text-xs font-semibold uppercase text-muted">
-              Site destinataire (stock)
-            </span>
-            <br />
-            {nomSite}
-          </p>
+          <label className="block text-xs font-semibold text-muted">
+            Site destinataire (stock)
+            {dossierEditable ? (
+              <select
+                className="input mt-1"
+                value={mission.siteDestinataireId}
+                onChange={(e) => {
+                  const res = modifierMissionAchat(mission.id, {
+                    siteDestinataireId: e.target.value,
+                  });
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nom}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="mt-1 block text-sm font-normal text-ink">
+                {nomSite}
+              </span>
+            )}
+          </label>
           <label className="block text-xs font-semibold text-muted">
             Service / département
             {dossierEditable ? (
@@ -871,8 +998,10 @@ function MissionDetail() {
             mission.statut === "fonds_remis" ||
             mission.statut === "en_cours") && (
           <p className="mt-3 text-xs text-muted">
-            Le décaissement sort du compte de trésorerie choisi et passe en
-            comptabilité (compte 471 en attente de justificatifs).
+            L’achat saisi passe automatiquement en comptabilité : charge (classe 6)
+            au débit, compte 467 de l’acheteur au crédit. Le paiement (décaissement
+            ou paiement de ligne) débite le 467 et crédite le compte de trésorerie,
+            et sort de la caisse / banque / mobile money.
           </p>
         )}
       </section>
@@ -906,7 +1035,10 @@ function MissionDetail() {
         <p className="mb-3 text-xs text-muted">
           Prévu {formatCurrency(fin.budget)} vs dépensé{" "}
           {formatCurrency(totalDepenseMission(mission))} · Achats{" "}
-          {formatCurrency(totalAchatsRealises(mission))}
+          {formatCurrency(totalAchatsRealises(mission))}. Chaque ligne avec
+          quantité et prix génère 6 au débit / 467 au crédit. Pour payer depuis
+          l’entreprise, choisissez le mode et le compte de trésorerie (467 au
+          débit / trésorerie au crédit).
         </p>
         <div className="table-shell">
           <table className="data">
@@ -1131,28 +1263,76 @@ function MissionDetail() {
                     </td>
                     <td>
                       {saisie ? (
-                        <select
-                          className="select w-32"
-                          value={l.modePaiement ?? ""}
-                          onChange={(e) =>
-                            patchRealises((lignes) =>
-                              lignes.map((x) =>
-                                x.id === l.id
-                                  ? { ...x, modePaiement: e.target.value || undefined }
-                                  : x,
-                              ),
-                            )
-                          }
-                        >
-                          <option value="">—</option>
-                          {Object.entries(MODES_PAIEMENT).map(([k, lab]) => (
-                            <option key={k} value={k}>
-                              {lab}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex min-w-[12rem] flex-col gap-1">
+                          <select
+                            className="select w-full"
+                            value={l.modePaiement ?? ""}
+                            onChange={(e) => {
+                              const modePaiement = e.target.value || undefined;
+                              patchRealises((lignes) =>
+                                lignes.map((x) =>
+                                  x.id === l.id
+                                    ? {
+                                        ...x,
+                                        modePaiement,
+                                        compteTresorerieId: modePaiement
+                                          ? compteCompatibleOuVide(
+                                              x.compteTresorerieId,
+                                              modePaiement,
+                                              comptesTresorerie,
+                                              modesPaiement,
+                                            ) || undefined
+                                          : undefined,
+                                      }
+                                    : x,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="">— Non payé —</option>
+                            {modesPaiementActifs(modesPaiement).map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.libelle}
+                              </option>
+                            ))}
+                          </select>
+                          {l.modePaiement ? (
+                            <CompteTresorerieSelect
+                              modePaiement={l.modePaiement}
+                              value={l.compteTresorerieId ?? ""}
+                              onChange={(compteTresorerieId) =>
+                                patchRealises((lignes) =>
+                                  lignes.map((x) =>
+                                    x.id === l.id
+                                      ? {
+                                          ...x,
+                                          compteTresorerieId:
+                                            compteTresorerieId || undefined,
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              allowEmpty
+                              emptyLabel="— Compte trésorerie —"
+                            />
+                          ) : null}
+                        </div>
                       ) : l.modePaiement ? (
-                        MODES_PAIEMENT[l.modePaiement] ?? l.modePaiement
+                        <span>
+                          {libelleModePaiement(l.modePaiement, modesPaiement)}
+                          {l.compteTresorerieId ? (
+                            <>
+                              <br />
+                              <span className="text-xs text-muted">
+                                {libelleCompteTresorerie(
+                                  l.compteTresorerieId,
+                                  comptesTresorerie,
+                                )}
+                              </span>
+                            </>
+                          ) : null}
+                        </span>
                       ) : (
                         "—"
                       )}
@@ -1642,7 +1822,8 @@ function MissionDetail() {
         <p className="mt-3 text-xs text-muted">
           Solde = fonds remis − dépenses justifiées. Le décaissement et la
           restitution (ou le remboursement) s&apos;enregistrent sur un compte de
-          trésorerie : caisse / banque / mobile money et journal comptable 471.
+          trésorerie : caisse / banque / mobile money, contre le compte 467 de
+          l&apos;acheteur.
         </p>
 
         {gerer &&

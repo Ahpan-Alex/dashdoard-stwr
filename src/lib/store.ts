@@ -153,8 +153,10 @@ import {
   parserCsvPlanComptable,
   PREFIXE_COMPTE_CLIENT,
   PREFIXE_COMPTE_FOURNISSEUR,
+  PREFIXE_COMPTE_MISSION_ACHETEUR,
   prochainNumeroSousCompteTiers,
   regenererEcrituresComptables,
+  numeroEstCompte467,
   VALEUR_COMPTE_TIERS_AUTO,
   validerImportPlanComptable,
   dedupliquerIdsComptes,
@@ -359,6 +361,7 @@ import type {
   BesoinAchat,
   OrdreFabrication,
   TypeNomenclature,
+  CompteMissionAcheteur,
   MissionAchat,
   MissionAchatRealise,
   MissionDepenseDiverse,
@@ -404,6 +407,7 @@ type Store = {
   ordresFabrication: OrdreFabrication[];
   bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
+  comptesMissionAcheteur: CompteMissionAcheteur[];
   demandesPrix: DemandePrix[];
   besoinsAchat: BesoinAchat[];
   pointsDeVente: PointDeVente[];
@@ -1484,6 +1488,7 @@ function journalDepuis(state: {
   modesPaiement?: ModePaiementParam[];
   operationsTresorerie?: OperationTresorerie[];
   reclassements471?: Reclassement471[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
     factures: state.factures,
@@ -1505,6 +1510,7 @@ function journalDepuis(state: {
     modesPaiement: state.modesPaiement,
     operationsTresorerie: state.operationsTresorerie,
     reclassements471: state.reclassements471,
+    comptesMissionAcheteur: state.comptesMissionAcheteur,
   });
 }
 
@@ -1529,15 +1535,21 @@ function avecJournal<T extends Record<string, unknown>>(
     modesPaiement?: ModePaiementParam[];
     operationsTresorerie?: OperationTresorerie[];
     reclassements471?: Reclassement471[];
+    comptesMissionAcheteur?: CompteMissionAcheteur[];
   },
   patch: T,
 ): T & {
   ecrituresComptables: EcritureComptable[];
   parametres: Parametres;
   comptesComptables: CompteComptable[];
+  comptesMissionAcheteur: CompteMissionAcheteur[];
 } {
   const merged = { ...state, ...patch };
   const seeded = seedComptesDefautState(merged);
+  const comptes467 = etatAvecComptes467Missions({
+    ...merged,
+    ...seeded,
+  });
   const assures = assurerJournauxParCompteTresorerie(
     merged.comptesTresorerie ?? [],
     merged.journauxTresorerie ?? [],
@@ -1547,10 +1559,12 @@ function avecJournal<T extends Record<string, unknown>>(
     comptesTresorerie: assures.comptes,
     journauxTresorerie: assures.journaux,
     parametres: seeded.parametres,
-    comptesComptables: seeded.comptesComptables,
+    comptesComptables: comptes467.comptesComptables,
+    comptesMissionAcheteur: comptes467.comptesMissionAcheteur,
     ecrituresComptables: journalDepuis({
       ...merged,
       ...seeded,
+      ...comptes467,
       comptesTresorerie: assures.comptes,
       journauxTresorerie: assures.journaux,
       ecrituresComptables:
@@ -1717,6 +1731,107 @@ function resoudreCompteTiersAuto(opts: {
   };
   comptes = [nouveau, ...comptes];
   return { ok: true, compteId: nouveau.id, comptes };
+}
+
+function etatAvecCompte467Acheteur(opts: {
+  userId: string;
+  nom: string;
+  comptes: CompteComptable[];
+  liens: CompteMissionAcheteur[];
+  parametres: Parametres;
+}): { comptes: CompteComptable[]; liens: CompteMissionAcheteur[] } {
+  const nomTrim = opts.nom.trim() || "Acheteur";
+  let comptes = opts.comptes;
+  let liens = opts.liens;
+  if (!opts.userId) return { comptes, liens };
+  const existant = liens.find((l) => l.userId === opts.userId);
+  if (existant) {
+    const c = comptes.find((x) => x.id === existant.compteId);
+    if (c && numeroEstCompte467(c.numero)) {
+      if (nomTrim !== existant.nom) {
+        liens = liens.map((l) =>
+          l.userId === opts.userId ? { ...l, nom: nomTrim } : l,
+        );
+        const libelle = libelleCompteTiersAuto(
+          PREFIXE_COMPTE_MISSION_ACHETEUR,
+          nomTrim,
+        );
+        comptes = comptes.map((x) =>
+          x.id === existant.compteId ? { ...x, libelle } : x,
+        );
+      }
+      return { comptes, liens };
+    }
+    liens = liens.filter((l) => l.userId !== opts.userId);
+  }
+  const longueur = longueurNumeroCompteEffective(opts.parametres);
+  if (longueur == null) return { comptes, liens };
+  const numeroParent = completerNumeroCompte(
+    PREFIXE_COMPTE_MISSION_ACHETEUR,
+    longueur,
+  );
+  if (
+    !comptes.some(
+      (c) => chiffresNumeroCompte(c.numero) === chiffresNumeroCompte(numeroParent),
+    )
+  ) {
+    comptes = [
+      {
+        id: uid("cpt"),
+        numero: numeroParent,
+        libelle: "Autres comptes débiteurs ou créditeurs",
+      },
+      ...comptes,
+    ];
+  }
+  const numero = prochainNumeroSousCompteTiers(
+    PREFIXE_COMPTE_MISSION_ACHETEUR,
+    comptes,
+    longueur,
+  );
+  if (!numero) return { comptes, liens };
+  const nouveau: CompteComptable = {
+    id: uid("cpt"),
+    numero,
+    libelle: libelleCompteTiersAuto(PREFIXE_COMPTE_MISSION_ACHETEUR, nomTrim),
+  };
+  comptes = [nouveau, ...comptes];
+  liens = [
+    { userId: opts.userId, nom: nomTrim, compteId: nouveau.id },
+    ...liens,
+  ];
+  return { comptes, liens };
+}
+
+function etatAvecComptes467Missions(state: {
+  missionsAchat?: MissionAchat[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
+  comptesComptables: CompteComptable[];
+  parametres: Parametres;
+}) {
+  let comptes = state.comptesComptables;
+  let liens = state.comptesMissionAcheteur ?? [];
+  const vus = new Map<string, string>();
+  for (const l of liens) {
+    if (l.userId && !vus.has(l.userId)) vus.set(l.userId, l.nom);
+  }
+  for (const m of state.missionsAchat ?? []) {
+    if (m.acheteurUserId && !vus.has(m.acheteurUserId)) {
+      vus.set(m.acheteurUserId, m.acheteurNom);
+    }
+  }
+  for (const [userId, nom] of vus) {
+    const next = etatAvecCompte467Acheteur({
+      userId,
+      nom,
+      comptes,
+      liens,
+      parametres: state.parametres,
+    });
+    comptes = next.comptes;
+    liens = next.liens;
+  }
+  return { comptesComptables: comptes, comptesMissionAcheteur: liens };
 }
 
 function utilisateurCourantPeutAgirSurSite(siteId: string) {
@@ -5492,6 +5607,13 @@ export const useStore = create<Store>()((set, get) => ({
         if (!gerer && !saisie) {
           return { ok: false, reason: "Seul l'acheteur assigné peut saisir les achats de cette mission." };
         }
+        if (data.siteDestinataireId && data.siteDestinataireId !== prev.siteDestinataireId) {
+          const site = state.pointsDeVente.find((s) => s.id === data.siteDestinataireId);
+          if (!site) return { ok: false, reason: "Site destinataire introuvable." };
+        }
+        if (data.acheteurUserId !== undefined && !data.acheteurUserId) {
+          return { ok: false, reason: "Assignez un acheteur." };
+        }
         const headerKeys = [
           "acheteurUserId",
           "acheteurNom",
@@ -5613,21 +5735,23 @@ export const useStore = create<Store>()((set, get) => ({
             ],
           };
         }
-        set((s) => ({
-          missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
-          ...(evenements.length
-            ? {
-                journalActivites: [
-                  entreeActivite("modification", "mission_achat", {
-                    entiteId: id,
-                    libelle: prev.numero,
-                    detail: evenements.map((e) => e.detail).join(" · "),
-                  }),
-                  ...s.journalActivites,
-                ],
-              }
-            : {}),
-        }));
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            ...(evenements.length
+              ? {
+                  journalActivites: [
+                    entreeActivite("modification", "mission_achat", {
+                      entiteId: id,
+                      libelle: prev.numero,
+                      detail: evenements.map((e) => e.detail).join(" · "),
+                    }),
+                    ...s.journalActivites,
+                  ],
+                }
+              : {}),
+          }),
+        );
         return { ok: true };
       },
 

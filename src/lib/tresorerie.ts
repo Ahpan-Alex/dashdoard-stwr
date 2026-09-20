@@ -553,6 +553,14 @@ export type MissionFondsTreso = {
     compteTresorerieId?: string;
     reference?: string;
   }[];
+  achatsRealises?: {
+    id: string;
+    quantite: number;
+    prixUnitaire: number;
+    dateAchat?: string;
+    modePaiement?: string;
+    compteTresorerieId?: string;
+  }[];
 };
 
 export function mouvementsDepuisMissions(
@@ -596,6 +604,33 @@ export function mouvementsDepuisMissions(
         source: "mission",
         sourceId: m.id,
         lignePaiementId: mv.id,
+      });
+    }
+    for (const l of m.achatsRealises ?? []) {
+      if (!l.compteTresorerieId || !l.modePaiement) continue;
+      const montant = Math.round(
+        Math.max(0, l.quantite) * Math.max(0, l.prixUnitaire),
+      );
+      if (montant <= 0) continue;
+      const ligne: LignePaiement = {
+        id: l.id,
+        date: l.dateAchat || new Date().toISOString(),
+        montant,
+        modePaiement: l.modePaiement,
+        compteTresorerieId: l.compteTresorerieId,
+      };
+      if (!ligneGenereMouvement(ligne, modes)) continue;
+      out.push({
+        id: mvId("mission", `achat-${l.id}`),
+        date: dateMouvementLigne(ligne),
+        compteTresorerieId: l.compteTresorerieId,
+        montant: -montant,
+        sens: "sortie",
+        modePaiementId: l.modePaiement,
+        libelle: `Mission ${m.numero ?? m.id} · Paiement achat`,
+        source: "mission",
+        sourceId: m.id,
+        lignePaiementId: l.id,
       });
     }
   }
@@ -1004,6 +1039,7 @@ export function modePaiementUtilise(
   }
   for (const m of ctx.missions ?? []) {
     if ((m.mouvementsFonds ?? []).some((mv) => mv.modePaiement === id)) return true;
+    if ((m.achatsRealises ?? []).some((l) => l.modePaiement === id)) return true;
   }
   return false;
 }
@@ -1032,6 +1068,9 @@ export function compteTresorerieUtilise(
   }
   for (const m of ctx.missions ?? []) {
     if ((m.mouvementsFonds ?? []).some((mv) => mv.compteTresorerieId === id)) {
+      return true;
+    }
+    if ((m.achatsRealises ?? []).some((l) => l.compteTresorerieId === id)) {
       return true;
     }
   }

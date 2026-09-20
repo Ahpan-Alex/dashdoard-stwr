@@ -1934,6 +1934,8 @@ export type MissionAchatRealise = {
   numeroJustificatif?: string;
   typeJustificatif?: MissionJustificatifType;
   modePaiement?: string;
+  /** Compte de trésorerie si l'achat est payé par l'entreprise (sortie 467 / 5xx). */
+  compteTresorerieId?: string;
   commentaire?: string;
   /** Absent = quantité achetée (rétrocompatibilité / entrée en stock). */
   quantiteReceptionnee?: number;
@@ -2012,6 +2014,12 @@ export type MissionValidationEtape = {
   detail?: string;
 };
 
+export type CompteMissionAcheteur = {
+  userId: string;
+  nom: string;
+  compteId: string;
+};
+
 export type MissionAchat = {
   id: string;
   numero: string;
@@ -2078,6 +2086,8 @@ export type AppState = {
   /** Bons à tirer versionnés, liés à une commande client. */
   bonsATirer: BonATirer[];
   missionsAchat: MissionAchat[];
+  /** Sous-compte 467 unique par acheteur, pour le suivi des fonds de mission. */
+  comptesMissionAcheteur: CompteMissionAcheteur[];
   demandesPrix: DemandePrix[];
   besoinsAchat: BesoinAchat[];
   pointsDeVente: PointDeVente[];

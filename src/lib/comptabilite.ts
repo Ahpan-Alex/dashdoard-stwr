@@ -14,6 +14,7 @@ import type {
   Client,
   Acompte,
   CompteComptable,
+  CompteMissionAcheteur,
   CompteTresorerie,
   EcritureComptable,
   Facture,
@@ -103,6 +104,7 @@ export const ID_COMPTE_DEFAUT_VENTE = "cpt-defaut-vente";
 
 export const PREFIXE_COMPTE_FOURNISSEUR = "401";
 export const PREFIXE_COMPTE_CLIENT = "411";
+export const PREFIXE_COMPTE_MISSION_ACHETEUR = "467";
 export const VALEUR_COMPTE_TIERS_AUTO = "__auto__";
 
 export const MSG_COMPTE_TIERS_AUTO =
@@ -455,7 +457,8 @@ export function motifNumeroCompteSaisie(
 
 export type PrefixeCompteTiers =
   | typeof PREFIXE_COMPTE_CLIENT
-  | typeof PREFIXE_COMPTE_FOURNISSEUR;
+  | typeof PREFIXE_COMPTE_FOURNISSEUR
+  | typeof PREFIXE_COMPTE_MISSION_ACHETEUR;
 
 export function estCompteFamilleTiers(
   numero: string,
@@ -498,7 +501,12 @@ export function libelleCompteTiersAuto(
   prefixe: PrefixeCompteTiers,
   nomTiers: string,
 ) {
-  const role = prefixe === PREFIXE_COMPTE_CLIENT ? "Client" : "Fournisseur";
+  const role =
+    prefixe === PREFIXE_COMPTE_CLIENT
+      ? "Client"
+      : prefixe === PREFIXE_COMPTE_FOURNISSEUR
+        ? "Fournisseur"
+        : "Acheteur mission";
   const nom = nomTiers.trim() || "Tiers";
   return `${role} — ${nom}`;
 }
@@ -644,6 +652,58 @@ export function compteAttente471(comptes: CompteComptable[]) {
       chiffresNumeroCompte(a.numero).length -
       chiffresNumeroCompte(b.numero).length,
   )[0];
+}
+
+export function numeroEstCompte467(numero: string) {
+  return chiffresNumeroCompte(numero).startsWith(PREFIXE_COMPTE_MISSION_ACHETEUR);
+}
+
+export function compteMissionDuAcheteur(
+  userId: string | undefined,
+  liens: CompteMissionAcheteur[] | undefined,
+  comptes: CompteComptable[],
+) {
+  if (!userId) return undefined;
+  const lien = (liens ?? []).find((l) => l.userId === userId);
+  if (!lien) return undefined;
+  const compte = comptes.find((c) => c.id === lien.compteId);
+  if (!compte || !numeroEstCompte467(compte.numero)) return undefined;
+  return compte;
+}
+
+export function compteContrepartieMissionAchat(
+  mission: Pick<MissionAchat, "acheteurUserId">,
+  liens: CompteMissionAcheteur[] | undefined,
+  comptes: CompteComptable[],
+) {
+  return (
+    compteMissionDuAcheteur(mission.acheteurUserId, liens, comptes) ??
+    compteAttente471(comptes)
+  );
+}
+
+function missionGenereEcrituresAchat(statut: MissionAchat["statut"]) {
+  return (
+    statut !== "brouillon" &&
+    statut !== "soumise" &&
+    statut !== "rejetee" &&
+    statut !== "annule"
+  );
+}
+
+function dateEcritureMissionAchat(
+  dates: (string | undefined)[],
+  mission: MissionAchat,
+  contre: boolean,
+) {
+  if (contre) {
+    return mission.dateAnnulation ?? mission.dateCloture ?? mission.date;
+  }
+  const valides = dates
+    .map((d) => (d ?? "").trim())
+    .filter((d) => d.length >= 8);
+  if (valides.length) return [...valides].sort().slice(-1)[0];
+  return mission.date;
 }
 
 export function comptesDestinationReclassement471(comptes: CompteComptable[]) {
@@ -1238,6 +1298,7 @@ function ecritureMissionFournisseur(opts: {
   comptes: CompteComptable[];
   parametres: Parametres;
   tiers?: Tiers[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
   contre: boolean;
 }): EcritureComptable | null {
   const { mission, fournisseurId, contre } = opts;
@@ -1268,18 +1329,25 @@ function ecritureMissionFournisseur(opts: {
     compteTva: undefined,
     libelleTva: "TVA déductible",
   });
+  const compte467 = compteContrepartieMissionAchat(
+    mission,
+    opts.comptesMissionAcheteur,
+    opts.comptes,
+  );
   const lignes = equilibrer(lignesProduits, {
     id: `${prefix}-ctp`,
-    compte: compteFournisseurDuTiers(fiche, opts.comptes),
-    fallbackLibelle: `Fournisseurs — ${nom}`,
+    compte: compte467,
+    fallbackLibelle: `467 — ${mission.acheteurNom}`,
     debitSiPositif: contre,
   });
   if (lignes.every((l) => l.debit === 0 && l.credit === 0)) return null;
   return {
     id: prefix,
-    date: contre
-      ? (mission.dateAnnulation ?? mission.dateCloture ?? mission.date)
-      : (mission.dateCloture ?? mission.date),
+    date: dateEcritureMissionAchat(
+      opts.lignes.map((l) => l.dateAchat),
+      mission,
+      contre,
+    ),
     libelle: contre
       ? `Annulation mission ${mission.numero} — ${nom}`
       : `Mission ${mission.numero} — ${nom}`,
@@ -1298,9 +1366,10 @@ export function ecrituresDepuisMission(opts: {
   parametres: Parametres;
   tiers?: Tiers[];
   naturesDepense?: NatureDepenseMission[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
 }): EcritureComptable[] {
   const { mission } = opts;
-  if (mission.statut !== "cloture" && mission.statut !== "cloture_annule") return [];
+  if (!missionGenereEcrituresAchat(mission.statut)) return [];
   const parFournisseur = new Map<string, MissionAchat["achatsRealises"]>();
   for (const l of mission.achatsRealises) {
     if (l.quantite <= 0 || montantLigneRealisee(l) <= 0) continue;
@@ -1353,18 +1422,16 @@ function ecritureMissionDepense(opts: {
   comptes: CompteComptable[];
   tiers?: Tiers[];
   naturesDepense?: NatureDepenseMission[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
   contre: boolean;
 }): EcritureComptable | null {
   const { mission, depense, contre } = opts;
   const natures = opts.naturesDepense ?? [];
-  const fiche = opts.tiers?.find((t) => t.id === depense.fournisseurId);
-  const nom = fiche?.nom ?? TIERS_DIVERS_MARCHE_NOM;
   const compteCharge = compteImputationDepenseMission(
     depense,
     natures,
     opts.comptes,
   );
-  const compteFournisseur = compteFournisseurDuTiers(fiche, opts.comptes);
   const prefix = contre
     ? `ecr-mis-dep-ann-${mission.id}-${depense.id}`
     : `ecr-mis-dep-${mission.id}-${depense.id}`;
@@ -1383,18 +1450,25 @@ function ecritureMissionDepense(opts: {
       contre ? ht : 0,
     ),
   ];
+  const compte467 = compteContrepartieMissionAchat(
+    mission,
+    opts.comptesMissionAcheteur,
+    opts.comptes,
+  );
   const equilibrees = equilibrer(lignes, {
     id: `${prefix}-ctp`,
-    compte: compteFournisseur,
-    fallbackLibelle: `Fournisseurs — ${nom}`,
+    compte: compte467,
+    fallbackLibelle: `467 — ${mission.acheteurNom}`,
     debitSiPositif: contre,
   });
   if (equilibrees.every((l) => l.debit === 0 && l.credit === 0)) return null;
   return {
     id: prefix,
-    date: contre
-      ? (mission.dateAnnulation ?? mission.dateCloture ?? mission.date)
-      : (mission.dateCloture ?? depense.date ?? mission.date),
+    date: dateEcritureMissionAchat(
+      [depense.date],
+      mission,
+      contre,
+    ),
     libelle: contre
       ? `Annulation mission ${mission.numero} — ${libNature}`
       : `Mission ${mission.numero} — ${libNature}`,
@@ -1585,6 +1659,8 @@ export function ecritureDepuisMouvementTresorerie(opts: {
   clients: Client[];
   fournisseurs: Fournisseur[];
   tiers?: Tiers[];
+  missions?: MissionAchat[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
 }): EcritureComptable | null {
   const m = opts.mouvement;
   if (m.source === "operation") return null;
@@ -1636,7 +1712,14 @@ export function ecritureDepuisMouvementTresorerie(opts: {
       opts.comptes,
     );
   } else if (m.source === "mission") {
-    contre = compteAttente471(opts.comptes);
+    const mission = opts.missions?.find((x) => x.id === m.sourceId);
+    contre = mission
+      ? compteContrepartieMissionAchat(
+          mission,
+          opts.comptesMissionAcheteur,
+          opts.comptes,
+        )
+      : compteAttente471(opts.comptes);
   }
   if (!contre?.numero) return null;
 
@@ -1816,6 +1899,7 @@ export function regenererEcrituresComptables(opts: {
   modesPaiement?: ModePaiementParam[];
   operationsTresorerie?: OperationTresorerie[];
   reclassements471?: Reclassement471[];
+  comptesMissionAcheteur?: CompteMissionAcheteur[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
     return (opts.existantes ?? []).filter(ecritureEstTransferee);
@@ -1863,6 +1947,7 @@ export function regenererEcrituresComptables(opts: {
       parametres: opts.parametres,
       tiers: opts.tiers,
       naturesDepense: opts.naturesDepenseMission,
+      comptesMissionAcheteur: opts.comptesMissionAcheteur,
     })) {
       generees.push(e);
     }
@@ -1897,6 +1982,8 @@ export function regenererEcrituresComptables(opts: {
       clients: opts.clients,
       fournisseurs: opts.fournisseurs,
       tiers: opts.tiers,
+      missions: opts.missionsAchat,
+      comptesMissionAcheteur: opts.comptesMissionAcheteur,
     });
     if (e && ecritureEstEquilibree(e)) generees.push(e);
   }

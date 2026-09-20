@@ -90,6 +90,7 @@ export function emptyAppState(): AppState {
     ordresFabrication: [],
     bonsATirer: [],
     missionsAchat: [],
+    comptesMissionAcheteur: [],
     demandesPrix: [],
     besoinsAchat: [],
     pointsDeVente: [],
@@ -153,6 +154,9 @@ export function pickAppState(state: AppState): AppState {
     ordresFabrication: state.ordresFabrication ?? [],
     bonsATirer: state.bonsATirer ?? [],
     missionsAchat: state.missionsAchat ?? [],
+    comptesMissionAcheteur: Array.isArray(state.comptesMissionAcheteur)
+      ? state.comptesMissionAcheteur
+      : [],
     demandesPrix: state.demandesPrix ?? [],
     besoinsAchat: state.besoinsAchat ?? [],
     pointsDeVente: state.pointsDeVente,
