@@ -287,6 +287,7 @@ import { createId } from "./id";
 import { parserReleveBancaireCsv } from "./rapprochement-bancaire";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
+import { estAdministrateur } from "./auth/rbac";
 import {
   creerVerrouTransformation,
   verrouTransformationActif,
@@ -1980,7 +1981,10 @@ function tracerRemiseDocument(
 }
 
 function actorPeutGererMissions() {
-  return useAuthStore.getState().hasPermission("missions.gerer");
+  const auth = useAuthStore.getState();
+  const user = auth.currentUser();
+  if (user && estAdministrateur(user)) return true;
+  return auth.hasPermission("missions.gerer");
 }
 
 function actorPeutGererBat() {

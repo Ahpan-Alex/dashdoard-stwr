@@ -331,12 +331,7 @@ export function peutSaisirMission(
   opts: { userId?: string; gerer: boolean },
 ) {
   if (missionEstVerrouillee(mission)) return false;
-  if (opts.gerer) {
-    return (
-      mission.statut === "validee" ||
-      MISSION_STATUTS_EXECUTION.includes(mission.statut)
-    );
-  }
+  if (opts.gerer) return true;
   if (!MISSION_STATUTS_EXECUTION.includes(mission.statut)) return false;
   return Boolean(opts.userId && opts.userId === mission.acheteurUserId);
 }

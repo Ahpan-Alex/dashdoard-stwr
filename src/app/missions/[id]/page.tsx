@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -172,25 +172,34 @@ class MissionDetailBoundary extends Component<
 function MissionDetail() {
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
-  const mission = useStore((s) => (s.missionsAchat ?? []).find((m) => m.id === id));
-  const produits = useStore((s) => (Array.isArray(s.produits) ? s.produits : []));
-  const categoriesProduits = useStore((s) =>
-    Array.isArray(s.categoriesProduits) ? s.categoriesProduits : [],
-  );
-  const tiers = useStore((s) => s.tiers ?? []);
-  const naturesDepenseMission = useStore((s) => s.naturesDepenseMission ?? []);
-  const pointsDeVente = useStore((s) =>
-    Array.isArray(s.pointsDeVente) ? s.pointsDeVente : [],
-  );
-  const comptesTresorerie = useStore((s) => s.comptesTresorerie ?? []);
-  const modesPaiement = useStore((s) => s.modesPaiement ?? []);
-  const comptesComptables = useStore((s) => s.comptesComptables ?? []);
-  const comptesMissionAcheteur = useStore((s) => s.comptesMissionAcheteur ?? []);
+  const missionsAchat = useStore((s) => s.missionsAchat);
+  const mission = (missionsAchat ?? []).find((m) => m.id === id);
+  const produitsBruts = useStore((s) => s.produits);
+  const produits = Array.isArray(produitsBruts) ? produitsBruts : [];
+  const categoriesBrutes = useStore((s) => s.categoriesProduits);
+  const categoriesProduits = Array.isArray(categoriesBrutes) ? categoriesBrutes : [];
+  const tiersBruts = useStore((s) => s.tiers);
+  const tiers = Array.isArray(tiersBruts) ? tiersBruts : [];
+  const naturesBrutes = useStore((s) => s.naturesDepenseMission);
+  const naturesDepenseMission = Array.isArray(naturesBrutes) ? naturesBrutes : [];
+  const pointsBruts = useStore((s) => s.pointsDeVente);
+  const pointsDeVente = Array.isArray(pointsBruts) ? pointsBruts : [];
+  const comptesTresoBruts = useStore((s) => s.comptesTresorerie);
+  const comptesTresorerie = Array.isArray(comptesTresoBruts) ? comptesTresoBruts : [];
+  const modesBruts = useStore((s) => s.modesPaiement);
+  const modesPaiement = Array.isArray(modesBruts) ? modesBruts : [];
+  const comptesGlBruts = useStore((s) => s.comptesComptables);
+  const comptesComptables = Array.isArray(comptesGlBruts) ? comptesGlBruts : [];
+  const comptes467Bruts = useStore((s) => s.comptesMissionAcheteur);
+  const comptesMissionAcheteur = Array.isArray(comptes467Bruts) ? comptes467Bruts : [];
   const parametres = useStore((s) => s.parametres);
-  const journal = useStore((s) =>
-    (s.journalActivites ?? []).filter(
-      (j) => j.entite === "mission_achat" && j.entiteId === id,
-    ),
+  const journalActivites = useStore((s) => s.journalActivites);
+  const journal = useMemo(
+    () =>
+      (journalActivites ?? []).filter(
+        (j) => j.entite === "mission_achat" && j.entiteId === id,
+      ),
+    [journalActivites, id],
   );
   const modifierMissionAchat = useStore((s) => s.modifierMissionAchat);
   const soumettreMissionAchat = useStore((s) => s.soumettreMissionAchat);
@@ -209,7 +218,7 @@ function MissionDetail() {
     hasPermission("missions.gerer") || estAdministrateur(user ?? { role: "" });
   const rapportRef = useRef<HTMLDivElement>(null);
 
-  const [edition, setEdition] = useState(false);
+  const [edition, setEdition] = useState(true);
   const [clotureOpen, setClotureOpen] = useState(false);
   const [exceptionJustificatifs, setExceptionJustificatifs] = useState(false);
   const [nouveauFrnLigneId, setNouveauFrnLigneId] = useState<string | null>(null);
@@ -248,7 +257,9 @@ function MissionDetail() {
   const verrouille = missionEstVerrouillee(doc);
   const peutOuvrirEdition = gerer && peutModifierDossierMission(doc);
   const dossierEditable = peutOuvrirEdition && edition;
-  const saisie = peutSaisirMission(doc, { gerer, userId: user?.id });
+  const saisie = gerer
+    ? !verrouille
+    : peutSaisirMission(doc, { gerer, userId: user?.id });
   const compte467 = compteMissionDuAcheteur(
     doc.acheteurUserId,
     comptesMissionAcheteur,
@@ -395,8 +406,8 @@ function MissionDetail() {
       {peutOuvrirEdition && !edition && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-sea-300 bg-sea-50 p-4">
           <p className="text-sm text-ink">
-            Mission non clôturée : l’administrateur peut modifier l’acheteur, le
-            site, les dates et la liste prévisionnelle.
+            Mission non clôturée : cliquez Modifier pour éditer l’en-tête, la
+            liste prévisionnelle et les achats réalisés.
           </p>
           <BoutonModifierMission
             visible
