@@ -10,6 +10,8 @@ import {
   produitEstFabrique,
 } from "@/lib/nature-stock";
 import { libelleProduit } from "@/lib/produits";
+import { siteEstAtelier } from "@/lib/sites";
+import { useStore } from "@/lib/store";
 import {
   TYPE_CALCUL_NOMENCLATURE_LABELS,
   typeCalculNomenclature,
@@ -234,6 +236,10 @@ function BlocNomenclature({
         <Plus className="h-4 w-4" />
         Ajouter un composant
       </button>
+      <TempsModNomenclature
+        nomenclature={nomenclature}
+        onChange={onChange}
+      />
       {nomenclature.lignes.map((l) => {
         const p = produits.find((x) => x.id === l.composantId);
         return p ? null : (
@@ -474,5 +480,116 @@ function LigneNomenclature({
         </button>
       </td>
     </tr>
+  );
+}
+
+function TempsModNomenclature({
+  nomenclature,
+  onChange,
+}: {
+  nomenclature: NomenclatureProduit;
+  onChange: (n: NomenclatureProduit) => void;
+}) {
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const ateliers = pointsDeVente.filter((s) => s.actif && siteEstAtelier(s));
+  const lignes = nomenclature.tempsMod ?? [];
+
+  function patch(next: typeof lignes) {
+    onChange({
+      ...nomenclature,
+      tempsMod: next.length ? next : undefined,
+    });
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="mb-1 text-[11px] font-semibold text-muted">
+        Temps standard MOD (pour 1 unité)
+      </p>
+      <p className="mb-2 text-[11px] font-normal text-muted">
+        Facultatif. Sert au coût théorique ; le temps réel se saisit sur l&apos;OF.
+      </p>
+      {lignes.length > 0 && (
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Atelier</th>
+              <th>Heures</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {lignes.map((l) => (
+              <tr key={l.id}>
+                <td>
+                  <select
+                    className="select"
+                    value={l.atelierId}
+                    onChange={(e) =>
+                      patch(
+                        lignes.map((x) =>
+                          x.id === l.id ? { ...x, atelierId: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">— Choisir —</option>
+                    {ateliers.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.nom}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="input"
+                    value={l.heures}
+                    onChange={(e) =>
+                      patch(
+                        lignes.map((x) =>
+                          x.id === l.id
+                            ? { ...x, heures: Number(e.target.value) || 0 }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => patch(lignes.filter((x) => x.id !== l.id))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <button
+        type="button"
+        className="btn btn-secondary mt-2"
+        onClick={() =>
+          patch([
+            ...lignes,
+            {
+              id: createId("nmod"),
+              atelierId: ateliers[0]?.id ?? "",
+              heures: 1,
+            },
+          ])
+        }
+      >
+        <Plus className="h-4 w-4" />
+        Ajouter un temps atelier
+      </button>
+    </div>
   );
 }

@@ -45,6 +45,7 @@ import { PastilleCompteManquant } from "@/components/avertissement-compte-produi
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
 import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
+import { CoutTheoriqueProduitPanel } from "@/components/cout-theorique-produit";
 import { AideSurfaceProduit } from "@/components/ligne-dimensions-saisie";
 import {
   achatSousTraitanceDuProduit,
@@ -186,9 +187,9 @@ export default function ParametresProduitsPage() {
     "actifs",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [ficheOnglet, setFicheOnglet] = useState<"tarifs" | "historique" | "fournisseurs">(
-    "tarifs",
-  );
+  const [ficheOnglet, setFicheOnglet] = useState<
+    "tarifs" | "historique" | "fournisseurs" | "cout"
+  >("tarifs");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [alertDoublons, setAlertDoublons] = useState<string | null>(null);
@@ -1562,6 +1563,9 @@ export default function ParametresProduitsPage() {
                       ...(produitEstVendable(selected, categoriesProduits)
                         ? [{ id: "tarifs" as const, label: "Tarifs clients" }]
                         : []),
+                      ...(produitEstFabrique(selected)
+                        ? [{ id: "cout" as const, label: "Coût théorique" }]
+                        : []),
                       { id: "historique" as const, label: "Historique des prix" },
                       ...(produitEstAchetable(selected, categoriesProduits)
                         ? [{ id: "fournisseurs" as const, label: "Fournisseurs" }]
@@ -1655,6 +1659,13 @@ export default function ParametresProduitsPage() {
                   </button>
                 </div>
               </div>
+              )}
+
+              {ficheOnglet === "cout" && produitEstFabrique(selected) && (
+                <CoutTheoriqueProduitPanel
+                  key={selected.id}
+                  produit={selected}
+                />
               )}
 
               {ficheOnglet === "historique" && (

@@ -366,6 +366,15 @@ export type NomenclatureProduit = {
   /** « Nomenclature standard » ou nom libre pour l’alternative. */
   nom: string;
   lignes: NomenclatureLigne[];
+  /** Temps standard MOD par atelier, pour 1 unité de produit. */
+  tempsMod?: NomenclatureTempsMod[];
+};
+
+export type NomenclatureTempsMod = {
+  id: string;
+  atelierId: string;
+  /** Heures pour 1 unité du produit. */
+  heures: number;
 };
 
 export type TarifClient = {

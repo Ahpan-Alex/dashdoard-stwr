@@ -8,6 +8,7 @@ import {
 import type {
   NomenclatureLigne,
   NomenclatureProduit,
+  NomenclatureTempsMod,
   Produit,
   TypeNomenclature,
 } from "./types";
@@ -53,6 +54,7 @@ export function normaliserNomenclatures(
     type: "automatique",
     nom: NOM_NOMENCLATURE_STANDARD,
     lignes: nettoyerLignes(autoRaw?.lignes ?? []),
+    tempsMod: nettoyerTempsMod(autoRaw?.tempsMod),
   };
   const out: NomenclatureProduit[] = [auto];
   if (altRaw) {
@@ -62,9 +64,26 @@ export function normaliserNomenclatures(
       type: "alternative",
       nom,
       lignes: nettoyerLignes(altRaw.lignes),
+      tempsMod: nettoyerTempsMod(altRaw.tempsMod),
     });
   }
   return out;
+}
+
+function nettoyerTempsMod(
+  lignes: NomenclatureTempsMod[] | undefined,
+): NomenclatureTempsMod[] | undefined {
+  const out: NomenclatureTempsMod[] = [];
+  for (const l of lignes ?? []) {
+    const heures = Number(l.heures);
+    if (!l.atelierId || !(heures > 0)) continue;
+    out.push({
+      id: l.id || createId("nmod"),
+      atelierId: l.atelierId,
+      heures,
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 function nettoyerLignes(lignes: NomenclatureLigne[]): NomenclatureLigne[] {
