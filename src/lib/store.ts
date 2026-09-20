@@ -228,6 +228,7 @@ import {
   listerMouvementsBloquantAnnulationMission,
   messageAnnulationMissionRefusee,
   missionEstVerrouillee,
+  missionPeutEtreSupprimee,
   motifClotureImpossible,
   motifDepenseDiverseInvalide,
   motifLigneMissionInvalide,
@@ -838,6 +839,10 @@ type Store = {
     }[];
     note?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
+  dupliquerMissionAchat: (
+    id: string,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  supprimerMissionAchat: (id: string) => { ok: boolean; reason?: string };
   modifierMissionAchat: (
     id: string,
     data: Partial<{
@@ -875,6 +880,10 @@ type Store = {
       compteTresorerieId?: string;
       reference?: string;
     },
+  ) => { ok: boolean; reason?: string };
+  annulerRemiseFondsMissionAchat: (
+    id: string,
+    mouvementId: string,
   ) => { ok: boolean; reason?: string };
   cloturerMissionAchat: (
     id: string,
@@ -5606,6 +5615,59 @@ export const useStore = create<Store>()((set, get) => ({
         return { ok: true, id: nouveau.id };
       },
 
+      dupliquerMissionAchat: (id) => {
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        const objet = (prev.objet ?? "").trim();
+        return get().creerMissionAchat({
+          acheteurUserId: prev.acheteurUserId,
+          acheteurNom: prev.acheteurNom,
+          date: new Date().toISOString().slice(0, 10),
+          datePrevue: prev.datePrevue,
+          siteDestinataireId: prev.siteDestinataireId,
+          service: prev.service,
+          objet: objet ? `${objet} (copie)` : prev.numero,
+          fournisseursPrevus: prev.fournisseursPrevus,
+          montantAvance: 0,
+          montantAvanceDemandee: prev.montantAvanceDemandee ?? 0,
+          lignesPrevisionnelles: (prev.lignesPrevisionnelles ?? []).map((l) => ({
+            produitId: l.produitId,
+            quantiteSouhaitee: l.quantiteSouhaitee,
+            prixUnitaireEstime: l.prixUnitaireEstime,
+            fournisseurId: l.fournisseurId,
+            commentaire: l.commentaire,
+          })),
+          note: prev.note,
+        });
+      },
+
+      supprimerMissionAchat: (id) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "La suppression est réservée au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (!missionPeutEtreSupprimee(prev)) {
+          return {
+            ok: false,
+            reason:
+              "Cette mission a déjà des fonds ou des achats. Annulez-la depuis la fiche plutôt que de la supprimer.",
+          };
+        }
+        set((s) => ({
+          missionsAchat: (s.missionsAchat ?? []).filter((m) => m.id !== id),
+          journalActivites: [
+            entreeActivite("annulation", "mission_achat", {
+              entiteId: id,
+              libelle: prev.numero,
+              detail: "Suppression du brouillon",
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
+      },
+
       modifierMissionAchat: (id, data) => {
         const state = get();
         const prev = (state.missionsAchat ?? []).find((m) => m.id === id);
@@ -6176,6 +6238,60 @@ export const useStore = create<Store>()((set, get) => ({
                 entiteId: id,
                 libelle: prev.numero,
                 detail: `Remise de fonds ${Math.round(data.montant)} Ar`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true };
+      },
+
+      annulerRemiseFondsMissionAchat: (id, mouvementId) => {
+        if (!actorPeutGererMissions()) {
+          return { ok: false, reason: "L'annulation d'un décaissement est réservée au responsable achats." };
+        }
+        const prev = (get().missionsAchat ?? []).find((m) => m.id === id);
+        if (!prev) return { ok: false, reason: "Mission introuvable." };
+        if (missionEstVerrouillee(prev)) {
+          return { ok: false, reason: "Cette mission est clôturée, rejetée ou annulée : le décaissement ne peut plus être annulé." };
+        }
+        if (prev.statutReglement === "regle") {
+          return { ok: false, reason: "L'avance est déjà réglée. Passez d'abord le règlement à « non réglé » pour annuler un décaissement." };
+        }
+        const cible = (prev.mouvementsFonds ?? []).find((mv) => mv.id === mouvementId);
+        if (!cible) return { ok: false, reason: "Décaissement introuvable." };
+        if (cible.type !== "remise") {
+          return { ok: false, reason: "Seule une remise de fonds à l'acheteur peut être annulée ici." };
+        }
+        const mouvements = (prev.mouvementsFonds ?? []).filter((mv) => mv.id !== mouvementId);
+        const remis = mouvements
+          .filter((x) => x.type === "remise")
+          .reduce((s, x) => s + Math.max(0, x.montant), 0);
+        let statut = prev.statut;
+        if (remis <= 0 && prev.statut === "fonds_remis") statut = "validee";
+        const actor = getActiviteActor();
+        const next: MissionAchat = {
+          ...prev,
+          statut,
+          montantAvance: remis,
+          mouvementsFonds: mouvements,
+          validations: [
+            ...prev.validations,
+            etapeValidationMission(
+              "annuler_remise_fonds",
+              actor,
+              `${Math.round(cible.montant)} Ar${cible.reference ? ` — ${cible.reference}` : ""}`,
+            ),
+          ],
+        };
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat: (s.missionsAchat ?? []).map((m) => (m.id === id ? next : m)),
+            journalActivites: [
+              entreeActivite("annulation", "mission_achat", {
+                entiteId: id,
+                libelle: prev.numero,
+                detail: `Annulation décaissement ${Math.round(cible.montant)} Ar`,
               }),
               ...s.journalActivites,
             ],

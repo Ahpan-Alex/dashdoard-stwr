@@ -1995,6 +1995,7 @@ export type MissionValidationAction =
   | "valider"
   | "rejeter"
   | "remettre_fonds"
+  | "annuler_remise_fonds"
   | "ajouter_achat"
   | "ajouter_justificatif"
   | "reception"

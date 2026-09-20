@@ -85,6 +85,7 @@ const VALIDATION_LABELS: Record<MissionValidationAction, string> = {
   valider: "Validation",
   rejeter: "Rejet",
   remettre_fonds: "Remise des fonds",
+  annuler_remise_fonds: "Annulation décaissement",
   ajouter_achat: "Achat enregistré",
   ajouter_justificatif: "Justificatif",
   reception: "Réception",
@@ -206,6 +207,7 @@ function MissionDetail() {
   const validerMissionAchat = useStore((s) => s.validerMissionAchat);
   const rejeterMissionAchat = useStore((s) => s.rejeterMissionAchat);
   const remettreFondsMissionAchat = useStore((s) => s.remettreFondsMissionAchat);
+  const annulerRemiseFondsMissionAchat = useStore((s) => s.annulerRemiseFondsMissionAchat);
   const cloturerMissionAchat = useStore((s) => s.cloturerMissionAchat);
   const annulerMissionAchat = useStore((s) => s.annulerMissionAchat);
   const reglerMissionAchat = useStore((s) => s.reglerMissionAchat);
@@ -911,6 +913,7 @@ function MissionDetail() {
                   <th>Compte / source</th>
                   <th>Réf.</th>
                   <th>Par</th>
+                  {gerer && !verrouille && <th />}
                 </tr>
               </thead>
               <tbody>
@@ -932,6 +935,28 @@ function MissionDetail() {
                     </td>
                     <td>{mv.reference || "—"}</td>
                     <td>{mv.responsableNom || "—"}</td>
+                    {gerer && !verrouille && (
+                      <td>
+                        {mv.type === "remise" ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (
+                                !confirm(
+                                  `Annuler ce décaissement de ${formatCurrency(mv.montant)} ? La trésorerie et le compte 467 seront corrigés.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              run(annulerRemiseFondsMissionAchat(mission.id, mv.id));
+                            }}
+                          >
+                            Annuler
+                          </button>
+                        ) : null}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1057,7 +1082,9 @@ function MissionDetail() {
             au débit, compte 467 de l’acheteur au crédit. Le décaissement (remise
             de fonds) et le paiement de ligne débiteront le 467, créditeront le
             compte de trésorerie, et passeront dans le journal de ce compte
-            (caisse, banque ou mobile money).
+            (caisse, banque ou mobile money). Un décaissement cliqué deux fois
+            peut être annulé dans le tableau ci-dessus, tant que la mission n’est
+            pas clôturée.
           </p>
         )}
       </section>

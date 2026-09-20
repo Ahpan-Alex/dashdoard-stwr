@@ -91,6 +91,29 @@ export function missionEstVerrouillee(m: Pick<MissionAchat, "statut">) {
   );
 }
 
+export function missionPeutEtreCloturee(m: Pick<MissionAchat, "statut">) {
+  return (
+    m.statut === "en_cours" ||
+    m.statut === "fonds_remis" ||
+    m.statut === "a_regulariser"
+  );
+}
+
+export function missionPeutEtreSupprimee(m: MissionAchat) {
+  if (
+    m.statut !== "brouillon" &&
+    m.statut !== "soumise" &&
+    m.statut !== "rejetee"
+  ) {
+    return false;
+  }
+  const fondsRemis = (m.mouvementsFonds ?? []).some(
+    (x) => x.type === "remise" && x.montant > 0,
+  );
+  const achatSaisi = (m.achatsRealises ?? []).some((l) => l.quantite > 0);
+  return !fondsRemis && !achatSaisi;
+}
+
 export function montantLignePrevisionnelle(
   l: Pick<MissionLignePrevisionnelle, "quantiteSouhaitee" | "prixUnitaireEstime">,
 ) {

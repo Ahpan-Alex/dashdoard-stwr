@@ -1,17 +1,18 @@
 "use client";
 
 import { Component, FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Banknote, Plus } from "lucide-react";
+import { Banknote, CheckCircle2, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
+import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { RequirePermission } from "@/components/require-permission";
 import { StatCard } from "@/components/stat-card";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
-import { primaryRole, rolesFromStored } from "@/lib/auth/rbac";
+import { estAdministrateur, primaryRole, rolesFromStored } from "@/lib/auth/rbac";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
@@ -19,6 +20,8 @@ import {
   libelleSoldeMission,
   MISSION_REGLEMENT_LABELS,
   MISSION_STATUT_LABELS,
+  missionPeutEtreCloturee,
+  missionPeutEtreSupprimee,
   missionsVisiblesPour,
   soldeMission,
   totalDepenseMission,
@@ -60,12 +63,16 @@ function MissionsContent() {
   const parametresAlertes = useStore((s) => s.parametresAlertes);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
   const creerMissionAchat = useStore((s) => s.creerMissionAchat);
+  const dupliquerMissionAchat = useStore((s) => s.dupliquerMissionAchat);
+  const supprimerMissionAchat = useStore((s) => s.supprimerMissionAchat);
+  const cloturerMissionAchat = useStore((s) => s.cloturerMissionAchat);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const user = useAuthStore((s) => s.user);
   const users = useAuthStore((s) => s.users);
   const refreshUsers = useAuthStore((s) => s.refreshUsers);
   const { visibles, actif } = useSitesVisibles();
-  const gerer = hasPermission("missions.gerer");
+  const gerer =
+    hasPermission("missions.gerer") || estAdministrateur(user ?? { role: "" });
   const { visible } = useAffichageTable("missions");
   const [creer, setCreer] = useState(false);
 
@@ -227,6 +234,7 @@ function MissionsContent() {
                   <ThCol id="solde" show={visible}>Solde</ThCol>
                   <ThCol id="statut" show={visible}>Statut</ThCol>
                   <ThCol id="reglement" show={visible}>Règlement</ThCol>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -257,6 +265,75 @@ function MissionsContent() {
                     <TdCol id="reglement" show={visible}>
                       {MISSION_REGLEMENT_LABELS[m.statutReglement]}
                     </TdCol>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <IconButton
+                          label="Modifier"
+                          onClick={() => router.push(`/missions/${m.id}`)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </IconButton>
+                        {gerer && (
+                          <>
+                            <IconButton
+                              label="Dupliquer"
+                              onClick={() => {
+                                const res = dupliquerMissionAchat(m.id);
+                                if (!res.ok) {
+                                  alert(res.reason);
+                                  return;
+                                }
+                                router.push(`/missions/${res.id}`);
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </IconButton>
+                            <IconButton
+                              label={
+                                missionPeutEtreSupprimee(m)
+                                  ? "Supprimer"
+                                  : "Impossible : fonds ou achats déjà enregistrés"
+                              }
+                              disabled={!missionPeutEtreSupprimee(m)}
+                              onClick={() => {
+                                if (!confirm(`Supprimer ${m.numero} ?`)) return;
+                                const res = supprimerMissionAchat(m.id);
+                                if (!res.ok) alert(res.reason);
+                              }}
+                            >
+                              <Trash2
+                                className={`h-4 w-4 ${
+                                  missionPeutEtreSupprimee(m)
+                                    ? "text-danger"
+                                    : "text-muted"
+                                }`}
+                              />
+                            </IconButton>
+                            <IconButton
+                              label={
+                                missionPeutEtreCloturee(m)
+                                  ? "Clôturer"
+                                  : "Clôture impossible à ce statut"
+                              }
+                              disabled={!missionPeutEtreCloturee(m)}
+                              onClick={() => {
+                                if (
+                                  !confirm(
+                                    `Clôturer ${m.numero} ? Les quantités réceptionnées entreront en stock.`,
+                                  )
+                                ) {
+                                  return;
+                                }
+                                const res = cloturerMissionAchat(m.id);
+                                if (!res.ok) alert(res.reason);
+                              }}
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </IconButton>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
