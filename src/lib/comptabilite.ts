@@ -1567,6 +1567,47 @@ export function compteComptableDuCompteTresorerie(
   );
 }
 
+function libelleCompteGlTresorerie(type: TypeCompteTresorerie) {
+  if (type === "caisse") return "Caisse";
+  if (type === "mobile_monnaie") return "Mobile monnaie";
+  return "Banques";
+}
+
+/** Crée ou rattache le 5xx du PCG à chaque compte de trésorerie, pour le journal dédié. */
+export function assurerComptesGlDesComptesTresorerie(
+  comptesTresorerie: CompteTresorerie[],
+  comptes: CompteComptable[],
+  longueur: number | null,
+): { comptesTresorerie: CompteTresorerie[]; comptes: CompteComptable[] } {
+  let gl = [...comptes];
+  const treso = comptesTresorerie.map((c) => ({ ...c }));
+  for (const c of treso) {
+    const existant = compteComptableDuCompteTresorerie(c, gl);
+    if (existant?.numero) {
+      if (!c.compteComptableId) c.compteComptableId = existant.id;
+      continue;
+    }
+    if (longueur == null) continue;
+    const prefix = prefixeCompteTresorerie(c.type);
+    const numero = completerNumeroCompte(prefix, longueur);
+    const memeNumero = gl.find(
+      (x) => chiffresNumeroCompte(x.numero) === chiffresNumeroCompte(numero),
+    );
+    if (memeNumero) {
+      c.compteComptableId = memeNumero.id;
+      continue;
+    }
+    const nouveau: CompteComptable = {
+      id: createId("cpt"),
+      numero,
+      libelle: libelleCompteGlTresorerie(c.type),
+    };
+    gl = [nouveau, ...gl];
+    c.compteComptableId = nouveau.id;
+  }
+  return { comptesTresorerie: treso, comptes: gl };
+}
+
 export function compteContrepartieSoldeInitial(comptes: CompteComptable[]) {
   return compteParPrefixe(comptes, "11") ?? compteAttente471(comptes);
 }
@@ -1668,7 +1709,8 @@ export function ecritureDepuisMouvementTresorerie(opts: {
   if (montant <= 0) return null;
   const caisse = opts.comptesTresorerie.find((c) => c.id === m.compteTresorerieId);
   const compteTreso = compteComptableDuCompteTresorerie(caisse, opts.comptes);
-  if (!compteTreso?.numero) return null;
+  if (!caisse) return null;
+  if (!compteTreso?.numero && m.source !== "mission") return null;
 
   let contre: CompteComptable | undefined;
   if (m.source === "facture") {
@@ -1721,7 +1763,8 @@ export function ecritureDepuisMouvementTresorerie(opts: {
         )
       : compteAttente471(opts.comptes);
   }
-  if (!contre?.numero) return null;
+  if (!contre?.numero && m.source !== "mission") return null;
+  if (m.source === "mission" && !compteTreso?.numero && !contre?.numero) return null;
 
   const entree = m.sens === "entree";
   const prefix = `ecr-trs-${m.id}`;
@@ -1729,14 +1772,14 @@ export function ecritureDepuisMouvementTresorerie(opts: {
     ligneEcriture(
       `${prefix}-tr`,
       compteTreso,
-      compteTreso.libelle,
+      compteTreso?.libelle ?? caisse.libelle,
       entree ? montant : 0,
       entree ? 0 : montant,
     ),
     ligneEcriture(
       `${prefix}-ctp`,
       contre,
-      contre.libelle,
+      contre?.libelle ?? "467 — Acheteur mission",
       entree ? 0 : montant,
       entree ? montant : 0,
     ),

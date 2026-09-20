@@ -129,6 +129,7 @@ import {
 import {
   appliquerRoleUnique,
   appliquerSeedComptesDefaut,
+  assurerComptesGlDesComptesTresorerie,
   compteChargeProduit,
   compteParNumero,
   compteUtiliseEnEcriture,
@@ -1550,8 +1551,13 @@ function avecJournal<T extends Record<string, unknown>>(
     ...merged,
     ...seeded,
   });
-  const assures = assurerJournauxParCompteTresorerie(
+  const glTreso = assurerComptesGlDesComptesTresorerie(
     merged.comptesTresorerie ?? [],
+    comptes467.comptesComptables,
+    longueurNumeroCompteEffective(seeded.parametres) ?? null,
+  );
+  const assures = assurerJournauxParCompteTresorerie(
+    glTreso.comptesTresorerie,
     merged.journauxTresorerie ?? [],
   );
   return {
@@ -1559,12 +1565,13 @@ function avecJournal<T extends Record<string, unknown>>(
     comptesTresorerie: assures.comptes,
     journauxTresorerie: assures.journaux,
     parametres: seeded.parametres,
-    comptesComptables: comptes467.comptesComptables,
+    comptesComptables: glTreso.comptes,
     comptesMissionAcheteur: comptes467.comptesMissionAcheteur,
     ecrituresComptables: journalDepuis({
       ...merged,
       ...seeded,
-      ...comptes467,
+      comptesComptables: glTreso.comptes,
+      comptesMissionAcheteur: comptes467.comptesMissionAcheteur,
       comptesTresorerie: assures.comptes,
       journauxTresorerie: assures.journaux,
       ecrituresComptables:

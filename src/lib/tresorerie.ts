@@ -582,7 +582,6 @@ export function mouvementsDepuisMissions(
         compteTresorerieId: mv.compteTresorerieId,
         reference: mv.reference,
       };
-      if (!ligneGenereMouvement(ligne, modes)) continue;
       const signed = sortie ? -Math.abs(mv.montant) : Math.abs(mv.montant);
       const libelleType =
         mv.type === "remise"

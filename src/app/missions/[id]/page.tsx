@@ -999,9 +999,10 @@ function MissionDetail() {
             mission.statut === "en_cours") && (
           <p className="mt-3 text-xs text-muted">
             L’achat saisi passe automatiquement en comptabilité : charge (classe 6)
-            au débit, compte 467 de l’acheteur au crédit. Le paiement (décaissement
-            ou paiement de ligne) débite le 467 et crédite le compte de trésorerie,
-            et sort de la caisse / banque / mobile money.
+            au débit, compte 467 de l’acheteur au crédit. Le décaissement (remise
+            de fonds) et le paiement de ligne débiteront le 467, créditeront le
+            compte de trésorerie, et passeront dans le journal de ce compte
+            (caisse, banque ou mobile money).
           </p>
         )}
       </section>
