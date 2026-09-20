@@ -212,7 +212,7 @@ export const REFERENTIEL_SECTIONS: ParametreSection[] = [
     id: "stock",
     href: "/parametres/stock",
     label: "Stock",
-    description: "Stock initial et délai d'alerte des transferts.",
+    description: "Stock initial, emplacements d'entrepôt et délai d'alerte des transferts.",
     groupe: "referentiel",
     items: [
       {
@@ -220,13 +220,18 @@ export const REFERENTIEL_SECTIONS: ParametreSection[] = [
         label: "Stock initial",
         description: "Quantités et valeurs d'ouverture par site.",
       },
+      {
+        href: "/parametres/emplacements",
+        label: "Emplacements d'entrepôt",
+        description: "Allées et casiers de picking, imprimés sur le bon de préparation.",
+      },
     ],
   },
   {
     id: "fabrication",
     href: "/parametres/fabrication",
     label: "Fabrication",
-    description: "Taux MOD, capacité atelier, BAT et règles de clôture.",
+    description: "Taux MOD, capacité OF et heures, BAT et règles de clôture.",
     groupe: "referentiel",
     items: [
       {

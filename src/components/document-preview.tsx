@@ -35,10 +35,12 @@ import { libelleValiditeDocument } from "@/lib/validite-document";
 import { libelleDimensionsLigne, ligneEstSurface } from "@/lib/surface-vente";
 import type {
   Client,
+  EmplacementStock,
   LigneDocument,
   Parametres,
   PointDeVente,
 } from "@/lib/types";
+import { libelleEmplacementLigne } from "@/lib/emplacements-stock";
 
 function libelleMesureLigne(l: LigneDocument) {
   if (ligneEstSurface(l)) return libelleDimensionsLigne(l);
@@ -57,6 +59,8 @@ type Props = {
   pdv?: PointDeVente;
   /** Sites pour résoudre l'emplacement de picking. */
   pointsDeVente?: PointDeVente[];
+  /** Casiers / allées pour la colonne emplacement du BP. */
+  emplacementsStock?: EmplacementStock[];
   parametres: Parametres;
   modele: ModeleDocument | undefined;
   lignes: LigneDocument[];
@@ -99,6 +103,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
     client,
     pdv,
     pointsDeVente,
+    emplacementsStock,
     parametres,
     modele,
     lignes,
@@ -250,6 +255,13 @@ export const DocumentPreview = forwardRef<HTMLDivElement, Props>(
         const nom =
           (pointsDeVente ?? (pdv ? [pdv] : [])).find((s) => s.id === siteId)
             ?.nom ?? pdv?.nom;
+        if (colId === "emplacement") {
+          return libelleEmplacementLigne(
+            l,
+            emplacementsStock,
+            nom || (apercuModele ? "Magasin central" : "—"),
+          );
+        }
         return nom || (apercuModele ? "Magasin central" : "—");
       }
       case "prepare":

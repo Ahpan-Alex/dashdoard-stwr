@@ -87,7 +87,7 @@ export const REFERENTIEL_INDICATEURS = {
   production_charge: {
     titre: "Charge atelier",
     definition:
-      "Part des heures MOD de l'atelier dans le total (aucune capacité nominale n'est paramétrée).",
+      "Heures MOD de la période rapportées à la capacité h/jour × jours ouvrés, si la capacité est renseignée. Sinon, part des heures de l'atelier dans le total.",
   },
   production_cout_mod: {
     titre: "Coût MOD",

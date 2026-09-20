@@ -13,6 +13,10 @@ export default function ParametresStockPage() {
         <Link href="/transferts/historique" className="text-sea-800 underline">
           Transferts → Historique par article
         </Link>
+        . Allées et casiers de picking :{" "}
+        <Link href="/parametres/emplacements" className="text-sea-800 underline">
+          Emplacements d&apos;entrepôt
+        </Link>
         .
       </p>
     </ParametresSectionFrame>

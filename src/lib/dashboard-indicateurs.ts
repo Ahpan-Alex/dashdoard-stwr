@@ -25,6 +25,7 @@ import { natureStockDuProduit, NATURE_STOCK_LABELS } from "./nature-stock";
 import { libelleProduit } from "./produits";
 import { quantiteReserveeProduitSite, type CtxReservationOf } from "./repartition-achat-of";
 import { coutConsommablesAtelierPeriode } from "./sorties-atelier";
+import { capaciteHeuresPeriode } from "./planning-atelier";
 import {
   labelsTranchesBalanceAgee,
   normaliserTranchesBalanceAgee,
@@ -254,10 +255,19 @@ export function indicateursProduction(
     tauxRespect,
     nbAvecDelai: avecDelai.length,
     nbRespect: respect,
-    parAtelier: parAtelier.map((a) => ({
-      ...a,
-      tauxCharge: totalHeures > 0 ? (a.heuresMod / totalHeures) * 100 : null,
-    })),
+    parAtelier: parAtelier.map((a) => {
+      const atelier = ateliers.find((x) => x.id === a.atelierId);
+      const capaPeriode = atelier ? capaciteHeuresPeriode(atelier, range) : 0;
+      return {
+        ...a,
+        tauxCharge:
+          capaPeriode > 0
+            ? (a.heuresMod / capaPeriode) * 100
+            : totalHeures > 0
+              ? (a.heuresMod / totalHeures) * 100
+              : null,
+      };
+    }),
   };
 }
 

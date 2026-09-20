@@ -24,6 +24,7 @@ export default function NouveauBonDePreparationPage() {
     pointsDeVente,
     parametres,
     ordresFabrication,
+    emplacementsStock,
     pointDeVenteActifId,
     addBonDePreparation,
     verrouillerTransformation,
@@ -83,7 +84,11 @@ export default function NouveauBonDePreparationPage() {
       devisId: c.devisId,
       note: c.note,
       afficherPrix: false,
-      lignes: lignesPreparationDepuisCommande(c.lignes, c.pointDeVenteId),
+      lignes: lignesPreparationDepuisCommande(
+        c.lignes,
+        c.pointDeVenteId,
+        emplacementsStock,
+      ),
     });
     const fin = finaliserTransformation({
       sourceType: "commande",

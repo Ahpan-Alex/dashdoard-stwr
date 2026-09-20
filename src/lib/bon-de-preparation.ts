@@ -3,10 +3,12 @@ import { stockDisponible } from "./calculations";
 import { isLigneProduit } from "./commercial";
 import { createId } from "./id";
 import { produitEstFabrique } from "./nature-stock";
+import { emplacementParDefautDuSite } from "./emplacements-stock";
 import type {
   BonDePreparation,
   BonDePreparationStatut,
   Commande,
+  EmplacementStock,
   EntreeStock,
   Inventaire,
   LigneDocument,
@@ -96,13 +98,19 @@ export function bpComptePourPreparation(b: Pick<BonDePreparation, "statut">) {
 export function lignesPreparationDepuisCommande(
   lignes: LigneDocument[],
   siteStockId: string,
+  emplacements?: EmplacementStock[],
 ): LigneDocument[] {
-  return lignes.map((l) => ({
-    ...l,
-    id: createId("bpl"),
-    prepare: false,
-    siteStockId: l.siteStockId || siteStockId,
-  }));
+  return lignes.map((l) => {
+    const site = l.siteStockId || siteStockId;
+    const defaut = emplacementParDefautDuSite(emplacements, site);
+    return {
+      ...l,
+      id: createId("bpl"),
+      prepare: false,
+      siteStockId: site,
+      emplacementId: l.emplacementId || defaut?.id,
+    };
+  });
 }
 
 export function nomSitePreparation(

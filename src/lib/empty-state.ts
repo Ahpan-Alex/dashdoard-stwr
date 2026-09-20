@@ -97,6 +97,7 @@ export function emptyAppState(): AppState {
     typesClients: seedTypesClients(),
     naturesDepenseMission: seedNaturesDepenseMission(),
     motifsSortieAtelier: seedMotifsSortieAtelier(),
+    emplacementsStock: [],
     sortiesAtelier: [],
     comptesTresorerie: [],
     lignesReleveBancaire: [],
@@ -162,6 +163,9 @@ export function pickAppState(state: AppState): AppState {
       state.naturesDepenseMission,
     ),
     motifsSortieAtelier: fusionnerMotifsSortieAtelier(state.motifsSortieAtelier),
+    emplacementsStock: Array.isArray(state.emplacementsStock)
+      ? state.emplacementsStock
+      : [],
     sortiesAtelier: Array.isArray(state.sortiesAtelier)
       ? state.sortiesAtelier
       : [],

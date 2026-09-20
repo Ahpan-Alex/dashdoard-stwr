@@ -23,6 +23,7 @@ export default function ParametresFabricationPage() {
   );
   const [brouillons, setBrouillons] = useState<Record<string, string>>({});
   const [capacites, setCapacites] = useState<Record<string, string>>({});
+  const [heures, setHeures] = useState<Record<string, string>>({});
   const [savedId, setSavedId] = useState<string | null>(null);
 
   function valeurChamp(id: string, actuel?: number) {
@@ -35,6 +36,11 @@ export default function ParametresFabricationPage() {
     return actuel && actuel > 0 ? String(actuel) : "";
   }
 
+  function valeurHeures(id: string, actuel?: number) {
+    if (heures[id] !== undefined) return heures[id];
+    return actuel && actuel > 0 ? String(actuel) : "";
+  }
+
   function enregistrer(id: string) {
     const atelier = ateliers.find((a) => a.id === id);
     const taux = Math.max(0, Number(valeurChamp(id, atelier?.tauxHoraireMod)) || 0);
@@ -42,9 +48,14 @@ export default function ParametresFabricationPage() {
       0,
       Number(valeurCapa(id, atelier?.capaciteOfSimultanes)) || 0,
     );
+    const capaH = Math.max(
+      0,
+      Number(valeurHeures(id, atelier?.capaciteHeuresJour)) || 0,
+    );
     updatePointDeVente(id, {
       tauxHoraireMod: taux,
       capaciteOfSimultanes: capa,
+      capaciteHeuresJour: capaH,
     });
     setBrouillons((prev) => {
       const next = { ...prev };
@@ -52,6 +63,11 @@ export default function ParametresFabricationPage() {
       return next;
     });
     setCapacites((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setHeures((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
@@ -107,8 +123,9 @@ export default function ParametresFabricationPage() {
           Taux horaire MOD et capacité par atelier
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Taux figé sur les lignes MOD déjà saisies. Capacité = nombre maximal
-          d&apos;OF ouverts simultanément (alerte de surcharge).
+          Taux figé sur les lignes MOD déjà saisies. Capacité OF = nombre maximal
+          d&apos;OF ouverts simultanément. Capacité h/jour = charge horaire du
+          planning (alerte de surcharge).
         </p>
 
         {ateliers.length === 0 ? (
@@ -176,6 +193,24 @@ export default function ParametresFabricationPage() {
                         value={valeurCapa(atelier.id, atelier.capaciteOfSimultanes)}
                         onChange={(e) =>
                           setCapacites((prev) => ({
+                            ...prev,
+                            [atelier.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-muted">
+                      Capacité (h / jour)
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        className="input mt-1 w-36"
+                        disabled={!peutGerer}
+                        value={valeurHeures(atelier.id, atelier.capaciteHeuresJour)}
+                        onChange={(e) =>
+                          setHeures((prev) => ({
                             ...prev,
                             [atelier.id]: e.target.value,
                           }))

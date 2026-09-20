@@ -161,7 +161,12 @@ const sections: { title: string; links: NavLink[] }[] = [
         icon: Factory,
         matchPrefixes: ["/fabrication"],
         children: [
-          { href: "/fabrication", label: "Ordres de fabrication", exact: true },
+          {
+            href: "/fabrication",
+            label: "Ordres de fabrication",
+            exact: true,
+          },
+          { href: "/fabrication/planning", label: "Planning atelier" },
           {
             href: "/fabrication/transferts-matiere",
             label: "Transferts matière OF",

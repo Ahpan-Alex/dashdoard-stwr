@@ -23,6 +23,7 @@ const FORM_VIDE = {
   objectifMargeAnnuel: "",
   tauxHoraireMod: "",
   capaciteOfSimultanes: "",
+  capaciteHeuresJour: "",
   rolesSite: ["point_de_vente"] as RoleSite[],
 };
 
@@ -43,6 +44,10 @@ function pdvVersForm(pdv: PointDeVente) {
     capaciteOfSimultanes:
       pdv.capaciteOfSimultanes && pdv.capaciteOfSimultanes > 0
         ? String(pdv.capaciteOfSimultanes)
+        : "",
+    capaciteHeuresJour:
+      pdv.capaciteHeuresJour && pdv.capaciteHeuresJour > 0
+        ? String(pdv.capaciteHeuresJour)
         : "",
     rolesSite: rolesSiteDuSite(pdv),
   };
@@ -133,6 +138,7 @@ export default function ParametresPointsDeVentePage() {
       objectifMargeAnnuel: Math.max(0, Number(form.objectifMargeAnnuel) || 0),
       tauxHoraireMod: Math.max(0, Number(form.tauxHoraireMod) || 0),
       capaciteOfSimultanes: Math.max(0, Number(form.capaciteOfSimultanes) || 0),
+      capaciteHeuresJour: Math.max(0, Number(form.capaciteHeuresJour) || 0),
       rolesSite: form.rolesSite.length ? form.rolesSite : (["point_de_vente"] as RoleSite[]),
     };
     try {
@@ -359,6 +365,20 @@ export default function ParametresPointsDeVentePage() {
                   placeholder="Ex. 8 — 0 = pas d'alerte"
                 />
               </label>
+              <label className="block text-xs font-semibold text-muted">
+                Capacité atelier (h / jour)
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  className="input mt-1"
+                  value={form.capaciteHeuresJour}
+                  onChange={(e) =>
+                    setForm({ ...form, capaciteHeuresJour: e.target.value })
+                  }
+                  placeholder="Ex. 16 — 0 = pas d'alerte horaire"
+                />
+              </label>
               </>
             ) : null}
             <div className="space-y-3 sm:col-span-2">
@@ -500,10 +520,16 @@ export default function ParametresPointsDeVentePage() {
           value={formatCurrency(apercu?.objectifMargeAnnuel ?? 0)}
         />
         {apercu && siteEstAtelier(apercu) ? (
-          <LigneInfo
-            label="Capacité atelier (OF simultanés)"
-            value={String(apercu.capaciteOfSimultanes ?? 0)}
-          />
+          <>
+            <LigneInfo
+              label="Capacité atelier (OF simultanés)"
+              value={String(apercu.capaciteOfSimultanes ?? 0)}
+            />
+            <LigneInfo
+              label="Capacité atelier (h / jour)"
+              value={String(apercu.capaciteHeuresJour ?? 0)}
+            />
+          </>
         ) : null}
       </FicheApercuModal>
     </div>

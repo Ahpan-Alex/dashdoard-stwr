@@ -43,6 +43,7 @@ const ENTITE_LABELS: Record<ActiviteEntite, string> = {
   mode_paiement: "Mode de paiement",
   sortie_atelier: "Sortie atelier",
   motif_sortie_atelier: "Motif sortie atelier",
+  emplacement_stock: "Emplacement stock",
   relance_impayee: "Relance impayé",
   autre: "Autre",
 };

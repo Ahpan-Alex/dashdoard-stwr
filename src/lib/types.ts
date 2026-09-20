@@ -42,6 +42,11 @@ export type PointDeVente = {
    * Absent ou 0 = pas de capacité déclarée (alerte de surcharge inactive pour ce site).
    */
   capaciteOfSimultanes?: number;
+  /**
+   * Capacité journalière en heures MOD (planning atelier).
+   * Absent ou 0 = pas d'alerte de charge horaire.
+   */
+  capaciteHeuresJour?: number;
 };
 
 export type CategorieProduit = {
@@ -1101,6 +1106,8 @@ export type LigneDocument = {
   prepare?: boolean;
   /** Site de picking (bon de préparation). Défaut = site du document. */
   siteStockId?: string;
+  /** Casier / allée de picking (référentiel emplacements). */
+  emplacementId?: string;
 };
 
 export type DevisStatut =
@@ -1559,6 +1566,7 @@ export type ActiviteEntite =
   | "mode_paiement"
   | "sortie_atelier"
   | "motif_sortie_atelier"
+  | "emplacement_stock"
   | "relance_impayee"
   | "autre";
 
@@ -1697,6 +1705,15 @@ export type MotifSortieAtelier = {
   id: string;
   libelle: string;
   ordre: number;
+  actif: boolean;
+};
+
+/** Allée / casier d'un site (picking BP). */
+export type EmplacementStock = {
+  id: string;
+  siteId: string;
+  allee: string;
+  casier: string;
   actif: boolean;
 };
 
@@ -2001,6 +2018,7 @@ export type AppState = {
   typesClients: TypeClient[];
   naturesDepenseMission: NatureDepenseMission[];
   motifsSortieAtelier: MotifSortieAtelier[];
+  emplacementsStock: EmplacementStock[];
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
   /** Lignes de relevé bancaire importées (rapprochement manuel). */

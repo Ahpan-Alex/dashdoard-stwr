@@ -93,6 +93,11 @@ import {
   motifSortieAtelierInvalide,
   regenererEntreesSortiesAtelier,
 } from "./sorties-atelier";
+import {
+  libelleEmplacement,
+  motifEmplacementInvalide,
+  nbLignesBpSurEmplacement,
+} from "./emplacements-stock";
 import { emptyAppState, pickAppState } from "./empty-state";
 import { motifRepartitionInvalide, siteEstAtelier, sitesAchat, utilisateurRattacheAuSite } from "./sites";
 import {
@@ -345,6 +350,7 @@ import type {
   MissionMouvementFonds,
   MissionReglementStatut,
   MotifSortieAtelier,
+  EmplacementStock,
   DemandePrix,
   DemandePrixConsultationStatut,
   DemandePrixLigne,
@@ -388,6 +394,7 @@ type Store = {
   typesClients: TypeClient[];
   naturesDepenseMission: NatureDepenseMission[];
   motifsSortieAtelier: MotifSortieAtelier[];
+  emplacementsStock: EmplacementStock[];
   sortiesAtelier: SortieAtelier[];
   comptesTresorerie: CompteTresorerie[];
   lignesReleveBancaire: LigneReleveBancaire[];
@@ -696,6 +703,16 @@ type Store = {
     data: Partial<Pick<MotifSortieAtelier, "libelle" | "actif" | "ordre">>,
   ) => { ok: true } | { ok: false; reason: string };
   deleteMotifSortieAtelier: (id: string) => { ok: true } | { ok: false; reason: string };
+  addEmplacementStock: (data: {
+    siteId: string;
+    allee: string;
+    casier: string;
+  }) => { ok: true; id: string } | { ok: false; reason: string };
+  updateEmplacementStock: (
+    id: string,
+    data: Partial<Pick<EmplacementStock, "siteId" | "allee" | "casier" | "actif">>,
+  ) => { ok: true } | { ok: false; reason: string };
+  deleteEmplacementStock: (id: string) => { ok: true } | { ok: false; reason: string };
   ajouterFraisOf: (
     ofId: string,
     data: { date: string; libelle: string; montant: number },
@@ -4455,6 +4472,96 @@ export const useStore = create<Store>()((set, get) => ({
             entreeActivite("suppression", "motif_sortie_atelier", {
               entiteId: id,
               libelle: prev.libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+
+      addEmplacementStock: (data) => {
+        const state = get();
+        const motif = motifEmplacementInvalide(
+          data,
+          state.emplacementsStock ?? [],
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const id = uid("ems");
+        const allee = data.allee.trim();
+        const casier = data.casier.trim();
+        set((s) => ({
+          emplacementsStock: [
+            ...(s.emplacementsStock ?? []),
+            { id, siteId: data.siteId, allee, casier, actif: true },
+          ],
+          journalActivites: [
+            entreeActivite("creation", "emplacement_stock", {
+              entiteId: id,
+              libelle: libelleEmplacement({ allee, casier }),
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const, id };
+      },
+      updateEmplacementStock: (id, data) => {
+        const state = get();
+        const prev = (state.emplacementsStock ?? []).find((e) => e.id === id);
+        if (!prev) return { ok: false as const, reason: "Emplacement introuvable." };
+        const next = {
+          siteId: data.siteId ?? prev.siteId,
+          allee: data.allee ?? prev.allee,
+          casier: data.casier ?? prev.casier,
+        };
+        const motif = motifEmplacementInvalide(
+          next,
+          state.emplacementsStock ?? [],
+          id,
+        );
+        if (motif) return { ok: false as const, reason: motif };
+        const libelle = libelleEmplacement({
+          allee: next.allee.trim(),
+          casier: next.casier.trim(),
+        });
+        set((s) => ({
+          emplacementsStock: (s.emplacementsStock ?? []).map((e) =>
+            e.id === id
+              ? {
+                  ...e,
+                  ...data,
+                  siteId: next.siteId,
+                  allee: next.allee.trim(),
+                  casier: next.casier.trim(),
+                }
+              : e,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "emplacement_stock", {
+              entiteId: id,
+              libelle,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true as const };
+      },
+      deleteEmplacementStock: (id) => {
+        const state = get();
+        const prev = (state.emplacementsStock ?? []).find((e) => e.id === id);
+        if (!prev) return { ok: false as const, reason: "Emplacement introuvable." };
+        const nb = nbLignesBpSurEmplacement(state.bonsDePreparation ?? [], id);
+        if (nb > 0) {
+          return {
+            ok: false as const,
+            reason: "Cet emplacement est déjà utilisé sur un bon de préparation.",
+          };
+        }
+        set((s) => ({
+          emplacementsStock: (s.emplacementsStock ?? []).filter((e) => e.id !== id),
+          journalActivites: [
+            entreeActivite("suppression", "emplacement_stock", {
+              entiteId: id,
+              libelle: libelleEmplacement(prev),
             }),
             ...s.journalActivites,
           ],

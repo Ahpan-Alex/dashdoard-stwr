@@ -20,6 +20,10 @@ import {
   stockLignePreparation,
   toutesLignesPreparees,
 } from "@/lib/bon-de-preparation";
+import {
+  codeEmplacement,
+  emplacementsDuSite,
+} from "@/lib/emplacements-stock";
 import { filterByPos } from "@/lib/calculations";
 import { calculerTotaux, couleurStatutDocument, isLigneProduit, libelleClient } from "@/lib/commercial";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
@@ -58,6 +62,7 @@ export default function ListeBonsDePreparationPage() {
     entrees,
     ventes,
     inventaires,
+    emplacementsStock,
     pointDeVenteActifId,
     bonsDeLivraison,
     updateBonDePreparation,
@@ -103,9 +108,22 @@ export default function ListeBonsDePreparationPage() {
     ? calculerTotaux(preview.lignes, 0, 0, false, 0, "montant")
     : null;
 
-  function patchLigne(bp: BonDePreparation, ligneId: string, prepare: boolean) {
+  function patchLigne(
+    bp: BonDePreparation,
+    ligneId: string,
+    patch: { prepare?: boolean; emplacementId?: string },
+  ) {
     const lignesNext = bp.lignes.map((l) =>
-      l.id === ligneId ? { ...l, prepare } : l,
+      l.id === ligneId
+        ? {
+            ...l,
+            ...patch,
+            emplacementId:
+              patch.emplacementId !== undefined
+                ? patch.emplacementId || undefined
+                : l.emplacementId,
+          }
+        : l,
     );
     const all = toutesLignesPreparees({ lignes: lignesNext });
     updateBonDePreparation(bp.id, {
@@ -367,6 +385,7 @@ export default function ListeBonsDePreparationPage() {
                   client={clients.find((c) => c.id === preview.clientId)}
                   pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
                   pointsDeVente={pointsDeVente}
+                  emplacementsStock={emplacementsStock}
                   parametres={parametres}
                   modele={modele}
                   lignes={preview.lignes}
@@ -441,10 +460,39 @@ export default function ListeBonsDePreparationPage() {
                         {formatNumber(l.quantite, 3)} {l.unite}
                       </td>
                       <td className="text-xs">
-                        {nomSitePreparation(
-                          l.siteStockId || preview.pointDeVenteId,
-                          pointsDeVente,
-                        )}
+                        <p>
+                          {nomSitePreparation(
+                            l.siteStockId || preview.pointDeVenteId,
+                            pointsDeVente,
+                          )}
+                        </p>
+                        {(() => {
+                          const casiers = emplacementsDuSite(
+                            emplacementsStock,
+                            l.siteStockId || preview.pointDeVenteId,
+                            { actifsSeulement: true },
+                          );
+                          if (casiers.length === 0) return null;
+                          return (
+                            <select
+                              className="input mt-1"
+                              value={l.emplacementId ?? ""}
+                              disabled={preview.statut === "transforme"}
+                              onChange={(e) =>
+                                patchLigne(preview, l.id, {
+                                  emplacementId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Casier…</option>
+                              {casiers.map((e) => (
+                                <option key={e.id} value={e.id}>
+                                  {codeEmplacement(e)}
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        })()}
                       </td>
                       <td className="text-right font-mono text-xs">
                         {formatNumber(
@@ -464,7 +512,9 @@ export default function ListeBonsDePreparationPage() {
                           checked={l.prepare === true}
                           disabled={preview.statut === "transforme"}
                           onChange={(e) =>
-                            patchLigne(preview, l.id, e.target.checked)
+                            patchLigne(preview, l.id, {
+                              prepare: e.target.checked,
+                            })
                           }
                         />
                       </td>
@@ -493,6 +543,7 @@ export default function ListeBonsDePreparationPage() {
               client={clients.find((c) => c.id === preview.clientId)}
               pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
               pointsDeVente={pointsDeVente}
+              emplacementsStock={emplacementsStock}
               parametres={parametres}
               modele={modele}
               lignes={preview.lignes}

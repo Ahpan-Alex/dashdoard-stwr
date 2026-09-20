@@ -76,7 +76,7 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
       unite: "Perte matière globale (%)",
     },
     { cle: "productionRuptureComposant", titre: "Rupture de composant en cours d'OF" },
-    { cle: "productionSurchargeAtelier", titre: "Atelier en surcharge" },
+    { cle: "productionSurchargeAtelier", titre: "Atelier en surcharge (OF et heures)" },
   ],
   achat: [
     {
@@ -392,6 +392,44 @@ export function ParametresAlertesForm({
                       onChange={(e) =>
                         updatePointDeVente(a.id, {
                           capaciteOfSimultanes: Math.max(
+                            0,
+                            Number(e.target.value) || 0,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+          <section className="rounded-[var(--radius)] border border-line bg-card p-5">
+            <h2 className="font-display text-lg font-semibold">
+              Capacité horaire par atelier (h / jour)
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Heures MOD journalières pour le planning. 0 = pas d&apos;alerte de
+              surcharge horaire. Même règle que &quot;Atelier en surcharge&quot;.
+            </p>
+            {ateliers.length === 0 ? (
+              <p className="mt-3 text-sm text-muted">Aucun atelier actif.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {ateliers.map((a) => (
+                  <label
+                    key={a.id}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span>{a.nom}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      className="input w-28"
+                      value={a.capaciteHeuresJour ?? 0}
+                      onChange={(e) =>
+                        updatePointDeVente(a.id, {
+                          capaciteHeuresJour: Math.max(
                             0,
                             Number(e.target.value) || 0,
                           ),

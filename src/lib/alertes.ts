@@ -23,6 +23,10 @@ import { natureStockDuProduit } from "./nature-stock";
 import { libelleProduit, prixAchatCatalogue } from "./produits";
 import { siteEstAtelier } from "./sites";
 import {
+  capaciteHeuresJourAtelier,
+  chargeHeuresAujourdhui,
+} from "./planning-atelier";
+import {
   labelsTranchesBalanceAgee,
   normaliserTranchesBalanceAgee,
   soldeClientTiers,
@@ -86,6 +90,7 @@ export type TypeAlerte =
   | "of_ecart_matiere"
   | "of_rupture_composant"
   | "atelier_surcharge"
+  | "atelier_surcharge_heures"
   | "bat_relance";
 
 export type GraviteAlerte = "info" | "warning" | "danger";
@@ -246,6 +251,7 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   of_ecart_matiere: "Écart de fabrication anormal",
   of_rupture_composant: "Rupture de composant en cours d'OF",
   atelier_surcharge: "Atelier en surcharge",
+  atelier_surcharge_heures: "Atelier en surcharge horaire",
   bat_relance: "BAT en attente — relance client",
 };
 
@@ -1046,6 +1052,24 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
         pointDeVenteId: atelier.id,
       });
     }
+    for (const atelier of ateliers) {
+      const capaH = capaciteHeuresJourAtelier(atelier);
+      if (capaH <= 0) continue;
+      const h = chargeHeuresAujourdhui(atelier, ofs, today);
+      if (h <= capaH + 1e-6) continue;
+      out.push({
+        id: `atelier_surcharge_heures:${atelier.id}`,
+        type: "atelier_surcharge_heures",
+        categorie: "production",
+        titre: `${atelier.nom} — surcharge horaire`,
+        message: `${Math.round(h * 10) / 10} h prévues aujourd'hui pour ${capaH} h de capacité.`,
+        date: today,
+        href: `/fabrication/planning`,
+        gravite: h >= capaH * 2 ? "danger" : "warning",
+        entiteId: atelier.id,
+        pointDeVenteId: atelier.id,
+      });
+    }
   }
 
   const missions = ctx.missionsAchat ?? [];
@@ -1431,6 +1455,15 @@ export function explicationAlerte(
         calcul:
           "Nombre d'OF brouillon ou en cours de l'atelier, comparé à la capacité saisie sur la fiche atelier.",
         seuil: "Seuil actuel : capacité de chaque atelier (fiche site / Paramètres Production)",
+        hrefParametre: href("production"),
+      };
+    case "atelier_surcharge_heures":
+      return {
+        signification:
+          "Les heures MOD prévues aujourd'hui dépassent la capacité journalière de l'atelier.",
+        calcul:
+          "Heures MOD de chaque OF réparties à parts égales sur sa fenêtre (création → date prévue), comparées à la capacité h/jour.",
+        seuil: "Seuil actuel : capacité horaires de chaque atelier (fiche site / Paramètres Fabrication)",
         hrefParametre: href("production"),
       };
     case "achat_echeance_approche":

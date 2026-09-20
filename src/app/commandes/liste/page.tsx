@@ -108,6 +108,7 @@ export default function ListeCommandesPage() {
     addBonDePreparation,
     bonsDePreparation,
     ordresFabrication,
+    emplacementsStock,
     addFacture,
     factures,
     tarifsClients,
@@ -346,7 +347,11 @@ export default function ListeCommandesPage() {
       devisId: c.devisId,
       note: c.note,
       afficherPrix: false,
-      lignes: lignesPreparationDepuisCommande(c.lignes, c.pointDeVenteId),
+      lignes: lignesPreparationDepuisCommande(
+        c.lignes,
+        c.pointDeVenteId,
+        emplacementsStock,
+      ),
     });
     const precedent =
       c.verrouTransformation?.statutPrecedent ??
@@ -987,11 +992,13 @@ export default function ListeCommandesPage() {
                 (p) => p.id === pendingCmd.pointDeVenteId,
               )}
               pointsDeVente={pointsDeVente}
+              emplacementsStock={emplacementsStock}
               parametres={parametres}
               modele={modeleBp}
               lignes={lignesPreparationDepuisCommande(
                 pendingCmd.lignes,
                 pendingCmd.pointDeVenteId,
+                emplacementsStock,
               )}
               totaux={totauxCommande(pendingCmd, parametres, acomptes)}
               note={pendingCmd.note}

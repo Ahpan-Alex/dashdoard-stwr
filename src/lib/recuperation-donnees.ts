@@ -350,4 +350,22 @@ export const LOTS_RECUPERATION: LotRecuperation[] = [
         ]),
       ]),
   },
+  {
+    id: "emplacements",
+    titre: "Emplacements d'entrepôt",
+    pourquoi: "Allées et casiers de picking par site.",
+    ouLabel: "Paramètres → Stock → Emplacements",
+    ouHref: "/parametres/emplacements",
+    compter: (s) => (s.emplacementsStock ?? []).length,
+    exporter: (s) =>
+      downloadCsv("emplacements-entrepot.csv", [
+        ["Site", "Allée", "Casier", "Actif"],
+        ...(s.emplacementsStock ?? []).map((e) => [
+          nomSite(s, e.siteId),
+          e.allee,
+          e.casier,
+          e.actif ? "oui" : "non",
+        ]),
+      ]),
+  },
 ];
