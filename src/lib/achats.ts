@@ -15,6 +15,8 @@ import type {
   ModePaiement,
   PaiementAchatStatut,
   Produit,
+  DestinationAchat,
+  OrdreFabrication,
 } from "./types";
 
 export type PlageDates = { debut: Date; fin: Date };
@@ -46,6 +48,42 @@ export const STATUT_PAIEMENT_LABELS: Record<PaiementAchatStatut, string> = {
   partiel: "Partiel",
   paye: "Payé",
 };
+
+export const DESTINATION_ACHAT_LABELS: Record<DestinationAchat, string> = {
+  projet_client: "Projet client",
+  approvisionnement_stock: "Approvisionnement stock",
+};
+
+export function motifDestinationAchatManquante(doc: {
+  destinationAchat?: DestinationAchat;
+  commandeId?: string;
+}): string | null {
+  if (!doc.destinationAchat) {
+    return "Indiquez si c'est un projet client ou un approvisionnement stock.";
+  }
+  if (doc.destinationAchat === "projet_client" && !doc.commandeId) {
+    return "Choisissez la commande client (projet) liée.";
+  }
+  return null;
+}
+
+/** Achat sans rattachement projet client (hors réappro stock explicite). */
+export function achatSansLienProjetClient(
+  a: Pick<Achat, "statut" | "destinationAchat" | "commandeId">,
+) {
+  if (a.statut === "annule") return false;
+  if (a.destinationAchat === "approvisionnement_stock") return false;
+  return !a.commandeId;
+}
+
+export function destinationDepuisOf(
+  of: Pick<OrdreFabrication, "commandeId"> | undefined,
+): { destinationAchat: DestinationAchat; commandeId?: string } {
+  if (of?.commandeId) {
+    return { destinationAchat: "projet_client", commandeId: of.commandeId };
+  }
+  return { destinationAchat: "approvisionnement_stock" };
+}
 
 export function montantHTLigne(l: Pick<AchatLigne, "quantite" | "prixAchatUnitaire">) {
   return l.quantite * l.prixAchatUnitaire;

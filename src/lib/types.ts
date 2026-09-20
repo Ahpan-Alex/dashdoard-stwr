@@ -814,6 +814,8 @@ export type Tiers = {
 };
 
 export type AchatStatut = "brouillon" | "valide" | "annule";
+/** Finalité de l'achat / DP : commande client ou réappro de stock. */
+export type DestinationAchat = "projet_client" | "approvisionnement_stock";
 export type LivraisonAchatStatut =
   | "en_attente"
   | "partielle"
@@ -951,6 +953,10 @@ export type Achat = {
   validiteJours?: number;
   /** N° de la facture fournisseur, saisi manuellement. */
   numeroFactureFournisseur?: string;
+  /** Projet client (commande) ou réapprovisionnement de stock. */
+  destinationAchat?: DestinationAchat;
+  /** Commande client si destination = projet_client. */
+  commandeId?: string;
 };
 
 export type BesoinAchatStatut = "ouvert" | "partiel" | "couvert" | "annule";
@@ -1047,6 +1053,10 @@ export type DemandePrix = {
   validiteJours?: number;
   origine?: "libre" | "alerte_stock";
   alerteId?: string;
+  /** Projet client (commande) ou réapprovisionnement de stock. */
+  destinationAchat?: DestinationAchat;
+  /** Commande client si destination = projet_client. */
+  commandeId?: string;
 };
 
 export type TransfertStockStatut = "demande" | "expedie" | "recu" | "annule";
@@ -1668,7 +1678,17 @@ export type SourceEcriture =
   | "sortie_atelier"
   | "tresorerie"
   | "operation_tresorerie"
-  | "solde_initial";
+  | "solde_initial"
+  | "reclassement_471";
+
+/** Imputation d’une ligne 471 vers un compte définitif. */
+export type Reclassement471 = {
+  id: string;
+  ecritureId: string;
+  ligneId: string;
+  compteDestinationId: string;
+  date: string;
+};
 
 export type LigneEcritureComptable = {
   id: string;
@@ -2086,6 +2106,7 @@ export type AppState = {
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];
   ecrituresComptables: EcritureComptable[];
+  reclassements471: Reclassement471[];
   transfertsComptables: TransfertComptable[];
   pointDeVenteActifId: string | "tous";
 };

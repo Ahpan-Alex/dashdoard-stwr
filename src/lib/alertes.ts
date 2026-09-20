@@ -1,4 +1,4 @@
-import { soldeAchat, statutLivraisonAchat } from "./achats";
+import { soldeAchat, statutLivraisonAchat, achatSansLienProjetClient } from "./achats";
 import { calculerStocks } from "./calculations";
 import { etatPaiementFacture, resteAPayer } from "./commercial";
 import type { Permission } from "./auth/rbac";
@@ -71,6 +71,7 @@ export type TypeAlerte =
   | "mission_471_non_reclasse"
   | "dp_sans_reponse"
   | "dp_fournisseur_atypique"
+  | "achat_sans_projet_client"
   | "mission_ouverte"
   | "mission_ecart_acheteur"
   | "transfert_en_attente"
@@ -112,6 +113,7 @@ export type ParametresAlertes = {
   achatMissionAvance: RegleAlerte;
   achatCompte471: RegleAlerte;
   achatDpSansReponse: RegleAlerte;
+  achatSansProjetClient: RegleAlerte;
   venteEcheanceApproche: RegleAlerte;
   venteImpayee: RegleAlerte;
   ventePartielleSansMouvement: RegleAlerte;
@@ -168,6 +170,7 @@ export const PARAMETRES_ALERTES_DEFAUT: ParametresAlertes = {
   achatMissionAvance: { actif: true, delaiJours: 7 },
   achatCompte471: { actif: true, delaiJours: 7 },
   achatDpSansReponse: { actif: true, delaiJours: 7 },
+  achatSansProjetClient: { actif: true },
   venteEcheanceApproche: { actif: true, delaiJours: 7 },
   venteImpayee: { actif: true },
   ventePartielleSansMouvement: { actif: true, delaiJours: 14 },
@@ -232,6 +235,7 @@ export const LABEL_TYPE_ALERTE: Record<TypeAlerte, string> = {
   mission_471_non_reclasse: "Compte 471 en attente de reclassement",
   dp_sans_reponse: "Demande de prix sans réponse",
   dp_fournisseur_atypique: "Fournisseur retenu atypique",
+  achat_sans_projet_client: "Achat non lié à un projet client",
   mission_ouverte: "Mission ouverte sans clôture",
   mission_ecart_acheteur: "Écart moyen acheteur au-delà du seuil",
   transfert_en_attente: "Transfert en attente de validation",
@@ -1155,6 +1159,27 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
     }
   }
 
+  if (cfg.achatSansProjetClient.actif) {
+    for (const a of ctx.achats) {
+      if (!achatSansLienProjetClient(a)) continue;
+      out.push({
+        id: `achat_sans_projet_client:${a.id}`,
+        type: "achat_sans_projet_client",
+        categorie: "achat",
+        titre: `${a.numero} — non lié à un projet client`,
+        message:
+          a.destinationAchat === "projet_client"
+            ? "Projet client choisi, mais aucune commande client n'est rattachée."
+            : "Indiquez un projet client (commande) ou un approvisionnement stock.",
+        date: jourISO(a.date),
+        href: `/achats?id=${a.id}`,
+        gravite: a.statut === "valide" ? "warning" : "info",
+        entiteId: a.id,
+        pointDeVenteId: a.pointDeVenteId,
+      });
+    }
+  }
+
   if (moduleComptabiliteActif(ctx.parametres)) {
     const aMigrer = produitsAMigrerComptes(
       ctx.produits,
@@ -1512,6 +1537,15 @@ export function explicationAlerte(
           "Une demande de prix n'a reçu aucune offre de fournisseur dans le délai attendu.",
         calcul: `DP non clôturée / non annulée, aucune offre à prix > 0, âge depuis la date de la DP.`,
         seuil: `Seuil actuel : ${delaiPositif(n.achatDpSansReponse, 7)} jours`,
+        hrefParametre: href("achat"),
+      };
+    case "achat_sans_projet_client":
+      return {
+        signification:
+          "Un achat n'est rattaché ni à une commande client (projet) ni explicitement à un approvisionnement stock.",
+        calcul:
+          "Achat non annulé, destination ≠ approvisionnement stock, et aucune commande client liée.",
+        seuil: "Alerte dès qu'un achat n'est pas lié à un projet client",
         hrefParametre: href("achat"),
       };
     case "vente_echeance_approche":

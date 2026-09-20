@@ -29,6 +29,7 @@ import type {
   OperationTresorerie,
   Parametres,
   Produit,
+  Reclassement471,
   RoleCompteComptable,
   RoleTiers,
   SortieAtelier,
@@ -138,6 +139,28 @@ export function compteChargeDefautPourType(
 ) {
   const prefix = TYPE_ACHAT_COMPTE_CHARGE_PREFIX[type ?? "marchandises"];
   return compteParPrefixe(comptes, prefix);
+}
+
+/** Compte de charge pour une écriture d'achat : fiche produit, sinon compte type, sinon classe 6. */
+export function compteChargePourEcritureAchat(
+  produit: Pick<Produit, "compteChargeId" | "compteComptableId" | "typeAchat"> | undefined,
+  comptes: CompteComptable[],
+  compteLigneId?: string,
+) {
+  if (compteLigneId) {
+    const direct = comptes.find((c) => c.id === compteLigneId);
+    if (direct) return direct;
+  }
+  if (produit) {
+    const specifique = compteChargeProduit(produit, comptes);
+    if (specifique) return specifique;
+    const parType = compteChargeDefautPourType(produit.typeAchat, comptes);
+    if (parType) return parType;
+  }
+  return (
+    comptes.find((c) => c.id === ID_COMPTE_DEFAUT_CHARGE) ??
+    compteParPrefixe(comptes, "6")
+  );
 }
 
 export function compteChargeProduit(
@@ -605,16 +628,162 @@ export function compteParRole(
 }
 
 /** Compte 471 « Comptes d'attente » (préfixe 471, longueur d'entreprise variable). */
+export function numeroEstCompte471(numero: string) {
+  return chiffresNumeroCompte(numero).startsWith("471");
+}
+
+export function ligneEcritureEst471(ligne: Pick<LigneEcritureComptable, "numero">) {
+  return numeroEstCompte471(ligne.numero);
+}
+
 export function compteAttente471(comptes: CompteComptable[]) {
-  const matches = comptes.filter((c) =>
-    chiffresNumeroCompte(c.numero).startsWith("471"),
-  );
+  const matches = comptes.filter((c) => numeroEstCompte471(c.numero));
   if (matches.length === 0) return undefined;
   return [...matches].sort(
     (a, b) =>
       chiffresNumeroCompte(a.numero).length -
       chiffresNumeroCompte(b.numero).length,
   )[0];
+}
+
+export function comptesDestinationReclassement471(comptes: CompteComptable[]) {
+  return [...comptes]
+    .filter((c) => c.numero && !numeroEstCompte471(c.numero))
+    .sort((a, b) =>
+      chiffresNumeroCompte(a.numero).localeCompare(
+        chiffresNumeroCompte(b.numero),
+        undefined,
+        { numeric: true },
+      ),
+    );
+}
+
+export type Ligne471AReclasser = {
+  ecritureId: string;
+  ligneId: string;
+  date: string;
+  piece: string;
+  libelle: string;
+  journal: string;
+  sourceType: EcritureComptable["sourceType"];
+  sourceId: string;
+  compteId?: string;
+  numero: string;
+  compteLibelle: string;
+  debit: number;
+  credit: number;
+  transferee: boolean;
+};
+
+export function lignes471AReclasser(
+  ecritures: EcritureComptable[],
+  reclassements: Reclassement471[] = [],
+): Ligne471AReclasser[] {
+  const faits = new Set(
+    reclassements.map((r) => `${r.ecritureId}:${r.ligneId}`),
+  );
+  const out: Ligne471AReclasser[] = [];
+  for (const e of ecritures) {
+    if (e.sourceType === "reclassement_471") continue;
+    for (const l of e.lignes) {
+      if (!ligneEcritureEst471(l)) continue;
+      if (faits.has(`${e.id}:${l.id}`)) continue;
+      if (!(l.debit > 0 || l.credit > 0)) continue;
+      out.push({
+        ecritureId: e.id,
+        ligneId: l.id,
+        date: e.date,
+        piece: e.piece,
+        libelle: e.libelle,
+        journal: e.journal,
+        sourceType: e.sourceType,
+        sourceId: e.sourceId,
+        compteId: l.compteId,
+        numero: l.numero,
+        compteLibelle: l.libelle,
+        debit: l.debit,
+        credit: l.credit,
+        transferee: Boolean(e.transferee),
+      });
+    }
+  }
+  return out.sort((a, b) => {
+    const d = (b.date ?? "").localeCompare(a.date ?? "");
+    if (d !== 0) return d;
+    return a.piece.localeCompare(b.piece);
+  });
+}
+
+function appliquerReclassements471(
+  ecritures: EcritureComptable[],
+  reclassements: Reclassement471[],
+  comptes: CompteComptable[],
+  existantes: EcritureComptable[] = [],
+): EcritureComptable[] {
+  if (reclassements.length === 0) return ecritures;
+  const byKey = new Map(
+    reclassements.map((r) => [`${r.ecritureId}:${r.ligneId}`, r] as const),
+  );
+  const prevById = new Map(existantes.map((e) => [e.id, e]));
+  const out = ecritures.map((e) => {
+    if (ecritureEstTransferee(e)) return e;
+    let changed = false;
+    const lignes = e.lignes.map((l) => {
+      const r = byKey.get(`${e.id}:${l.id}`);
+      if (!r) return l;
+      const dest = comptes.find((c) => c.id === r.compteDestinationId);
+      if (!dest?.numero || numeroEstCompte471(dest.numero)) return l;
+      changed = true;
+      return {
+        ...l,
+        compteId: dest.id,
+        numero: dest.numero,
+        libelle: dest.libelle,
+      };
+    });
+    return changed ? { ...e, lignes } : e;
+  });
+  const ods: EcritureComptable[] = [];
+  const deja = new Set(out.map((e) => e.id));
+  for (const r of reclassements) {
+    const prefix = `ecr-reclass-${r.id}`;
+    if (deja.has(prefix)) continue;
+    const e = out.find((x) => x.id === r.ecritureId);
+    if (!e || !ecritureEstTransferee(e)) continue;
+    const l = e.lignes.find((x) => x.id === r.ligneId);
+    if (!l || !ligneEcritureEst471(l)) continue;
+    const dest = comptes.find((c) => c.id === r.compteDestinationId);
+    if (!dest?.numero || numeroEstCompte471(dest.numero)) continue;
+    const origine =
+      comptes.find((c) => c.id === l.compteId) ??
+      comptes.find((c) => chiffresNumeroCompte(c.numero) === chiffresNumeroCompte(l.numero));
+    const prev = prevById.get(prefix);
+    if (prev && ecritureEstTransferee(prev)) {
+      ods.push(prev);
+      continue;
+    }
+    const od: EcritureComptable = {
+      id: prefix,
+      date: r.date,
+      libelle: `Reclassement 471 — ${e.piece}`,
+      piece: e.piece,
+      journal: e.journal,
+      sourceType: "reclassement_471",
+      sourceId: r.id,
+      lignes: [
+        ligneEcriture(
+          `${prefix}-471`,
+          origine,
+          l.libelle,
+          l.credit,
+          l.debit,
+        ),
+        ligneEcriture(`${prefix}-dst`, dest, dest.libelle, l.debit, l.credit),
+      ],
+    };
+    if (ecritureEstEquilibree(od)) ods.push(od);
+  }
+  return [...out, ...ods];
 }
 
 export function compteImputationDepenseMission(
@@ -867,14 +1036,17 @@ function ventilerVersComptes(opts: {
   opts.ventilations.forEach((v, i) => {
     if (v.ht === 0) return;
     const produit = opts.produits.find((p) => p.id === v.produitId);
-    const compte = v.compteId
-      ? opts.comptes.find((c) => c.id === v.compteId)
-      : produit
-        ? opts.natureCompte === "vente"
-          ? compteVenteProduit(produit, opts.comptes)
-          : compteChargeProduit(produit, opts.comptes)
-        : undefined;
-    if (!compteProduitEstRenseigne(compte)) return;
+    const compte =
+      opts.natureCompte === "vente"
+        ? v.compteId
+          ? opts.comptes.find((c) => c.id === v.compteId)
+          : produit
+            ? compteVenteProduit(produit, opts.comptes)
+            : undefined
+        : compteChargePourEcritureAchat(produit, opts.comptes, v.compteId);
+    if (opts.natureCompte === "vente" && !compteProduitEstRenseigne(compte)) return;
+    if (opts.natureCompte === "charge" && !compte?.numero) return;
+    if (!compte) return;
     const debit = opts.produitsAuCredit ? 0 : v.ht;
     const credit = opts.produitsAuCredit ? v.ht : 0;
     lignes.push(
@@ -1643,6 +1815,7 @@ export function regenererEcrituresComptables(opts: {
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
   operationsTresorerie?: OperationTresorerie[];
+  reclassements471?: Reclassement471[];
 }): EcritureComptable[] {
   if (!moduleComptabiliteActif(opts.parametres)) {
     return (opts.existantes ?? []).filter(ecritureEstTransferee);
@@ -1764,7 +1937,13 @@ export function regenererEcrituresComptables(opts: {
   for (const prev of opts.existantes ?? []) {
     if (ecritureEstTransferee(prev) && !used.has(prev.id)) out.push(prev);
   }
-  return out.sort((a, b) => {
+  const avecReclassement = appliquerReclassements471(
+    out,
+    opts.reclassements471 ?? [],
+    opts.comptesComptables,
+    opts.existantes ?? [],
+  );
+  return avecReclassement.sort((a, b) => {
     const da = a.date.localeCompare(b.date);
     if (da !== 0) return da;
     return a.piece.localeCompare(b.piece);

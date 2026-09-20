@@ -16,6 +16,8 @@ import {
   statutGlobalDp,
 } from "@/lib/demandes-prix";
 import { produitEstAchetable } from "@/lib/nature-stock";
+import { motifDestinationAchatManquante } from "@/lib/achats";
+import { SelecteurDestinationAchat } from "@/components/selecteur-destination-achat";
 import { TIERS_DIVERS_MARCHE_ID } from "@/lib/missions";
 import { assurerTiers, estFournisseur } from "@/lib/tiers";
 import { useStore } from "@/lib/store";
@@ -226,6 +228,8 @@ function FormulaireDp({
     note?: string;
     origine?: "libre" | "alerte_stock";
     alerteId?: string;
+    destinationAchat?: "projet_client" | "approvisionnement_stock";
+    commandeId?: string;
   }) => void;
 }) {
   const searchParams = useSearchParams();
@@ -252,6 +256,12 @@ function FormulaireDp({
   const [frns, setFrns] = useState<string[]>([]);
   const [rechercheFrn, setRechercheFrn] = useState("");
   const origineAlerte = searchParams.get("alerte") || undefined;
+  const commandes = useStore((s) => s.commandes ?? []);
+  const clients = useStore((s) => s.clients ?? []);
+  const [destinationAchat, setDestinationAchat] = useState<
+    "projet_client" | "approvisionnement_stock" | ""
+  >(origineAlerte ? "approvisionnement_stock" : "");
+  const [commandeId, setCommandeId] = useState("");
 
   useEffect(() => {
     const produit = searchParams.get("produit") ?? "";
@@ -286,6 +296,14 @@ function FormulaireDp({
 
   function onForm(e: FormEvent) {
     e.preventDefault();
+    const motifDest = motifDestinationAchatManquante({
+      destinationAchat: destinationAchat || undefined,
+      commandeId: commandeId || undefined,
+    });
+    if (motifDest) {
+      alert(motifDest);
+      return;
+    }
     onSubmit({
       date: isoMidiDepuisJour(date),
       lignes: lignes
@@ -304,6 +322,9 @@ function FormulaireDp({
       note: note.trim() || undefined,
       origine: origineAlerte ? "alerte_stock" : "libre",
       alerteId: origineAlerte,
+      destinationAchat: destinationAchat || undefined,
+      commandeId:
+        destinationAchat === "projet_client" ? commandeId || undefined : undefined,
     });
   }
 
@@ -350,6 +371,18 @@ function FormulaireDp({
             onChange={(e) => setDateLivraison(e.target.value)}
           />
         </label>
+      </div>
+      <div className="mb-4 max-w-4xl">
+        <SelecteurDestinationAchat
+          destination={destinationAchat}
+          commandeId={commandeId}
+          commandes={commandes}
+          clients={clients}
+          onChange={(next) => {
+            setDestinationAchat(next.destinationAchat);
+            setCommandeId(next.commandeId);
+          }}
+        />
       </div>
       <h3 className="mb-2 text-sm font-semibold">Articles à consulter</h3>
       {articles.length === 0 ? (

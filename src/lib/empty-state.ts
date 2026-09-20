@@ -117,6 +117,7 @@ export function emptyAppState(): AppState {
     journalActivites: [],
     comptesComptables: [],
     ecrituresComptables: [],
+    reclassements471: [],
     transfertsComptables: [],
   };
 }
@@ -204,6 +205,9 @@ export function pickAppState(state: AppState): AppState {
     journalActivites: state.journalActivites ?? [],
     comptesComptables: state.comptesComptables ?? [],
     ecrituresComptables: state.ecrituresComptables ?? [],
+    reclassements471: Array.isArray(state.reclassements471)
+      ? state.reclassements471
+      : [],
     transfertsComptables: state.transfertsComptables ?? [],
     pointDeVenteActifId: state.pointDeVenteActifId,
   };

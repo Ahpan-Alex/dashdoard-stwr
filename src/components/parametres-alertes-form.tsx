@@ -126,6 +126,10 @@ const ITEMS: Record<"stock" | "production" | "achat" | "vente", ItemRegle[]> = {
       champ: "delai",
       unite: "Jours sans offre",
     },
+    {
+      cle: "achatSansProjetClient",
+      titre: "Achat non lié à un projet client",
+    },
   ],
   vente: [
     {
@@ -178,6 +182,7 @@ const TYPE_PAR_CLE: Partial<Record<CleRegle, keyof typeof LABEL_TYPE_ALERTE>> = 
   dpFournisseurAtypique: "dp_fournisseur_atypique",
   achatCompte471: "mission_471_non_reclasse",
   achatDpSansReponse: "dp_sans_reponse",
+  achatSansProjetClient: "achat_sans_projet_client",
   venteEcheanceApproche: "vente_echeance_approche",
   venteImpayee: "vente_impayee",
   ventePartielleSansMouvement: "vente_partielle_sans_mouvement",

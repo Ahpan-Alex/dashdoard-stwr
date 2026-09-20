@@ -14,7 +14,9 @@ import { libelleProduit } from "@/lib/produits";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
 import { VALIDITE_JOURS_DEFAUT, normaliserValiditeJours } from "@/lib/validite-document";
-import type { DemandePrix, Produit } from "@/lib/types";
+import { motifDestinationAchatManquante } from "@/lib/achats";
+import { SelecteurDestinationAchat } from "@/components/selecteur-destination-achat";
+import type { DemandePrix, DestinationAchat, Produit } from "@/lib/types";
 
 type PartEdit = {
   fournisseurId: string;
@@ -53,6 +55,8 @@ export function TransformerDpAchat({
 }) {
   const produits = useStore((s) => s.produits ?? []);
   const transformer = useStore((s) => s.transformerDemandePrixEnAchats);
+  const commandesClient = useStore((s) => s.commandes ?? []);
+  const clients = useStore((s) => s.clients ?? []);
   const { visibles } = useSitesVisibles();
   const sites = visibles.filter((s) => s.actif);
   const consultes = dp.fournisseurIds ?? [];
@@ -65,6 +69,11 @@ export function TransformerDpAchat({
     String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT),
   );
   const [lignes, setLignes] = useState<LigneEdit[]>(() => toEdit(dp, produits));
+  const [destinationAchat, setDestinationAchat] = useState<DestinationAchat | "">(
+    dp.destinationAchat ??
+      (dp.origine === "alerte_stock" ? "approvisionnement_stock" : ""),
+  );
+  const [commandeId, setCommandeId] = useState(dp.commandeId ?? "");
 
   const commandesPrevues = useMemo(
     () =>
@@ -85,7 +94,7 @@ export function TransformerDpAchat({
     return (
       <p className="text-sm text-muted">
         Ajoutez au moins un article et un fournisseur consulté pour transformer
-        cette DP en une ou plusieurs commandes fournisseur.
+        cette DP en un ou plusieurs achats.
       </p>
     );
   }
@@ -95,6 +104,11 @@ export function TransformerDpAchat({
     setSiteId(dp.pointDeVenteId || sites[0]?.id || "");
     setDate(jourLocalISO());
     setValiditeJours(String(dp.validiteJours ?? VALIDITE_JOURS_DEFAUT));
+    setDestinationAchat(
+      dp.destinationAchat ??
+        (dp.origine === "alerte_stock" ? "approvisionnement_stock" : ""),
+    );
+    setCommandeId(dp.commandeId ?? "");
     setEtape("edition");
     setOuvert(true);
   }
@@ -151,6 +165,14 @@ export function TransformerDpAchat({
       alert("Choisissez un site de destination.");
       return false;
     }
+    const motifDest = motifDestinationAchatManquante({
+      destinationAchat: destinationAchat || undefined,
+      commandeId: commandeId || undefined,
+    });
+    if (motifDest) {
+      alert(motifDest);
+      return false;
+    }
     if (commandesPrevues.length === 0) {
       alert("Attribuez au moins un article à un fournisseur, avec une quantité positive.");
       return false;
@@ -178,6 +200,9 @@ export function TransformerDpAchat({
       pointDeVenteId: siteId,
       date: isoMidiDepuisJour(date),
       validiteJours: normaliserValiditeJours(validiteJours),
+      destinationAchat: destinationAchat || undefined,
+      commandeId:
+        destinationAchat === "projet_client" ? commandeId || undefined : undefined,
       commandes,
     });
     if (!res.ok) {
@@ -193,17 +218,18 @@ export function TransformerDpAchat({
       {!ouvert ? (
         <button type="button" className="btn btn-primary" onClick={resetFormulaire}>
           {(dp.achatIds ?? []).length > 0
-            ? "Créer d’autres commandes"
-            : "Transformer en commande fournisseur"}
+            ? "Créer d’autres achats"
+            : "Transformer en achat"}
         </button>
       ) : etape === "validation" ? (
         <div className="space-y-4">
           <p className="text-sm font-semibold">Confirmer la transformation</p>
           <p className="text-sm text-muted">
             {commandesPrevues.length > 1
-              ? `${commandesPrevues.length} commandes brouillon seront créées.`
-              : "1 commande brouillon sera créée."}{" "}
-            La DP passera en statut Clôturée, avec le lien vers chaque commande.
+              ? `${commandesPrevues.length} achats validés seront créés.`
+              : "1 achat validé sera créé."}{" "}
+            La DP passera en statut Clôturée. Chaque achat génère une écriture
+            d&apos;achat (charges / fournisseur), distincte du paiement.
           </p>
           <ul className="space-y-1 text-sm">
             {commandesPrevues.map((c) => (
@@ -238,9 +264,9 @@ export function TransformerDpAchat({
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Répartissez chaque article entre un ou plusieurs fournisseurs : une
-            commande brouillon distincte est créée par fournisseur. Vous
-            prévisualisez et téléchargez ensuite chaque bon, avant de valider.
+            Répartissez chaque article entre un ou plusieurs fournisseurs : un
+            achat réel (validé) est créé par fournisseur, avec écriture
+            d&apos;achat au journal. Le paiement se saisit ensuite sur l&apos;achat.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block text-xs font-semibold text-muted">
@@ -278,6 +304,17 @@ export function TransformerDpAchat({
               />
             </label>
           </div>
+          <SelecteurDestinationAchat
+            name="destination-achat-dp-transform"
+            destination={destinationAchat}
+            commandeId={commandeId}
+            commandes={commandesClient}
+            clients={clients}
+            onChange={(next) => {
+              setDestinationAchat(next.destinationAchat);
+              setCommandeId(next.commandeId);
+            }}
+          />
 
           <div className="space-y-4">
             {lignes.map((l) => {
@@ -375,8 +412,8 @@ export function TransformerDpAchat({
             <div className="rounded-[var(--radius)] border border-sea-200 bg-sea-50/40 p-3">
               <p className="mb-2 text-xs font-semibold text-muted">
                 {commandesPrevues.length > 1
-                  ? `${commandesPrevues.length} commandes seront créées`
-                  : "1 commande sera créée"}
+                  ? `${commandesPrevues.length} achats validés seront créés`
+                  : "1 achat validé sera créé"}
               </p>
               <ul className="space-y-1 text-sm">
                 {commandesPrevues.map((c) => (

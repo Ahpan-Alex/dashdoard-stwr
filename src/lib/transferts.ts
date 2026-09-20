@@ -106,6 +106,37 @@ export function stockSuffisantPourTransfert(
   return null;
 }
 
+/** Articles avec stock physique > 0 sur le site source. */
+export function produitsEnStockPourTransfert(
+  produits: Produit[],
+  siteId: string,
+  ctx: {
+    entrees: EntreeStock[];
+    ventes: Vente[];
+    inventaires: Inventaire[];
+  },
+) {
+  if (!siteId) return [];
+  return produits
+    .filter((p) => p.actif)
+    .map((produit) => ({
+      produit,
+      quantite: quantiteStockChronologique({
+        produitId: produit.id,
+        pointDeVenteId: siteId,
+        entrees: ctx.entrees,
+        ventes: ctx.ventes,
+        inventaires: ctx.inventaires,
+      }),
+    }))
+    .filter((x) => x.quantite > 1e-9)
+    .sort((a, b) =>
+      (a.produit.libelleCourt || a.produit.libelleLong || "").localeCompare(
+        b.produit.libelleCourt || b.produit.libelleLong || "",
+      ),
+    );
+}
+
 export function figerCumpLignesTransfert(
   lignes: TransfertStockLigne[],
   siteSourceId: string,

@@ -11,6 +11,8 @@ import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
 import { SelecteurApercuCommandesFournisseur } from "@/components/apercu-bon-commande-fournisseur";
 import { TransformerDpAchat } from "@/components/transformer-dp-achat";
+import { SelecteurDestinationAchat } from "@/components/selecteur-destination-achat";
+import { DESTINATION_ACHAT_LABELS } from "@/lib/achats";
 import { formatDate } from "@/lib/format";
 import { createId } from "@/lib/id";
 import {
@@ -44,6 +46,7 @@ export default function DemandePrixDetailPage() {
   const parametres = useStore((s) => s.parametres);
   const achats = useStore((s) => s.achats);
   const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const commandes = useStore((s) => s.commandes ?? []);
   const [nouvelArticleId, setNouvelArticleId] = useState("");
   const [nouvelleQte, setNouvelleQte] = useState("1");
   const [nouvellesSpecs, setNouvellesSpecs] = useState("");
@@ -229,7 +232,38 @@ export default function DemandePrixDetailPage() {
           />
         </label>
       </div>
-
+      <div className="mb-6 max-w-3xl rounded-[var(--radius)] border border-line bg-card p-4">
+        {verrouille ? (
+          <p className="text-sm">
+            Destination :{" "}
+            <span className="font-semibold">
+              {dp.destinationAchat
+                ? DESTINATION_ACHAT_LABELS[dp.destinationAchat]
+                : "Non renseignée"}
+            </span>
+            {dp.commandeId
+              ? ` · ${commandes.find((c) => c.id === dp.commandeId)?.numero ?? dp.commandeId}`
+              : ""}
+          </p>
+        ) : (
+          <SelecteurDestinationAchat
+            destination={dp.destinationAchat ?? ""}
+            commandeId={dp.commandeId ?? ""}
+            commandes={commandes}
+            clients={clients}
+            onChange={(next) => {
+              const res = modifierDemandePrix(dp.id, {
+                destinationAchat: next.destinationAchat || undefined,
+                commandeId:
+                  next.destinationAchat === "projet_client"
+                    ? next.commandeId || undefined
+                    : undefined,
+              });
+              if (!res.ok) alert(res.reason);
+            }}
+          />
+        )}
+      </div>
       {!verrouille && (
         <div className="mb-6 flex flex-wrap gap-2">
           {dp.statut === "brouillon" && (
@@ -487,11 +521,12 @@ export default function DemandePrixDetailPage() {
       {dp.statut !== "annulee" && dp.statut !== "cloturee_sans_suite" && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-2 font-display text-lg font-semibold">
-            Transformer en commande(s) fournisseur
+            Transformer en achat réel
           </h2>
           <p className="mb-3 text-xs text-muted">
-            Retenez un fournisseur par ligne, puis confirmez la transformation. Une
-            commande brouillon est créée par fournisseur, avec le lien DP → commande.
+            Retenez un fournisseur par ligne, puis confirmez. Un achat validé est
+            créé par fournisseur, avec écriture d&apos;achat au journal (charges /
+            fournisseur). Le paiement se saisit ensuite, séparément.
           </p>
           <TransformerDpAchat dp={dp} nomFrn={nomFrn} />
         </section>
@@ -499,10 +534,10 @@ export default function DemandePrixDetailPage() {
 
       {(dp.achatIds ?? []).length > 0 && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
-          <h2 className="mb-2 font-display text-lg font-semibold">Commandes générées</h2>
+          <h2 className="mb-2 font-display text-lg font-semibold">Achats générés</h2>
           <p className="mb-3 text-xs text-muted">
-            Prévisualisez et téléchargez chaque bon de commande fournisseur avant
-            de valider.
+            Achats validés issus de cette DP. L&apos;écriture d&apos;achat est
+            déjà au journal ; le paiement se saisit sur chaque achat.
           </p>
           <SelecteurApercuCommandesFournisseur
             achats={(dp.achatIds ?? [])

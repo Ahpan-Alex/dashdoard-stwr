@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/empty-state";
 import { InfoButton } from "@/components/info-button";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurArticle } from "@/components/selecteur-article";
+import { SelecteurDestinationAchat } from "@/components/selecteur-destination-achat";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
 import { StatCard } from "@/components/stat-card";
@@ -44,6 +45,7 @@ import {
   totauxAchat,
   totauxAvoir,
   ttcAvoirsValides,
+  motifDestinationAchatManquante,
 } from "@/lib/achats";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
@@ -77,6 +79,7 @@ import type {
   AchatLigne,
   AchatLigneRepartition,
   AvoirAchatLigne,
+  DestinationAchat,
   LivraisonAchatLigne,
   ModePaiement,
   TypeAchat,
@@ -121,6 +124,8 @@ function AchatsListe() {
     addAchat,
     assurerComptesComptablesDefaut,
   } = useStore();
+  const commandes = useStore((s) => s.commandes ?? []);
+  const clients = useStore((s) => s.clients ?? []);
   const exercicesComptables = useStore((s) => s.exercicesComptables ?? []);
   const moduleCompta = moduleComptabiliteActif(parametres);
   const validiteDefaut = validiteJoursDefautAchats(parametres);
@@ -145,6 +150,8 @@ function AchatsListe() {
     validiteJours: String(validiteDefaut),
     numeroFactureFournisseur: "",
     produitRefId: "",
+    destinationAchat: "" as DestinationAchat | "",
+    commandeId: "",
   });
 
   useEffect(() => {
@@ -205,6 +212,14 @@ function AchatsListe() {
               alert("Choisissez un fournisseur et un site.");
       return;
     }
+    const motifDest = motifDestinationAchatManquante({
+      destinationAchat: form.destinationAchat || undefined,
+      commandeId: form.commandeId || undefined,
+    });
+    if (motifDest) {
+      alert(motifDest);
+      return;
+    }
     const id = addAchat({
       numero: nextNumeroAchat(achats, {
         date: isoMidiDepuisJour(form.date),
@@ -222,6 +237,11 @@ function AchatsListe() {
       note: undefined,
       validiteJours: Number(form.validiteJours) || 15,
       numeroFactureFournisseur: form.numeroFactureFournisseur.trim() || undefined,
+      destinationAchat: form.destinationAchat as DestinationAchat,
+      commandeId:
+        form.destinationAchat === "projet_client"
+          ? form.commandeId || undefined
+          : undefined,
     });
     setCreer(false);
     setSelectionId(id);
@@ -436,6 +456,21 @@ function AchatsListe() {
               />
             </label>
           </div>
+          <div className="mt-4">
+            <SelecteurDestinationAchat
+              destination={form.destinationAchat}
+              commandeId={form.commandeId}
+              commandes={commandes}
+              clients={clients}
+              onChange={(next) =>
+                setForm({
+                  ...form,
+                  destinationAchat: next.destinationAchat,
+                  commandeId: next.commandeId,
+                })
+              }
+            />
+          </div>
           <div className="mt-4 flex gap-2">
             <button type="button" className="btn btn-primary" onClick={lancerCreation}>
               Créer le brouillon
@@ -594,6 +629,17 @@ function AchatEditor({
       ? (s.besoinsAchat ?? []).find((b) => b.id === achat.besoinAchatId)
       : undefined,
   );
+  const commandes = useStore((s) => s.commandes ?? []);
+  const clients = useStore((s) => s.clients ?? []);
+  const commandeLiee = useStore((s) =>
+    achat.commandeId
+      ? s.commandes.find((c) => c.id === achat.commandeId)
+      : undefined,
+  );
+  const [destinationAchat, setDestinationAchat] = useState<DestinationAchat | "">(
+    achat.destinationAchat ?? "",
+  );
+  const [commandeId, setCommandeId] = useState(achat.commandeId ?? "");
   const [voirBon, setVoirBon] = useState(true);
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("charge");
@@ -645,6 +691,11 @@ function AchatEditor({
             numeroFactureFournisseur:
               numeroFactureFournisseur.trim() || undefined,
             modePaiement,
+            destinationAchat: destinationAchat || undefined,
+            commandeId:
+              destinationAchat === "projet_client"
+                ? commandeId || undefined
+                : undefined,
           }
         : {
             note: note.trim() || undefined,
@@ -653,6 +704,11 @@ function AchatEditor({
             numeroFactureFournisseur:
               numeroFactureFournisseur.trim() || undefined,
             modePaiement,
+            destinationAchat: destinationAchat || undefined,
+            commandeId:
+              destinationAchat === "projet_client"
+                ? commandeId || undefined
+                : undefined,
           },
     );
     if (!res.ok) alert(res.reason);
@@ -666,6 +722,9 @@ function AchatEditor({
       validiteJours: Number(validiteJours) || 15,
       numeroFactureFournisseur: numeroFactureFournisseur.trim() || undefined,
       modePaiement,
+      destinationAchat: destinationAchat || undefined,
+      commandeId:
+        destinationAchat === "projet_client" ? commandeId || undefined : undefined,
     });
     if (!save.ok) {
       alert(save.reason);
@@ -706,6 +765,18 @@ function AchatEditor({
             besoin {besoinLie.numero}
           </Link>
         </p>
+      )}
+
+      {commandeLiee && (
+        <p className="mb-3 text-sm">
+          Projet client :{" "}
+          <Link href={`/commandes?id=${commandeLiee.id}`} className="font-semibold text-sea-800">
+            {commandeLiee.numero}
+          </Link>
+        </p>
+      )}
+      {achat.destinationAchat === "approvisionnement_stock" && !commandeLiee && (
+        <p className="mb-3 text-sm text-muted">Approvisionnement stock</p>
       )}
 
       <PageHeader
@@ -832,7 +903,22 @@ function AchatEditor({
       </nav>
 
       {onglet === "commande" && (
-        <CommandePanel
+        <>
+          <div className="mb-4 rounded-[var(--radius)] border border-line bg-card p-4">
+            <SelecteurDestinationAchat
+              name="destination-achat-editor"
+              destination={destinationAchat}
+              commandeId={commandeId}
+              commandes={commandes}
+              clients={clients}
+              disabled={achat.statut === "annule"}
+              onChange={(next) => {
+                setDestinationAchat(next.destinationAchat);
+                setCommandeId(next.commandeId);
+              }}
+            />
+          </div>
+          <CommandePanel
           achat={achat}
           lignes={lignes}
           setLignes={setLignes}
@@ -852,6 +938,7 @@ function AchatEditor({
           tot={tot}
           onSave={enregistrerCommande}
         />
+        </>
       )}
       {onglet === "livraisons" && (
         <LivraisonsPanel

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -10,7 +10,7 @@ import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { etatCumpProduit } from "@/lib/cump";
 import { libelleProduit } from "@/lib/produits";
-import { STATUT_TRANSFERT_LABELS } from "@/lib/transferts";
+import { STATUT_TRANSFERT_LABELS, produitsEnStockPourTransfert } from "@/lib/transferts";
 import { BadgeDelai } from "@/components/badge-delai";
 import { etatDelaiTransfert } from "@/lib/delais-alerte";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
@@ -18,7 +18,6 @@ import { useStore } from "@/lib/store";
 import type {
   EntreeStock,
   Inventaire,
-  Produit,
   TransfertStock,
   TransfertStockLigne,
   Vente,
@@ -34,7 +33,6 @@ function badgeTransfert(statut: TransfertStock["statut"]) {
 export default function TransfertsPage() {
   const {
     transfertsStock,
-    produits,
     entrees,
     ventes,
     inventaires,
@@ -114,7 +112,6 @@ export default function TransfertsPage() {
         <FormulaireTransfert
           sitesSource={visibles.filter((s) => s.actif && rattache(s.id))}
           sitesDest={tousSites.filter((s) => s.actif)}
-          produits={produits.filter((p) => p.actif)}
           rattache={rattache}
           defautSource={actif !== "tous" ? actif : visibles.find((s) => rattache(s.id))?.id ?? ""}
           entrees={entrees}
@@ -202,7 +199,6 @@ export default function TransfertsPage() {
 function FormulaireTransfert({
   sitesSource,
   sitesDest,
-  produits,
   rattache,
   defautSource,
   entrees,
@@ -213,7 +209,6 @@ function FormulaireTransfert({
 }: {
   sitesSource: { id: string; nom: string }[];
   sitesDest: { id: string; nom: string }[];
-  produits: Produit[];
   rattache: (id: string) => boolean;
   defautSource: string;
   entrees: EntreeStock[];
@@ -235,12 +230,40 @@ function FormulaireTransfert({
   const [date, setDate] = useState(jourLocalISO());
   const [note, setNote] = useState("");
   const [lignes, setLignes] = useState<TransfertStockLigne[]>([]);
-  const [produitId, setProduitId] = useState(produits[0]?.id ?? "");
+  const [produitId, setProduitId] = useState("");
   const tousProduits = useStore((s) => s.produits);
+  const enStock = useMemo(
+    () =>
+      produitsEnStockPourTransfert(tousProduits, source, {
+        entrees,
+        ventes,
+        inventaires,
+      }),
+    [tousProduits, source, entrees, ventes, inventaires],
+  );
+
+  useEffect(() => {
+    if (!produitId || !enStock.some((x) => x.produit.id === produitId)) {
+      setProduitId(enStock[0]?.produit.id ?? "");
+    }
+  }, [enStock, produitId]);
+
+  function changerSource(next: string) {
+    setSource(next);
+    const restants = produitsEnStockPourTransfert(tousProduits, next, {
+      entrees,
+      ventes,
+      inventaires,
+    });
+    const ids = new Set(restants.map((x) => x.produit.id));
+    setLignes((prev) => prev.filter((l) => ids.has(l.produitId)));
+    setProduitId(restants[0]?.produit.id ?? "");
+  }
 
   function ajouter() {
     if (!produitId || lignes.some((l) => l.produitId === produitId)) return;
-    setLignes([...lignes, { produitId, quantite: 1 }]);
+    const dispo = enStock.find((x) => x.produit.id === produitId)?.quantite ?? 0;
+    setLignes([...lignes, { produitId, quantite: Math.min(1, dispo) || 1 }]);
   }
 
   function envoyer(e: FormEvent) {
@@ -270,7 +293,7 @@ function FormulaireTransfert({
           <select
             className="select mt-1"
             value={source}
-            onChange={(e) => setSource(e.target.value)}
+            onChange={(e) => changerSource(e.target.value)}
             required
           >
             <option value="">—</option>
@@ -313,20 +336,31 @@ function FormulaireTransfert({
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
         <label className="block text-xs font-semibold text-muted">
-          Article
+          Article en stock
           <select
             className="select mt-1 min-w-[16rem]"
             value={produitId}
             onChange={(e) => setProduitId(e.target.value)}
+            disabled={enStock.length === 0}
           >
-            {produits.map((p) => (
-              <option key={p.id} value={p.id}>
-                {libelleProduit(tousProduits.find((x) => x.id === p.id) ?? p)}
-              </option>
-            ))}
+            {enStock.length === 0 ? (
+              <option value="">Aucun article en stock sur ce site</option>
+            ) : (
+              enStock.map(({ produit, quantite }) => (
+                <option key={produit.id} value={produit.id}>
+                  {libelleProduit(produit)} — {formatNumber(quantite)}
+                  {produit.unite ? ` ${produit.unite}` : ""}
+                </option>
+              ))
+            )}
           </select>
         </label>
-        <button type="button" className="btn btn-secondary" onClick={ajouter}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={ajouter}
+          disabled={!produitId}
+        >
           <Plus className="h-4 w-4" />
           Ajouter
         </button>

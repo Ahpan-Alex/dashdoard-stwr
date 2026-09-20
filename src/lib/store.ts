@@ -43,6 +43,8 @@ import {
   reliquatProduit,
   soldeAchat,
   statutLivraisonRecord,
+  motifDestinationAchatManquante,
+  destinationDepuisOf,
 } from "./achats";
 import {
   motifVentilationInvalide,
@@ -146,6 +148,7 @@ import {
   motifLignesAchatInvalides,
   motifNumeroCompteInvalide,
   motifNumeroCompteSaisie,
+  numeroEstCompte471,
   MSG_COMPTE_VERROUILLE,
   parserCsvPlanComptable,
   PREFIXE_COMPTE_CLIENT,
@@ -336,6 +339,7 @@ import type {
   Produit,
   RelanceImpayee,
   RelanceImpayeeCanal,
+  Reclassement471,
   RoleCompteComptable,
   SourceTransformation,
   SortieAtelier,
@@ -370,6 +374,7 @@ import type {
   DemandePrixLigne,
   DemandePrixOffre,
   DemandePrixStatut,
+  DestinationAchat,
   ExerciceComptable,
   BatMotifRefus,
   BatOrigine,
@@ -427,6 +432,7 @@ type Store = {
   journalActivites: JournalActivite[];
   comptesComptables: CompteComptable[];
   ecrituresComptables: EcritureComptable[];
+  reclassements471: Reclassement471[];
   transfertsComptables: TransfertComptable[];
   identiteNavigation: IdentiteNavigation;
   preferencesAffichage: PreferencesAffichage;
@@ -520,7 +526,7 @@ type Store = {
   ) => string;
   updateAchat: (
     id: string,
-    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours" | "numeroFactureFournisseur" | "modePaiement">>,
+    data: Partial<Pick<Achat, "fournisseurId" | "pointDeVenteId" | "date" | "echeance" | "tauxTVA" | "lignes" | "note" | "validiteJours" | "numeroFactureFournisseur" | "modePaiement" | "destinationAchat" | "commandeId">>,
   ) => { ok: boolean; reason?: string };
   validerAchat: (id: string) => { ok: boolean; reason?: string };
   annulerAchat: (id: string) => { ok: boolean; reason?: string };
@@ -891,6 +897,8 @@ type Store = {
     dateLivraisonSouhaitee?: string;
     origine?: "libre" | "alerte_stock";
     alerteId?: string;
+    destinationAchat?: DestinationAchat;
+    commandeId?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierDemandePrix: (
     id: string,
@@ -906,6 +914,8 @@ type Store = {
       validiteJours: number;
       pointDeVenteId: string;
       dateLivraisonSouhaitee: string;
+      destinationAchat?: DestinationAchat;
+      commandeId?: string;
     }>,
   ) => { ok: boolean; reason?: string };
   patchOffreDemandePrix: (
@@ -939,6 +949,8 @@ type Store = {
       pointDeVenteId: string;
       date?: string;
       validiteJours?: number;
+      destinationAchat?: DestinationAchat;
+      commandeId?: string;
       commandes: {
         fournisseurId: string;
         lignes: { produitId: string; quantite: number; prixAchatUnitaire: number }[];
@@ -980,6 +992,11 @@ type Store = {
   reclasseDepenseMission: (
     missionId: string,
     depenseId: string,
+    compteId: string,
+  ) => { ok: true } | { ok: false; reason: string };
+  reclasseLigne471: (
+    ecritureId: string,
+    ligneId: string,
     compteId: string,
   ) => { ok: true } | { ok: false; reason: string };
 
@@ -1461,6 +1478,7 @@ function journalDepuis(state: {
   lotsPaiementFournisseur?: LotPaiementFournisseur[];
   modesPaiement?: ModePaiementParam[];
   operationsTresorerie?: OperationTresorerie[];
+  reclassements471?: Reclassement471[];
 }): EcritureComptable[] {
   return regenererEcrituresComptables({
     factures: state.factures,
@@ -1481,6 +1499,7 @@ function journalDepuis(state: {
     lotsPaiementFournisseur: state.lotsPaiementFournisseur,
     modesPaiement: state.modesPaiement,
     operationsTresorerie: state.operationsTresorerie,
+    reclassements471: state.reclassements471,
   });
 }
 
@@ -1504,6 +1523,7 @@ function avecJournal<T extends Record<string, unknown>>(
     lotsPaiementFournisseur?: LotPaiementFournisseur[];
     modesPaiement?: ModePaiementParam[];
     operationsTresorerie?: OperationTresorerie[];
+    reclassements471?: Reclassement471[];
   },
   patch: T,
 ): T & {
@@ -2678,6 +2698,8 @@ export const useStore = create<Store>()((set, get) => ({
           get().categoriesProduits,
         );
         if (motifNat) return { ok: false, reason: motifNat };
+        const motifDest = motifDestinationAchatManquante(prev);
+        if (motifDest) return { ok: false, reason: motifDest };
         if (moduleComptabiliteActif(get().parametres)) {
           const motifCompta = motifLignesAchatInvalides(
             prev.lignes,
@@ -3979,6 +4001,13 @@ export const useStore = create<Store>()((set, get) => ({
           data.quantite,
         ).map((r) => ({ ...r, id: uid("rof") }));
         const ofsUniques = [...new Set(repsOf.map((r) => r.ofId))];
+        const ofPrincipal =
+          ofsUniques.length === 1
+            ? state.ordresFabrication.find((o) => o.id === ofsUniques[0])
+            : ofsUniques.length > 0
+              ? state.ordresFabrication.find((o) => o.id === ofsUniques[0] && o.commandeId)
+              : undefined;
+        const destOf = destinationDepuisOf(ofPrincipal);
         const achatId = uid("ach");
         const numero = nextNumeroAchat(state.achats, optsNum(state));
         const actor = getActiviteActor();
@@ -4014,6 +4043,8 @@ export const useStore = create<Store>()((set, get) => ({
           modePaiement: data.modePaiement,
           ofId: ofsUniques.length === 1 ? ofsUniques[0] : undefined,
           ofComposantId: ofsUniques.length === 1 ? besoin.produitId : undefined,
+          destinationAchat: destOf.destinationAchat,
+          commandeId: destOf.commandeId,
         };
         set((s) => ({
           achats: [achat, ...s.achats],
@@ -5002,6 +5033,7 @@ export const useStore = create<Store>()((set, get) => ({
         const achatId = uid("ach");
         const numero = nextNumeroAchat(state.achats, optsNum(state));
         const actor = getActiviteActor();
+        const destOf = destinationDepuisOf(prev);
         set((s) => ({
           achats: [
             {
@@ -5032,6 +5064,8 @@ export const useStore = create<Store>()((set, get) => ({
               vendeurNom: actor.nom,
               ofId,
               ofComposantId: data.composantId,
+              destinationAchat: destOf.destinationAchat,
+              commandeId: destOf.commandeId,
             },
             ...s.achats,
           ],
@@ -6015,6 +6049,11 @@ export const useStore = create<Store>()((set, get) => ({
           state.categoriesProduits,
         );
         if (motifNat) return { ok: false, reason: motifNat };
+        const motifDest = motifDestinationAchatManquante({
+          destinationAchat: data.destinationAchat,
+          commandeId: data.commandeId,
+        });
+        if (motifDest) return { ok: false, reason: motifDest };
         const lignes: DemandePrixLigne[] = data.lignes.map((l) => ({
           id: uid("dpl"),
           produitId: l.produitId,
@@ -6050,6 +6089,11 @@ export const useStore = create<Store>()((set, get) => ({
           dateLivraisonSouhaitee: data.dateLivraisonSouhaitee,
           origine: data.origine ?? "libre",
           alerteId: data.alerteId,
+          destinationAchat: data.destinationAchat,
+          commandeId:
+            data.destinationAchat === "projet_client"
+              ? data.commandeId
+              : undefined,
         };
         set((s) => ({
           demandesPrix: [nouveau, ...(s.demandesPrix ?? [])],
@@ -6257,6 +6301,10 @@ export const useStore = create<Store>()((set, get) => ({
         ) {
           return { ok: false, reason: "Document verrouillé." };
         }
+        if (statut !== "annulee" && statut !== "brouillon") {
+          const motifDest = motifDestinationAchatManquante(prev);
+          if (motifDest) return { ok: false, reason: motifDest };
+        }
         set((s) => ({
           demandesPrix: (s.demandesPrix ?? []).map((d) => (d.id === id ? { ...d, statut } : d)),
           journalActivites: [
@@ -6289,6 +6337,17 @@ export const useStore = create<Store>()((set, get) => ({
         if (data.commandes.length === 0) {
           return { ok: false, reason: "Répartissez au moins un article vers un fournisseur." };
         }
+        const destinationAchat =
+          data.destinationAchat ?? prev.destinationAchat;
+        const commandeId =
+          destinationAchat === "projet_client"
+            ? (data.commandeId ?? prev.commandeId)
+            : undefined;
+        const motifDest = motifDestinationAchatManquante({
+          destinationAchat,
+          commandeId,
+        });
+        if (motifDest) return { ok: false, reason: motifDest };
         const produits = state.produits ?? [];
         const actor = getActiviteActor();
         const nouveaux: Achat[] = [];
@@ -6320,6 +6379,9 @@ export const useStore = create<Store>()((set, get) => ({
             quantite: l.quantite,
             prixAchatUnitaire: l.prixAchatUnitaire,
             typeAchat: produits.find((p) => p.id === l.produitId)?.typeAchat,
+            repartitions: [
+              { pointDeVenteId: siteDest, quantite: l.quantite },
+            ],
           }));
           const motifNat = motifAchatNatureInterdite(
             produits,
@@ -6327,6 +6389,13 @@ export const useStore = create<Store>()((set, get) => ({
             state.categoriesProduits,
           );
           if (motifNat) return { ok: false, reason: motifNat };
+          if (moduleComptabiliteActif(state.parametres)) {
+            const motifCompta = motifLignesAchatInvalides(
+              lignesAchat,
+              state.comptesComptables,
+            );
+            if (motifCompta) return { ok: false, reason: motifCompta };
+          }
           const achatId = uid("ach");
           const numero = nextNumeroAchat(
             achatsCourants,
@@ -6338,7 +6407,8 @@ export const useStore = create<Store>()((set, get) => ({
             fournisseurId: cmd.fournisseurId,
             pointDeVenteId: siteDest,
             date: data.date ?? prev.date,
-            statut: "brouillon",
+            statut: "valide",
+            dateValidation: new Date().toISOString(),
             tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
             lignes: lignesAchat,
             livraisons: [],
@@ -6351,6 +6421,8 @@ export const useStore = create<Store>()((set, get) => ({
             vendeurNom: actor.nom,
             demandePrixId: prev.id,
             validiteJours: validite,
+            destinationAchat,
+            commandeId,
           };
           nouveaux.push(achat);
           achatsCourants = [achat, ...achatsCourants];
@@ -6365,7 +6437,8 @@ export const useStore = create<Store>()((set, get) => ({
         const retenuesParLigne = [
           ...(prev.retenuesParLigne ?? []),
         ];
-        set((s) => ({
+        set((s) =>
+          avecJournal(s, {
           achats: [...nouveaux, ...s.achats],
           demandesPrix: (s.demandesPrix ?? []).map((d) =>
             d.id === id
@@ -6380,15 +6453,16 @@ export const useStore = create<Store>()((set, get) => ({
           ),
           journalActivites: [
             ...nouveaux.map((a) =>
-              entreeActivite("creation", "achat", {
+              entreeActivite("validation", "achat", {
                 entiteId: a.id,
                 libelle: a.numero,
-                detail: `Depuis ${prev.numero}`,
+                detail: `Depuis ${prev.numero} — achat réel`,
               }),
             ),
             ...s.journalActivites,
           ],
-        }));
+        }),
+        );
         return { ok: true, achatIds: nouveaux.map((a) => a.id) };
       },
 
@@ -7219,6 +7293,83 @@ export const useStore = create<Store>()((set, get) => ({
                 entiteId: missionId,
                 libelle: mission.numero,
                 detail: `Reclassement dépense ${depense.nature} → ${compte.numero}`,
+              }),
+              ...s.journalActivites,
+            ],
+          }),
+        );
+        return { ok: true as const };
+      },
+      reclasseLigne471: (ecritureId, ligneId, compteId) => {
+        if (!useAuthStore.getState().hasPermission("comptabilite.gerer")) {
+          return {
+            ok: false as const,
+            reason: "Le reclassement est réservé au comptable.",
+          };
+        }
+        const state = get();
+        const ecriture = (state.ecrituresComptables ?? []).find(
+          (e) => e.id === ecritureId,
+        );
+        if (!ecriture) {
+          return { ok: false as const, reason: "Écriture introuvable." };
+        }
+        const ligne = ecriture.lignes.find((l) => l.id === ligneId);
+        if (!ligne) {
+          return { ok: false as const, reason: "Ligne d'écriture introuvable." };
+        }
+        if (!numeroEstCompte471(ligne.numero)) {
+          return {
+            ok: false as const,
+            reason: "Cette ligne n'est pas imputée à un compte 471.",
+          };
+        }
+        const compte = state.comptesComptables.find((c) => c.id === compteId);
+        if (!compte) return { ok: false as const, reason: "Compte introuvable." };
+        if (numeroEstCompte471(compte.numero)) {
+          return {
+            ok: false as const,
+            reason: "Choisissez un compte définitif, autre que 471.",
+          };
+        }
+        let missionsAchat = state.missionsAchat ?? [];
+        if (ecriture.sourceType === "mission_achat_depense") {
+          missionsAchat = missionsAchat.map((m) => {
+            if (!m.depensesDiverses.some((d) => d.id === ecriture.sourceId)) {
+              return m;
+            }
+            return {
+              ...m,
+              depensesDiverses: m.depensesDiverses.map((d) =>
+                d.id === ecriture.sourceId
+                  ? { ...d, compteReclasseId: compteId }
+                  : d,
+              ),
+            };
+          });
+        }
+        const rec: Reclassement471 = {
+          id: uid("r471"),
+          ecritureId,
+          ligneId,
+          compteDestinationId: compteId,
+          date: new Date().toISOString(),
+        };
+        const reclassements471 = [
+          ...(state.reclassements471 ?? []).filter(
+            (r) => !(r.ecritureId === ecritureId && r.ligneId === ligneId),
+          ),
+          rec,
+        ];
+        set((s) =>
+          avecJournal(s, {
+            missionsAchat,
+            reclassements471,
+            journalActivites: [
+              entreeActivite("modification", "compte_comptable", {
+                entiteId: compteId,
+                libelle: `${ligne.numero} → ${compte.numero}`,
+                detail: `Reclassement 471 ${ecriture.piece}`,
               }),
               ...s.journalActivites,
             ],
