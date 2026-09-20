@@ -77,7 +77,7 @@ export default function CaObjectifsPage() {
         description="Suivi du CA réalisé face aux objectifs mensuels et annuels fixés pour chaque point de vente."
         actions={
           <Link
-            href="/parametres/objectifs-revenu"
+            href="/parametres/pilotage?onglet=objectifs"
             className="btn btn-primary"
           >
             <Settings className="h-4 w-4" />

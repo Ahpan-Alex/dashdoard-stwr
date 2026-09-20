@@ -108,7 +108,23 @@ export async function resetBusinessState(
   return res;
 }
 
-/** Debounce PUT après mutations locales. */
+let conflictHandler: ((payload: { data: AppState }) => void) | null = null;
+
+/** Callback UI : un autre utilisateur a enregistré, on recharge sa version. */
+export function setBusinessConflictHandler(
+  handler: ((payload: { data: AppState }) => void) | null,
+) {
+  conflictHandler = handler;
+}
+
+async function chargerEtatServeur(): Promise<AppState | null> {
+  try {
+    const res = await fetchBusinessState();
+    return res.data;
+  } catch {
+    return null;
+  }
+}
 export function scheduleBusinessSave(data: AppState) {
   if (!syncEnabled) return;
   pendingData = data;
@@ -129,9 +145,15 @@ async function flushBusinessSave() {
   pendingData = null;
   saveInFlight = putBusinessState(data)
     .then(() => undefined)
-    .catch((err) => {
+    .catch(async (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        pendingData = null;
+        const body = err.body as { data?: AppState };
+        const serveur = body?.data ?? (await chargerEtatServeur());
+        if (serveur) conflictHandler?.({ data: serveur });
+        return;
+      }
       console.error("[business] sync failed", err);
-      // Remet en file pour retry
       if (!pendingData) pendingData = data;
     })
     .finally(() => {

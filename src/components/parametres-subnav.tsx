@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import {
   PARAMETRES_MENUS,
   PARAMETRES_SECTIONS,
+  REGLAGES_SECTIONS,
   itemParametresActif,
   parametresSectionPourChemin,
   type ParametreItem,
@@ -46,59 +47,74 @@ function Pill({
   );
 }
 
-function sectionsVisibles(
+function reglagesVisibles(
   hasPermission: (p: Permission) => boolean,
   moduleCompta: boolean,
 ) {
-  return PARAMETRES_SECTIONS.filter(
+  return REGLAGES_SECTIONS.filter(
     (s) =>
       peutVoir(hasPermission, s) &&
       (moduleCompta || s.id !== "comptabilite"),
   );
 }
 
-/** Sous-menu commun à toutes les pages de paramétrage. */
+/** Sous-menu : 4 blocs sur les réglages, sinon retour au hub. */
 export function ParametresSubnav() {
   const pathname = usePathname();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const moduleCompta = useStore((s) => moduleComptabiliteActif(s.parametres));
   const section = parametresSectionPourChemin(pathname);
-  const items = (section?.items ?? []).filter(
-    (item) => !item.hidden && peutVoir(hasPermission, item),
-  );
+
+  if (pathname === "/parametres") return null;
+
+  if (section?.groupe === "reglages") {
+    const items = (section.items ?? []).filter(
+      (item) => !item.hidden && peutVoir(hasPermission, item),
+    );
+    return (
+      <div className="mb-6 space-y-2">
+        <nav className="flex flex-wrap gap-2">
+          {reglagesVisibles(hasPermission, moduleCompta).map((s) => (
+            <Pill
+              key={s.id}
+              href={s.href}
+              label={s.label}
+              active={section.id === s.id}
+            />
+          ))}
+        </nav>
+        {items.length > 0 && (
+          <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-1">
+            {items.map((item) => {
+              const active = itemParametresActif(pathname, item);
+              return (
+                <Link
+                  key={`${item.href}-${item.label}`}
+                  href={item.href}
+                  className={`text-xs transition-colors ${
+                    active
+                      ? "font-semibold text-sea-800 underline decoration-sea-400 underline-offset-4"
+                      : "text-muted hover:text-ink hover:underline"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="mb-6 space-y-2">
-      <nav className="flex flex-wrap gap-2">
-        {sectionsVisibles(hasPermission, moduleCompta).map((s) => (
-          <Pill
-            key={s.id}
-            href={s.href}
-            label={s.label}
-            active={section?.id === s.id}
-          />
-        ))}
-      </nav>
-      {items.length > 0 && (
-        <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-1">
-          {items.map((item) => {
-            const active = itemParametresActif(pathname, item);
-            return (
-              <Link
-                key={`${item.href}-${item.label}`}
-                href={item.href}
-                className={`text-xs transition-colors ${
-                  active
-                    ? "font-semibold text-sea-800 underline decoration-sea-400 underline-offset-4"
-                    : "text-muted hover:text-ink hover:underline"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+    <div className="mb-6">
+      <Link
+        href="/parametres"
+        className="text-xs text-muted hover:text-ink hover:underline"
+      >
+        ← Paramètres
+      </Link>
     </div>
   );
 }
@@ -121,7 +137,7 @@ export function ParametresItemCards({ items }: { items: ParametreItem[] }) {
             {item.label}
           </p>
           <p className="mt-1 text-xs text-muted">
-            {item.description ?? "Ouvrir le paramétrage"}
+            {item.description ?? "Ouvrir"}
           </p>
         </Link>
       ))}

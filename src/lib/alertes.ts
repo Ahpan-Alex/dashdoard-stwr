@@ -190,25 +190,25 @@ export const MODULES_ALERTES = [
     id: "stock" as const,
     label: "Stock",
     href: "/alertes",
-    hrefParametres: "/parametres/alertes",
+    hrefParametres: "/parametres/pilotage?onglet=alertes&module=stock",
   },
   {
     id: "production" as const,
     label: "Production",
     href: "/alertes/production",
-    hrefParametres: "/parametres/alertes/production",
+    hrefParametres: "/parametres/pilotage?onglet=alertes&module=production",
   },
   {
     id: "achat" as const,
     label: "Achats",
     href: "/alertes/achats",
-    hrefParametres: "/parametres/alertes/achats",
+    hrefParametres: "/parametres/pilotage?onglet=alertes&module=achat",
   },
   {
     id: "vente" as const,
     label: "Ventes",
     href: "/alertes/ventes",
-    hrefParametres: "/parametres/alertes/ventes",
+    hrefParametres: "/parametres/pilotage?onglet=alertes&module=vente",
   },
 ] as const;
 
@@ -1327,7 +1327,7 @@ export type ExplicationAlerte = {
 export function hrefParametreAlerte(categorie: CategorieAlerte) {
   return (
     MODULES_ALERTES.find((m) => m.id === categorie)?.hrefParametres ??
-    "/parametres/alertes"
+    "/parametres/pilotage?onglet=alertes"
   );
 }
 
@@ -1555,7 +1555,7 @@ export function explicationAlerte(
         calcul:
           "Pour chaque ligne retenue : prix net ≠ mini du comparatif ET prix net ≠ dernier achat réel de l'article.",
         seuil: "Alerte combinée — les deux écarts en même temps",
-        hrefParametre: "/parametres/alertes/achats",
+        hrefParametre: href("achat"),
       };
     case "transfert_en_attente":
       return {

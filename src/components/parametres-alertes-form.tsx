@@ -447,9 +447,9 @@ function BalanceAgeeDansAlertes() {
         Tranches de balance âgée
       </h2>
       <p className="mt-1 text-xs text-muted">
-        Mêmes bornes que Paramètres → Tiers →{" "}
+        Mêmes bornes que{" "}
         <Link href="/parametres/balance-agee" className="underline">
-          Balance âgée
+          Tiers → Balance âgée
         </Link>
         . Elles classent les factures clients en retard (31–60 / 61–90 / +90 par
         défaut).

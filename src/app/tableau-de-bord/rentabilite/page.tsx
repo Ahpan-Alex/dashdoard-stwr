@@ -157,7 +157,7 @@ export default function RentabilitePage() {
         title="Rentabilité — 2 paliers"
         description="Palier 1 : marge brute (CA HT facturé − CMV). Palier 2 : résultat (CA HT facturé − achats validés, tous types)."
         actions={
-          <Link href="/parametres/rentabilite" className="btn btn-secondary">
+          <Link href="/parametres/pilotage?onglet=objectifs" className="btn btn-secondary">
             <Settings className="h-4 w-4" />
             Seuils d&apos;alerte
           </Link>

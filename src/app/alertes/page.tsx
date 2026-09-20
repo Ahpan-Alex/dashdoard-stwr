@@ -15,7 +15,7 @@ export default function AlertesStockPage() {
         title="Alertes — Stock"
         description={`${n} active${n > 1 ? "s" : ""} · ${nl} non lue${nl > 1 ? "s" : ""}. Notifications internes uniquement.`}
       />
-      <AlertesSubnav hrefParametres="/parametres/alertes" />
+      <AlertesSubnav hrefParametres="/parametres/pilotage?onglet=alertes&module=stock" />
       <AlertesListe categorie="stock" />
     </div>
   );

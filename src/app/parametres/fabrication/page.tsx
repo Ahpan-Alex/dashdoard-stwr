@@ -88,6 +88,18 @@ export default function ParametresFabricationPage() {
             entre ateliers passent par les transferts de stock.
           </p>
         </Link>
+        <Link
+          href="/parametres/bat"
+          className="rounded-[var(--radius)] border border-line bg-card p-4 transition-shadow hover:border-sea-300 hover:shadow-md"
+        >
+          <p className="font-display text-base font-semibold text-ink">
+            Bons à tirer
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Rôle habilité à valider un BAT. Le délai de relance se règle dans
+            Pilotage → Alertes → Ventes.
+          </p>
+        </Link>
       </div>
 
       <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">

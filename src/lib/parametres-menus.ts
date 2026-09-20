@@ -1,5 +1,4 @@
 import type { Permission } from "@/lib/auth/rbac";
-import { PIECES_NUMEROTEES } from "@/lib/numerotation-pieces";
 
 export type ParametreItem = {
   href: string;
@@ -21,191 +20,135 @@ export type ParametreSection = {
   permission?: Permission;
   anyOf?: Permission[];
   aliases?: string[];
+  groupe: "reglages" | "referentiel";
   items: ParametreItem[];
 };
 
-const NUMEROTATION_CHILDREN: ParametreItem[] = [
-  {
-    href: "/parametres/configuration/numerotation/initiale",
-    label: "Numérotation initiale",
-  },
-  ...PIECES_NUMEROTEES.map((p) => ({
-    href: `/parametres/configuration/numerotation/${p.slug}`,
-    label: p.label,
-  })),
-];
-
 /**
- * Sections du menu Paramètres, dans l'ordre des menus principaux
- * (Général en tête, puis Pilotage → Exploitation → Commercial → Comptabilité).
+ * Quatre blocs de réglages (décisions rares). Pas de sous-arbre dans la sidebar.
  */
-export const PARAMETRES_SECTIONS: ParametreSection[] = [
+export const REGLAGES_SECTIONS: ParametreSection[] = [
   {
-    id: "general",
-    href: "/parametres/general",
-    label: "Général",
+    id: "societe",
+    href: "/parametres/entreprise",
+    label: "Société",
     description:
-      "Identité de l'entreprise, catalogue, configuration transverse et objectifs.",
+      "Identité légale, régime fiscal, logo des documents et nom affiché dans le menu.",
+    groupe: "reglages",
+    aliases: ["/parametres/identite-menu", "/parametres/general", "/parametres/societe"],
     items: [
       {
         href: "/parametres/entreprise",
-        label: "Infos Entreprise / Fiscalité",
+        label: "Entreprise / fiscalité",
         description: "Identité légale, régime fiscal, TVA, logo et signature.",
+        exact: true,
       },
       {
         href: "/parametres/identite-menu",
         label: "Identité du menu",
-        description: "Nom et logo affichés dans la colonne de navigation.",
+        description: "Nom et logo de la colonne de navigation.",
         permission: "parametres.lire",
       },
+    ],
+  },
+  {
+    id: "pilotage",
+    href: "/parametres/pilotage",
+    label: "Pilotage",
+    description: "Objectifs de CA et de marge, seuils de rentabilité, alertes in-app.",
+    groupe: "reglages",
+    aliases: [
+      "/parametres/alertes",
+      "/parametres/objectifs-revenu",
+      "/parametres/objectifs-marge",
+      "/parametres/rentabilite",
+      "/reglages/alertes",
+    ],
+    items: [],
+  },
+  {
+    id: "documents",
+    href: "/parametres/documents-commerciaux",
+    label: "Documents",
+    description: "Modèles, colonnes des tableaux et numérotation des pièces.",
+    groupe: "reglages",
+    aliases: [
+      "/parametres/modeles",
+      "/parametres/affichage",
+      "/parametres/configuration/numerotation",
+      "/reglages/affichage",
+    ],
+    items: [
+      {
+        href: "/parametres/modeles",
+        label: "Modèles",
+        description: "Mise en page, pied de page, mention TVA, signature.",
+      },
+      {
+        href: "/parametres/affichage",
+        label: "Affichage",
+        description: "Colonnes des tableaux et export A4.",
+      },
+      {
+        href: "/parametres/documents-commerciaux",
+        label: "Numérotation",
+        description: "Préfixe, date et longueur — une ligne par type de pièce.",
+        exact: true,
+      },
+    ],
+  },
+  {
+    id: "comptabilite",
+    href: "/parametres/comptabilite",
+    label: "Compta",
+    description: "Longueur des numéros de compte et exercices comptables.",
+    permission: "comptabilite.lire",
+    groupe: "reglages",
+    aliases: ["/parametres/configuration"],
+    items: [
+      {
+        href: "/parametres/comptabilite",
+        label: "Comptes",
+        description: "Longueur des numéros de compte.",
+        exact: true,
+        permission: "comptabilite.lire",
+      },
+      {
+        href: "/parametres/configuration/exercices",
+        label: "Exercices",
+        description: "Année civile ou exercice à cheval.",
+      },
+    ],
+  },
+];
+
+/**
+ * Listes du quotidien — restent des écrans métier, plus des « paramètres éclatés ».
+ */
+export const REFERENTIEL_SECTIONS: ParametreSection[] = [
+  {
+    id: "catalogue",
+    href: "/parametres/produits",
+    label: "Catalogue",
+    description: "Familles, fiches articles, import, circuit achat / vente.",
+    permission: "produits.lire",
+    groupe: "referentiel",
+    items: [
       {
         href: "/parametres/produits",
-        label: "Catalogue de produits et articles",
-        description: "Familles, fiches articles, circuit achat / vente.",
+        label: "Fiches articles",
+        exact: true,
         permission: "produits.lire",
-        children: [
-          {
-            href: "/parametres/produits",
-            label: "Fiches articles",
-            exact: true,
-            permission: "produits.lire",
-          },
-          {
-            href: "/parametres/produits/import",
-            label: "Import catalogue",
-            permission: "produits.gerer",
-          },
-        ],
+      },
+      {
+        href: "/parametres/produits/import",
+        label: "Import catalogue",
+        permission: "produits.gerer",
       },
       {
         href: "/parametres/unites",
         label: "Unités de mesure",
-        description: "Unités utilisées sur le catalogue et les documents.",
         permission: "produits.lire",
-      },
-      {
-        href: "/parametres/configuration",
-        label: "Configuration générale",
-        description: "Exercices comptables et numérotation des pièces.",
-        children: [
-          {
-            href: "/parametres/configuration/exercices",
-            label: "Exercices comptables",
-            exact: true,
-          },
-          {
-            href: "/parametres/configuration/numerotation",
-            label: "Gestion n° des pièces",
-            children: NUMEROTATION_CHILDREN,
-          },
-        ],
-      },
-      {
-        href: "/administration/utilisateurs",
-        label: "Utilisateurs",
-        description: "Comptes, rôles et mots de passe — réservé à l'administrateur.",
-        permission: "users.gerer",
-      },
-      {
-        href: "/parametres/audit",
-        label: "Journal d'audit",
-        description: "Rétention des actions sensibles. Consultation du journal immuable.",
-        permission: "audit.lire",
-      },
-      {
-        href: "/parametres/points-de-vente",
-        label: "Points de vente",
-        description: "Sites, entrepôts, points de vente et ateliers.",
-      },
-      {
-        href: "/parametres/objectifs-revenu",
-        label: "Objectif de revenu",
-        description: "Objectifs de chiffre d'affaires par site.",
-      },
-      {
-        href: "/parametres/objectifs-marge",
-        label: "Objectif de marge",
-        description: "Objectifs de marge par site.",
-        permission: "rentabilite.lire",
-      },
-      {
-        href: "/parametres/rentabilite",
-        label: "Seuils de rentabilité",
-        description: "Paliers d'alerte affichés au Dashboard.",
-        permission: "rentabilite.lire",
-      },
-    ],
-  },
-  {
-    id: "alertes",
-    href: "/parametres/alertes",
-    label: "Alertes",
-    description:
-      "Seuils et délais des notifications in-app, par module (Stock, Production, Achats, Ventes).",
-    permission: "parametres.gerer",
-    aliases: ["/reglages/alertes"],
-    items: [
-      {
-        href: "/parametres/alertes",
-        label: "Stock",
-        description: "Rupture, stock dormant et écart CUMP.",
-        exact: true,
-      },
-      {
-        href: "/parametres/alertes/production",
-        label: "Production",
-        description: "Retard OF, écart matière, surcharge atelier.",
-      },
-      {
-        href: "/parametres/alertes/achats",
-        label: "Achats",
-        description: "Échéances fournisseur, missions, 471, demandes de prix.",
-      },
-      {
-        href: "/parametres/alertes/ventes",
-        label: "Ventes",
-        description: "Balance âgée et anticipation du plafond de crédit.",
-      },
-    ],
-  },
-  {
-    id: "achats",
-    href: "/parametres/achats",
-    label: "Achats",
-    description:
-      "Demandes de prix, types d'achat, natures de dépenses de mission, délai des missions ouvertes et numérotation des factures fournisseur.",
-    anyOf: ["achats.lire", "achats.gerer", "parametres.lire"],
-    items: [
-      {
-        href: "/parametres/configuration/numerotation/facture-fournisseur",
-        label: "Numérotation facture fournisseur",
-        description: "Le n° repris est celui de la facture fournisseur saisie.",
-      },
-    ],
-  },
-  {
-    id: "stock",
-    href: "/parametres/stock",
-    label: "Stock",
-    description: "Ouverture des stocks et délai d'alerte des transferts inter-sites.",
-    items: [
-      {
-        href: "/parametres/stock-initial",
-        label: "Stock initial",
-        description: "Quantités et valeurs d'ouverture par site.",
-      },
-    ],
-  },
-  {
-    id: "fabrication",
-    href: "/parametres/fabrication",
-    label: "Fabrication",
-    description: "Nomenclatures, ateliers, BAT, délai des OF non clôturés et règles de clôture.",
-    items: [
-      {
-        href: "/parametres/bat",
-        label: "Bons à tirer",
-        description: "Délai de relance et rôle habilité à valider.",
       },
     ],
   },
@@ -213,8 +156,8 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
     id: "tiers",
     href: "/parametres/tiers",
     label: "Tiers",
-    description:
-      "Fiches clients et fournisseurs, types, balance âgée et comptes 401 / 411.",
+    description: "Clients, fournisseurs, types et balance âgée.",
+    groupe: "referentiel",
     items: [
       {
         href: "/parametres/clients",
@@ -230,98 +173,145 @@ export const PARAMETRES_SECTIONS: ParametreSection[] = [
       {
         href: "/parametres/types-clients",
         label: "Types de clients",
-        description: "Catégories commerciales rattachées aux fiches clients.",
         permission: "clients.lire",
       },
       {
         href: "/parametres/balance-agee",
         label: "Balance âgée",
-        description: "Tranches d'ancienneté des créances et dettes.",
         permission: "parametres.gerer",
       },
     ],
   },
   {
-    id: "documents",
-    href: "/parametres/documents-commerciaux",
-    label: "Documents commerciaux",
-    description:
-      "Modèles, mise en page, pied de page, colonnes des tableaux et export A4.",
-    aliases: ["/reglages/affichage"],
-    items: [
-      {
-        href: "/parametres/modeles",
-        label: "Modèles de documents",
-        description:
-          "Mise en page, pied de page, mention TVA optionnelle, signature.",
-      },
-      {
-        href: "/parametres/bat",
-        label: "Bons à tirer",
-        description: "Délai de relance et rôle habilité à valider un BAT.",
-      },
-      {
-        href: "/parametres/affichage",
-        label: "Types d'affichage",
-        description: "Colonnes des tableaux, types d'affichage et export A4.",
-      },
-    ],
+    id: "sites",
+    href: "/parametres/points-de-vente",
+    label: "Sites",
+    description: "Entrepôts, points de vente et ateliers.",
+    groupe: "referentiel",
+    items: [],
   },
   {
     id: "tresorerie",
     href: "/parametres/tresorerie",
     label: "Trésorerie",
-    description:
-      "Comptes de caisse, banque et mobile monnaie, et modes de paiement paramétrables.",
+    description: "Comptes de caisse, banque, mobile monnaie et modes de paiement.",
     permission: "parametres.gerer",
+    groupe: "referentiel",
+    items: [],
+  },
+  {
+    id: "achats",
+    href: "/parametres/achats",
+    label: "Achats",
+    description: "Types d'achat, natures de dépenses de mission, validité des DP.",
+    anyOf: ["achats.lire", "achats.gerer", "parametres.lire"],
+    groupe: "referentiel",
+    items: [],
+  },
+  {
+    id: "stock",
+    href: "/parametres/stock",
+    label: "Stock",
+    description: "Stock initial et délai d'alerte des transferts.",
+    groupe: "referentiel",
     items: [
       {
-        href: "/parametres/tresorerie",
-        label: "Comptes et modes",
-        description: "Comptes de trésorerie par site et catalogue des modes.",
-        exact: true,
+        href: "/parametres/stock-initial",
+        label: "Stock initial",
+        description: "Quantités et valeurs d'ouverture par site.",
       },
     ],
   },
   {
-    id: "comptabilite",
-    href: "/parametres/comptabilite",
-    label: "Comptabilité",
-    description:
-      "Longueur des numéros de compte, plan comptable, TVA et exercices.",
-    permission: "comptabilite.lire",
-    aliases: ["/parametres/bilan-initial"],
+    id: "fabrication",
+    href: "/parametres/fabrication",
+    label: "Fabrication",
+    description: "Taux MOD, capacité atelier, BAT et règles de clôture.",
+    groupe: "referentiel",
     items: [
       {
-        href: "/comptabilite/plan",
-        label: "Plan comptable",
-        description: "Import PCG 2005 / CSV et comptes obligatoires TVA.",
-        permission: "comptabilite.lire",
-      },
-      {
-        href: "/parametres/configuration/exercices",
-        label: "Exercices comptables",
-        description: "Année civile ou exercice à cheval.",
-      },
-      {
-        href: "/comptabilite/journaux",
-        label: "Journaux",
-        description: "Consultation des journaux d'écritures.",
-        permission: "comptabilite.lire",
-      },
-      {
-        href: "/comptabilite/transfert",
-        label: "Transfert",
-        description: "Transfert des pièces vers la comptabilité.",
-        permission: "comptabilite.lire",
-      },
-      {
-        href: "/comptabilite/produits-sans-compte",
-        label: "Produits sans compte",
-        description: "Articles sans compte de charge (classe 6) et/ou de vente (classe 7).",
-        permission: "comptabilite.lire",
+        href: "/parametres/bat",
+        label: "Bons à tirer",
+        description: "Rôle habilité à valider un BAT.",
+        hidden: true,
       },
     ],
+  },
+  {
+    id: "recuperation",
+    href: "/parametres/recuperation",
+    label: "Récupération des données",
+    description:
+      "Liste des fichiers à emporter si vous quittez Négoo, et où les retrouver.",
+    permission: "parametres.lire",
+    groupe: "referentiel",
+    items: [],
+  },
+  {
+    id: "audit",
+    href: "/parametres/audit",
+    label: "Journal d'audit",
+    description: "Rétention des actions sensibles.",
+    permission: "audit.lire",
+    groupe: "referentiel",
+    items: [],
+  },
+];
+
+export const PARAMETRES_SECTIONS: ParametreSection[] = [
+  ...REGLAGES_SECTIONS,
+  ...REFERENTIEL_SECTIONS,
+];
+
+/** Entrées courtes du menu latéral Paramètres. */
+export const SIDEBAR_PARAMETRES: ParametreItem[] = [
+  {
+    href: "/parametres",
+    label: "Réglages",
+    description: "Société, pilotage, documents, compta.",
+    exact: true,
+    permission: "parametres.lire",
+  },
+  {
+    href: "/parametres/recuperation",
+    label: "Récupération des données",
+    permission: "parametres.lire",
+  },
+  {
+    href: "/parametres/produits",
+    label: "Catalogue",
+    permission: "produits.lire",
+    children: [
+      {
+        href: "/parametres/produits",
+        label: "Fiches articles",
+        exact: true,
+        permission: "produits.lire",
+      },
+      {
+        href: "/parametres/produits/import",
+        label: "Import catalogue",
+        permission: "produits.gerer",
+      },
+    ],
+  },
+  {
+    href: "/parametres/clients",
+    label: "Clients",
+    permission: "clients.lire",
+  },
+  {
+    href: "/parametres/fournisseurs",
+    label: "Fournisseurs",
+  },
+  {
+    href: "/parametres/points-de-vente",
+    label: "Sites",
+  },
+  {
+    href: "/parametres/tresorerie",
+    label: "Trésorerie",
+    permission: "parametres.gerer",
   },
 ];
 
@@ -374,9 +364,6 @@ export function parametresSectionPourChemin(
   }
 
   if (pathname === "/parametres") return undefined;
-  if (pathname.startsWith("/parametres/")) {
-    return meilleur?.section ?? PARAMETRES_SECTIONS[0];
-  }
   return meilleur?.section;
 }
 
@@ -386,4 +373,14 @@ export function itemParametresActif(
 ): boolean {
   if (cheminMatche(pathname, item.href, item.exact)) return true;
   return (item.children ?? []).some((c) => itemParametresActif(pathname, c));
+}
+
+export function hrefSeuilsAlertes(
+  module: "stock" | "production" | "achat" | "vente" = "stock",
+) {
+  return `/parametres/pilotage?onglet=alertes&module=${module}`;
+}
+
+export function hrefObjectifsPilotage() {
+  return "/parametres/pilotage?onglet=objectifs";
 }

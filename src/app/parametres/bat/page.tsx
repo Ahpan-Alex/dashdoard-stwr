@@ -75,7 +75,7 @@ function Contenu() {
             <IndicateurInfo>
               Un BAT resté « En attente » au-delà de ce délai affiche un badge
               Relance et alimente les alertes in-app. Réglable aussi dans
-              Paramètres → Alertes → Ventes.
+              Pilotage → Alertes → Ventes.
             </IndicateurInfo>
           </legend>
           <label className="block text-xs font-semibold text-muted">

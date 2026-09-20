@@ -15,7 +15,7 @@ export default function AlertesAchatsPage() {
         title="Alertes — Achats"
         description={`${n} active${n > 1 ? "s" : ""} · ${nl} non lue${nl > 1 ? "s" : ""}. Notifications internes uniquement.`}
       />
-      <AlertesSubnav hrefParametres="/parametres/alertes/achats" />
+      <AlertesSubnav hrefParametres="/parametres/pilotage?onglet=alertes&module=achat" />
       <AlertesListe categorie="achat" />
     </div>
   );

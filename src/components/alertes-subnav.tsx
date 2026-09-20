@@ -34,7 +34,7 @@ export function AlertesSubnav({
       </nav>
       {peutConfigurer && hrefParametres ? (
         <Link href={hrefParametres} className="btn btn-secondary">
-          Configurer
+          Seuils
         </Link>
       ) : null}
     </div>

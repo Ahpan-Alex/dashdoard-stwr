@@ -8,6 +8,7 @@ import { useStore } from "@/lib/store";
 import { HydrationGate } from "./hydration-gate";
 import { FilAriane } from "./fil-ariane";
 import { Sidebar } from "./sidebar";
+import { ConflitSaisieBanner } from "./conflit-saisie-banner";
 
 const AUTH_PUBLIC = new Set([
   "/login",
@@ -126,6 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <main className="flex-1 overflow-auto">
               <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
                 <FilAriane />
+                <ConflitSaisieBanner />
                 {children}
               </div>
             </main>

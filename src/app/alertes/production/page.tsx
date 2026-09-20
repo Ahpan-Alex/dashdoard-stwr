@@ -15,7 +15,7 @@ export default function AlertesProductionPage() {
         title="Alertes — Production"
         description={`${n} active${n > 1 ? "s" : ""} · ${nl} non lue${nl > 1 ? "s" : ""}. Notifications internes uniquement.`}
       />
-      <AlertesSubnav hrefParametres="/parametres/alertes/production" />
+      <AlertesSubnav hrefParametres="/parametres/pilotage?onglet=alertes&module=production" />
       <AlertesListe categorie="production" />
     </div>
   );

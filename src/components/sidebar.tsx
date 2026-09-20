@@ -47,7 +47,7 @@ import { useStore } from "@/lib/store";
 import { nomAfficheMenu } from "@/lib/identite-navigation";
 import { moduleComptabiliteActif } from "@/lib/comptabilite";
 import { BP_STATUTS, moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
-import { PARAMETRES_SECTIONS, type ParametreItem } from "@/lib/parametres-menus";
+import { SIDEBAR_PARAMETRES, type ParametreItem } from "@/lib/parametres-menus";
 import { AlertesCloche } from "./alertes-cloche";
 import { LogoNegoo, LogoNegooMark } from "./logo-negoo";
 import { useAlertes } from "@/lib/use-alertes";
@@ -353,15 +353,7 @@ const sections: { title: string; links: NavLink[] }[] = [
         icon: Settings,
         permission: "parametres.lire",
         matchPrefixes: ["/parametres", "/reglages"],
-        children: PARAMETRES_SECTIONS.map((section) => ({
-          href: section.href,
-          label: section.label,
-          permission: section.permission,
-          anyOf: section.anyOf,
-          children: section.items
-            .filter((item) => !item.hidden)
-            .map(parametreItemVersNav),
-        })),
+        children: SIDEBAR_PARAMETRES.map(parametreItemVersNav),
       },
     ],
   },

@@ -95,7 +95,7 @@ export default function MargeObjectifsPage() {
         description="Suivi de la marge brute (CA − coût d'achat) face aux objectifs mensuels et annuels."
         actions={
           <Link
-            href="/parametres/objectifs-marge"
+            href="/parametres/pilotage?onglet=objectifs"
             className="btn btn-primary"
           >
             <Settings className="h-4 w-4" />

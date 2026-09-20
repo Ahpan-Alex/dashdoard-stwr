@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function RedirectGeneral() {
+export default function RedirectSociete() {
   redirect("/parametres/entreprise");
 }

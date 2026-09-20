@@ -83,6 +83,11 @@ function DashboardVentesContent() {
       <PageHeader
         title="Dashboard — Ventes & Rentabilité"
         description="Marge réelle (factures validées − coûts OF / CMV), CA clients et transformation devis → commande."
+        actions={
+          <Link href="/parametres/pilotage?onglet=objectifs" className="btn btn-secondary">
+            Objectifs
+          </Link>
+        }
       />
       <DashboardSubnav />
 

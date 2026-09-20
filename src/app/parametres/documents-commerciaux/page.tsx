@@ -1,6 +1,8 @@
 "use client";
 
-import { ParametresSectionFrame } from "@/components/parametres-subnav";
+import { NumerotationPiecesTable } from "@/components/numerotation-pieces-table";
+import { ParametresSubnav } from "@/components/parametres-subnav";
+import { PageHeader } from "@/components/page-header";
 import { moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
 import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
@@ -12,21 +14,21 @@ export default function ParametresDocumentsCommerciauxPage() {
   const actif = moduleBonDePreparationActif(parametres);
 
   return (
-    <ParametresSectionFrame sectionId="documents">
-      <p className="mb-4 max-w-2xl text-sm text-muted">
-        Mise en page, pied de page, mention TVA optionnelle et colonnes des
-        tableaux. La numérotation des devis, commandes, BL, bons de préparation
-        et factures clients reste dans Configuration générale.
-      </p>
+    <div>
+      <PageHeader
+        title="Documents"
+        description="Modèles, colonnes des tableaux, et numérotation — une ligne par type de pièce."
+        showPosSelector={false}
+      />
+      <ParametresSubnav />
 
-      <section className="mb-4 rounded-[var(--radius)] border border-line bg-card p-5">
+      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="font-display text-lg font-semibold">
           Bon de préparation
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Étape optionnelle de picking entre la commande (et les OF clôturés)
-          et le BL. Le lien direct commande → BL reste possible. Aucune
-          écriture comptable, pas de TVA.
+          Étape optionnelle de picking entre la commande et le BL. Le lien
+          direct commande → BL reste possible.
         </p>
         <label className="mt-4 flex items-start gap-2 text-sm">
           <input
@@ -42,13 +44,13 @@ export default function ParametresDocumentsCommerciauxPage() {
             Activer le bon de préparation
             <span className="mt-0.5 block text-xs font-normal text-muted">
               Affiche le menu, le bouton → BP sur les commandes, et
-              l&apos;indicateur stock « en attente de préparation ». Le modèle
-              « Modèle bon de préparation (législation MG) » est disponible
-              dans Modèles de documents.
+              l&apos;indicateur stock « en attente de préparation ».
             </span>
           </span>
         </label>
       </section>
-    </ParametresSectionFrame>
+
+      <NumerotationPiecesTable />
+    </div>
   );
 }

@@ -54,29 +54,44 @@ export function crumbsPourChemin(pathname: string): Crumb[] {
           }
         }
       }
+      if (pathname.startsWith("/parametres")) {
+        return dedupeCrumbs([...crumbs, ...crumbsSectionsParametres(pathname)]);
+      }
       return dedupeCrumbs(crumbs);
     }
   }
   if (pathname.startsWith("/parametres")) {
     crumbs.push({ href: "/parametres", label: "Paramètres" });
-    for (const section of PARAMETRES_SECTIONS) {
-      const inSection =
-        pathname === section.href ||
-        pathname.startsWith(`${section.href}/`) ||
-        (section.aliases ?? []).some((a) => pathname === a || pathname.startsWith(`${a}/`)) ||
-        section.items.some(
-          (it) => pathname === it.href || pathname.startsWith(`${it.href}/`),
-        );
-      if (!inSection) continue;
-      crumbs.push({ href: section.href, label: section.label });
-      for (const item of section.items) {
-        if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
-          crumbs.push({ href: item.href, label: item.label });
-        }
+    crumbs.push(...crumbsSectionsParametres(pathname));
+  }
+  return dedupeCrumbs(crumbs);
+}
+
+function crumbsSectionsParametres(pathname: string): Crumb[] {
+  const extra: Crumb[] = [];
+  for (const section of PARAMETRES_SECTIONS) {
+    const inSection =
+      pathname === section.href ||
+      pathname.startsWith(`${section.href}/`) ||
+      (section.aliases ?? []).some(
+        (a) => pathname === a || pathname.startsWith(`${a}/`),
+      ) ||
+      section.items.some(
+        (it) => pathname === it.href || pathname.startsWith(`${it.href}/`),
+      );
+    if (!inSection) continue;
+    extra.push({ href: section.href, label: section.label });
+    for (const item of section.items) {
+      if (
+        item.exact
+          ? pathname === item.href
+          : pathname === item.href || pathname.startsWith(`${item.href}/`)
+      ) {
+        extra.push({ href: item.href, label: item.label });
       }
     }
   }
-  return dedupeCrumbs(crumbs);
+  return extra;
 }
 
 function dedupeCrumbs(crumbs: Crumb[]) {

@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { ConfirmPasswordModal } from "@/components/confirm-password-modal";
 import { PageHeader } from "@/components/page-header";
-import { ParametresSubnav } from "@/components/parametres-subnav";
 import { useAuthStore } from "@/lib/auth-store";
 import type { Permission } from "@/lib/auth/rbac";
 import { moduleComptabiliteActif } from "@/lib/comptabilite";
-import { PARAMETRES_SECTIONS } from "@/lib/parametres-menus";
+import {
+  REFERENTIEL_SECTIONS,
+  REGLAGES_SECTIONS,
+} from "@/lib/parametres-menus";
 import { useStore } from "@/lib/store";
 
 function peutVoir(
@@ -43,11 +45,20 @@ export default function ParametresHubPage() {
     }
   }
 
+  const reglages = REGLAGES_SECTIONS.filter(
+    (s) =>
+      peutVoir(hasPermission, s) &&
+      (moduleCompta || s.id !== "comptabilite"),
+  );
+  const referentiels = REFERENTIEL_SECTIONS.filter(
+    (s) => s.id !== "recuperation" && peutVoir(hasPermission, s),
+  );
+
   return (
     <div>
       <PageHeader
         title="Paramètres"
-        description="Même ordre que les menus principaux — chaque module a ses réglages au même endroit."
+        description="Quatre réglages rares, puis les listes du quotidien."
         showPosSelector={false}
         actions={
           <button
@@ -62,59 +73,64 @@ export default function ParametresHubPage() {
         }
       />
 
-      <ParametresSubnav />
+      <section className="mb-8">
+        <Link
+          href="/parametres/recuperation"
+          className="block rounded-[var(--radius)] border border-sea-200 bg-sea-50/70 p-5 transition-shadow hover:border-sea-400 hover:shadow-md"
+        >
+          <p className="font-display text-lg font-semibold text-ink">
+            Récupération des données
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Si vous quittez Négoo : liste des fichiers à emporter, et où les
+            retrouver dans le logiciel.
+          </p>
+        </Link>
+      </section>
 
-      <div className="space-y-8">
-        {PARAMETRES_SECTIONS.filter(
-          (section) =>
-            peutVoir(hasPermission, section) &&
-            (moduleCompta || section.id !== "comptabilite"),
-        ).map((section) => {
-          const items = section.items.filter(
-            (item) => !item.hidden && peutVoir(hasPermission, item),
-          );
-          return (
-            <section key={section.id}>
-              <Link href={section.href} className="group block">
-                <h2 className="font-display text-lg font-semibold text-ink group-hover:text-sea-800">
-                  {section.label}
-                </h2>
-                <p className="mt-0.5 text-xs text-muted">{section.description}</p>
-              </Link>
-              {items.length > 0 ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {items.map((item) => (
-                    <Link
-                      key={`${item.href}-${item.label}`}
-                      href={item.href}
-                      className="rounded-[var(--radius)] border border-line bg-card p-4 transition-shadow hover:border-sea-300 hover:shadow-md"
-                    >
-                      <p className="font-display text-base font-semibold text-ink">
-                        {item.label}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        {item.description ?? "Ouvrir le paramétrage"}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <Link
-                  href={section.href}
-                  className="mt-3 block rounded-[var(--radius)] border border-line bg-card p-4 transition-shadow hover:border-sea-300 hover:shadow-md sm:max-w-md"
-                >
-                  <p className="font-display text-base font-semibold text-ink">
-                    Ouvrir {section.label}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">
-                    Tous les réglages de ce module.
-                  </p>
-                </Link>
-              )}
-            </section>
-          );
-        })}
-      </div>
+      <section>
+        <h2 className="font-display text-lg font-semibold text-ink">Réglages</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Société, objectifs et alertes, documents, compta — une page par bloc.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {reglages.map((bloc) => (
+            <Link
+              key={bloc.id}
+              href={bloc.href}
+              className="rounded-[var(--radius)] border border-line bg-card p-5 transition-shadow hover:border-sea-300 hover:shadow-md"
+            >
+              <p className="font-display text-lg font-semibold text-ink">
+                {bloc.label}
+              </p>
+              <p className="mt-1 text-sm text-muted">{bloc.description}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          Référentiels
+        </h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Catalogue, tiers, sites — les listes que l&apos;on ouvre pour travailler.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {referentiels.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              className="rounded-[var(--radius)] border border-line bg-card p-4 transition-shadow hover:border-sea-300 hover:shadow-md"
+            >
+              <p className="font-display text-base font-semibold text-ink">
+                {item.label}
+              </p>
+              <p className="mt-1 text-xs text-muted">{item.description}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <ConfirmPasswordModal
         open={resetOpen}

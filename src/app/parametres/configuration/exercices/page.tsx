@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
-import { ConfigurationSubnav } from "@/components/configuration-subnav";
 import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { RowCrudActions } from "@/components/row-crud-actions";
@@ -108,11 +107,10 @@ export default function ParametresExercicesPage() {
 
   return (
     <div>
-      <ParametresSubnav />
-      <ConfigurationSubnav />
       <PageHeader
         title="Exercices comptables"
-        description="Année civile ou exercice à cheval sur deux années. Les n° de pièces commerciales suivent le format défini dans Gestion n° des pièces ; le compteur reprend à 1 à chaque changement de préfixe de date (année ou mois)."
+        description="Année civile ou exercice à cheval sur deux années. Les n° de pièces commerciales se règlent dans Documents."
+        showPosSelector={false}
         actions={
           <button type="button" className="btn btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
@@ -120,6 +118,7 @@ export default function ParametresExercicesPage() {
           </button>
         }
       />
+      <ParametresSubnav />
 
       {open && (
         <form
