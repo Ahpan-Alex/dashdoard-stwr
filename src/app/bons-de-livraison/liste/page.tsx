@@ -15,6 +15,7 @@ import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import {
   BadgeAvancementBl,
   DocumentFiliation,
@@ -616,6 +617,37 @@ export default function ListeBonsDeLivraisonPage() {
                           }
                         />
                       </ExportDocumentPdfButton>
+                      <EnvoiDocumentBouton
+                        filename={bl.numero}
+                        typeDocument="bon_de_livraison"
+                        numero={bl.numero}
+                        entiteId={bl.id}
+                        client={clients.find((c) => c.id === bl.clientId)}
+                      >
+                        <DocumentPreview
+                          type="bon_de_livraison"
+                          numero={bl.numero}
+                          date={bl.date}
+                          echeance={bl.dateLivraison}
+                          client={clients.find((c) => c.id === bl.clientId)}
+                          pdv={pointsDeVente.find(
+                            (p) => p.id === bl.pointDeVenteId,
+                          )}
+                          parametres={parametres}
+                          modele={modele}
+                          lignes={bl.lignes}
+                          totaux={totauxBonDeLivraison(bl, parametres, acomptes)}
+                          conditionsPaiement={bl.conditionsPaiement}
+                          note={bl.note}
+                          referenceDevis={
+                            devis.find((d) => d.id === bl.devisId)?.numero
+                          }
+                          referenceCommande={
+                            commandes.find((c) => c.id === bl.commandeId)
+                              ?.numero
+                          }
+                        />
+                      </EnvoiDocumentBouton>
                       <IconButton
                         label="Modifier"
                         onClick={() => ouvrirEdition(bl.id)}
@@ -658,6 +690,34 @@ export default function ListeBonsDeLivraisonPage() {
                 sheetRef={previewSheetRef}
                 filename={`BL ${preview.numero}`}
               />
+              <EnvoiDocumentBouton
+                filename={preview.numero}
+                typeDocument="bon_de_livraison"
+                numero={preview.numero}
+                entiteId={preview.id}
+                client={clients.find((c) => c.id === preview.clientId)}
+              >
+                <DocumentPreview
+                  type="bon_de_livraison"
+                  numero={preview.numero}
+                  date={preview.date}
+                  echeance={preview.dateLivraison}
+                  client={clients.find((c) => c.id === preview.clientId)}
+                  pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
+                  parametres={parametres}
+                  modele={modele}
+                  lignes={preview.lignes}
+                  totaux={totauxBonDeLivraison(preview, parametres, acomptes)}
+                  conditionsPaiement={preview.conditionsPaiement}
+                  note={preview.note}
+                  referenceDevis={
+                    devis.find((d) => d.id === preview.devisId)?.numero
+                  }
+                  referenceCommande={
+                    commandes.find((c) => c.id === preview.commandeId)?.numero
+                  }
+                />
+              </EnvoiDocumentBouton>
               <button
                 className="btn btn-secondary"
                 onClick={() => setPreviewId(null)}

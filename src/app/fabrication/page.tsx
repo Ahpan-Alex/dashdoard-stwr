@@ -278,49 +278,48 @@ function FormulaireOf({
       (commandesBrutes ?? []).filter((c) => c.statut !== "annulee" && c.statut !== "livree"),
     [commandesBrutes],
   );
-  const brouillon = lireBrouillonOf();
-  const [atelierId, setAtelierId] = useState(
-    brouillon?.atelierId || defautAtelier,
-  );
-  const [produitId, setProduitId] = useState(
-    brouillon?.produitId || produits[0]?.id || "",
-  );
-  const [qte, setQte] = useState(brouillon?.qte || "1");
-  const [source, setSource] = useState<TypeNomenclature>(
-    brouillon?.source || "automatique",
-  );
+  const cmdUrl = searchParams.get("commandeId") ?? "";
+  const clientUrl = searchParams.get("clientId") ?? "";
+  const [atelierId, setAtelierId] = useState(defautAtelier);
+  const [produitId, setProduitId] = useState(produits[0]?.id || "");
+  const [qte, setQte] = useState("1");
+  const [source, setSource] = useState<TypeNomenclature>("automatique");
   const [destination, setDestination] = useState<DestinationAchat | "">(
-    searchParams.get("commandeId") || brouillon?.commandeId
-      ? "projet_client"
-      : brouillon?.destination || "approvisionnement_stock",
+    cmdUrl ? "projet_client" : "",
   );
-  const [clientId, setClientId] = useState(
-    searchParams.get("clientId") || brouillon?.clientId || "",
-  );
-  const [commandeId, setCommandeId] = useState(
-    searchParams.get("commandeId") || brouillon?.commandeId || "",
-  );
-  const [cloturePrevue, setCloturePrevue] = useState(
-    brouillon?.cloturePrevue || "",
-  );
-  const [largeur, setLargeur] = useState(brouillon?.largeur || "");
-  const [hauteur, setHauteur] = useState(brouillon?.hauteur || "");
+  const [clientId, setClientId] = useState(clientUrl);
+  const [commandeId, setCommandeId] = useState(cmdUrl);
+  const [cloturePrevue, setCloturePrevue] = useState("");
+  const [largeur, setLargeur] = useState("");
+  const [hauteur, setHauteur] = useState("");
 
   useEffect(() => {
+    const b = lireBrouillonOf();
     const cmdId = searchParams.get("commandeId");
     const cliId = searchParams.get("clientId");
+    if (b) {
+      if (b.atelierId) setAtelierId(b.atelierId);
+      if (b.produitId) setProduitId(b.produitId);
+      if (b.qte) setQte(b.qte);
+      if (b.source) setSource(b.source);
+      if (b.cloturePrevue) setCloturePrevue(b.cloturePrevue);
+      if (b.largeur) setLargeur(b.largeur);
+      if (b.hauteur) setHauteur(b.hauteur);
+      if (!cmdId) {
+        setDestination(b.destination || "");
+        if (b.clientId) setClientId(b.clientId);
+        if (b.commandeId) setCommandeId(b.commandeId);
+      }
+    }
     if (cliId) setClientId(cliId);
     if (!cmdId) return;
-    const cmd = (commandesBrutes ?? []).find((c) => c.id === cmdId);
-    if (!cmd) {
-      setCommandeId(cmdId);
-      setDestination("projet_client");
-      return;
-    }
-    setCommandeId(cmd.id);
-    setClientId(cmd.clientId);
+    const cmd = (useStore.getState().commandes ?? []).find((c) => c.id === cmdId);
+    setCommandeId(cmd?.id ?? cmdId);
+    if (cmd?.clientId) setClientId(cmd.clientId);
     setDestination("projet_client");
-  }, [searchParams, commandesBrutes]);
+    // Restauration unique au montage / au retour commande — pas à chaque sync métier.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const produit = produits.find((p) => p.id === produitId);
   const alt = produit ? nomenclatureParType(produit, "alternative") : undefined;
@@ -367,6 +366,10 @@ function FormulaireOf({
   function onForm(e: FormEvent) {
     e.preventDefault();
     if (!atelierId || !produitId) return;
+    if (!destination) {
+      alert("Indiquez si c'est un projet client ou un approvisionnement stock.");
+      return;
+    }
     if (destination === "projet_client") {
       if (!clientId) {
         alert("Choisissez ou recherchez le client du projet.");
@@ -410,7 +413,7 @@ function FormulaireOf({
           Paramètres → Fabrication ou Général → Points de vente.
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <label className="block text-xs font-semibold text-muted">
           Atelier
           <select
@@ -468,10 +471,10 @@ function FormulaireOf({
             {alt && <option value="alternative">{alt.nom}</option>}
           </select>
         </label>
-        <fieldset className="sm:col-span-2">
-          <legend className="text-xs font-semibold text-muted">Destination</legend>
-          <div className="mt-2 flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-2">
+        <div className="min-w-0 sm:col-span-2">
+          <p className="text-xs font-semibold text-muted">Destination</p>
+          <div className="mt-2 flex flex-wrap gap-3 text-sm">
+            <label className="inline-flex min-w-0 items-center gap-2 rounded-[var(--radius)] border border-line bg-card px-3 py-2">
               <input
                 type="radio"
                 name="destination-of"
@@ -480,7 +483,7 @@ function FormulaireOf({
               />
               {DESTINATION_ACHAT_LABELS.projet_client}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="inline-flex min-w-0 items-center gap-2 rounded-[var(--radius)] border border-line bg-card px-3 py-2">
               <input
                 type="radio"
                 name="destination-of"
@@ -494,7 +497,7 @@ function FormulaireOf({
               {DESTINATION_ACHAT_LABELS.approvisionnement_stock}
             </label>
           </div>
-        </fieldset>
+        </div>
         {destination === "projet_client" && (
           <div className="sm:col-span-2 space-y-3">
             <SelecteurClient

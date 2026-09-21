@@ -350,14 +350,13 @@ export function ParametresAlertesForm({
                       className="input w-28"
                       placeholder="Global"
                       value={
-                        parametresAlertes.productionEcartFabrication.seuilsParAtelier?.[
-                          a.id
-                        ] ?? ""
+                        parametresAlertes.productionEcartFabrication
+                          ?.seuilsParAtelier?.[a.id] ?? ""
                       }
                       onChange={(e) => {
                         const next = {
                           ...(parametresAlertes.productionEcartFabrication
-                            .seuilsParAtelier ?? {}),
+                            ?.seuilsParAtelier ?? {}),
                         };
                         if (e.target.value === "") delete next[a.id];
                         else next[a.id] = Number(e.target.value);

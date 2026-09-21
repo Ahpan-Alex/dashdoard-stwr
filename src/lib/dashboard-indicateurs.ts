@@ -186,7 +186,7 @@ export function indicateursProduction(
       for (const of_ of duSite) {
         const rel = reliquatsMatieres(of_);
         const retours = of_.retoursMatieres ?? [];
-        for (const s of of_.sorties) {
+        for (const s of of_.sorties ?? []) {
           sorti += s.quantite;
         }
         for (const ligne of of_.nomenclatureLignes ?? []) {
@@ -359,7 +359,7 @@ export function rotationMatieresPremieres(
       let sorties = 0;
       for (const of_ of ofs) {
         if (!ofDuSite(of_, siteId)) continue;
-        for (const s of of_.sorties) {
+        for (const s of of_.sorties ?? []) {
           if (s.composantId !== p.id) continue;
           if (!inDateRange(s.date, range)) continue;
           sorties += s.quantite;

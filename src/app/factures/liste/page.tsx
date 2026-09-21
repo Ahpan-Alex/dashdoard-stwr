@@ -16,6 +16,7 @@ import { SaisieLignesPaiement } from "@/components/saisie-lignes-paiement";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
@@ -950,6 +951,67 @@ export default function ListeFacturesPage() {
                             );
                           })()}
                         </ExportDocumentPdfButton>
+                        <EnvoiDocumentBouton
+                          filename={f.numero}
+                          typeDocument="facture"
+                          numero={f.numero}
+                          entiteId={f.id}
+                          client={clients.find((c) => c.id === f.clientId)}
+                          onEnvoye={() => {
+                            if (!estNonFiscal && etat !== "annulee") {
+                              marquerEnvoyee(f);
+                            }
+                          }}
+                        >
+                          {(() => {
+                            const pres = presentationPourFacture(
+                              f,
+                              parametres,
+                              modele,
+                            );
+                            return (
+                              <DocumentPreview
+                                type="facture"
+                                factureType={f.type}
+                                estProforma={
+                                  f.type === "proforma" ||
+                                  f.statut === "proforma"
+                                }
+                                numero={f.numero}
+                                date={f.date}
+                                echeance={f.echeance}
+                                client={clients.find((c) => c.id === f.clientId)}
+                                pdv={pointsDeVente.find(
+                                  (p) => p.id === f.pointDeVenteId,
+                                )}
+                                parametres={pres.parametres}
+                                modele={pres.modele}
+                                lignes={f.lignes}
+                                totaux={totauxFacture(f, parametres, acomptes)}
+                                conditionsPaiement={f.conditionsPaiement}
+                                note={f.note}
+                                referenceFacture={
+                                  f.factureParenteId
+                                    ? factures.find(
+                                        (x) => x.id === f.factureParenteId,
+                                      )?.numero
+                                    : undefined
+                                }
+                                referenceDevis={
+                                  devis.find((d) => d.id === f.devisId)?.numero
+                                }
+                                referenceCommande={
+                                  commandes.find((c) => c.id === f.commandeId)
+                                    ?.numero
+                                }
+                                acomptesDetail={detailAcomptesDocument(
+                                  f,
+                                  acomptes,
+                                )}
+                              />
+                            );
+                          })()}
+                        </EnvoiDocumentBouton>
                         {estNonFiscal && (
                           <>
                             <IconButton
@@ -1112,6 +1174,65 @@ export default function ListeFacturesPage() {
                   sheetRef={previewSheetRef}
                   filename={`Facture ${preview.numero}`}
                 />
+                <EnvoiDocumentBouton
+                  filename={preview.numero}
+                  typeDocument="facture"
+                  numero={preview.numero}
+                  entiteId={preview.id}
+                  client={clients.find((c) => c.id === preview.clientId)}
+                  onEnvoye={() => {
+                    if (
+                      preview.statut !== "brouillon" &&
+                      preview.type !== "proforma" &&
+                      preview.statut !== "annulee"
+                    ) {
+                      marquerEnvoyee(preview);
+                    }
+                  }}
+                >
+                  {(() => {
+                    const pres = presentationPourFacture(
+                      preview,
+                      parametres,
+                      modele,
+                    );
+                    return (
+                      <DocumentPreview
+                        type="facture"
+                        factureType={preview.type}
+                        estProforma={
+                          preview.type === "proforma" ||
+                          preview.statut === "proforma"
+                        }
+                        numero={preview.numero}
+                        date={preview.date}
+                        echeance={preview.echeance}
+                        client={clients.find((c) => c.id === preview.clientId)}
+                        pdv={pointsDeVente.find(
+                          (p) => p.id === preview.pointDeVenteId,
+                        )}
+                        parametres={pres.parametres}
+                        modele={pres.modele}
+                        lignes={preview.lignes}
+                        totaux={totauxFacture(preview, parametres, acomptes)}
+                        conditionsPaiement={preview.conditionsPaiement}
+                        note={preview.note}
+                        referenceFacture={previewParent?.numero}
+                        referenceDevis={
+                          devis.find((d) => d.id === preview.devisId)?.numero
+                        }
+                        referenceCommande={
+                          commandes.find((c) => c.id === preview.commandeId)
+                            ?.numero
+                        }
+                        acomptesDetail={detailAcomptesDocument(
+                          preview,
+                          acomptes,
+                        )}
+                      />
+                    );
+                  })()}
+                </EnvoiDocumentBouton>
                 <button
                   className="btn btn-secondary"
                   onClick={() => setPreviewId(null)}

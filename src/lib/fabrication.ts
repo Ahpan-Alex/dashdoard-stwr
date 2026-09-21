@@ -103,7 +103,7 @@ export function motifLancementOfDimension(
   of: Pick<OrdreFabrication, "nomenclatureLignes" | "dimensionLargeur" | "dimensionHauteur">,
 ) {
   return motifDimensionNomenclatureManquante(
-    of.nomenclatureLignes,
+    of.nomenclatureLignes ?? [],
     of.dimensionLargeur,
     of.dimensionHauteur,
   );
@@ -153,11 +153,11 @@ export function coutsNonAffectes(of: OrdreFabrication) {
 }
 
 export function quantiteProduite(of: Pick<OrdreFabrication, "entreesProduction">) {
-  return of.entreesProduction.reduce((s, e) => s + e.quantite, 0);
+  return (of.entreesProduction ?? []).reduce((s, e) => s + e.quantite, 0);
 }
 
 export function quantiteSortieComposant(of: OrdreFabrication, composantId: string) {
-  return of.sorties
+  return (of.sorties ?? [])
     .filter((s) => s.composantId === composantId)
     .reduce((s, x) => s + x.quantite, 0);
 }
@@ -167,7 +167,9 @@ export function quantiteTheoriqueComposantOf(
   composantId: string,
   quantiteRef?: number,
 ) {
-  const ligne = of.nomenclatureLignes.find((l) => l.composantId === composantId);
+  const ligne = (of.nomenclatureLignes ?? []).find(
+    (l) => l.composantId === composantId,
+  );
   return (ligne?.quantiteUnitaire ?? 0) * (quantiteRef ?? of.quantitePrevue);
 }
 
@@ -175,8 +177,8 @@ export function depassementNomenclature(
   of: OrdreFabrication,
 ): { composantId: string; prevu: number; sorti: number }[] {
   const ids = new Set([
-    ...of.nomenclatureLignes.map((l) => l.composantId),
-    ...of.sorties.map((s) => s.composantId),
+    ...(of.nomenclatureLignes ?? []).map((l) => l.composantId),
+    ...(of.sorties ?? []).map((s) => s.composantId),
   ]);
   const out: { composantId: string; prevu: number; sorti: number }[] = [];
   for (const id of ids) {
@@ -191,12 +193,12 @@ export function depassementNomenclature(
 export function reliquatsMatieres(of: OrdreFabrication) {
   const produit = quantiteProduite(of);
   const parComposant = new Map<string, { sorti: number; theorique: number }>();
-  for (const s of of.sorties) {
+  for (const s of of.sorties ?? []) {
     const cur = parComposant.get(s.composantId) ?? { sorti: 0, theorique: 0 };
     cur.sorti += s.quantite;
     parComposant.set(s.composantId, cur);
   }
-  for (const l of of.nomenclatureLignes) {
+  for (const l of of.nomenclatureLignes ?? []) {
     const cur = parComposant.get(l.composantId) ?? { sorti: 0, theorique: 0 };
     cur.theorique = l.quantiteUnitaire * produit;
     parComposant.set(l.composantId, cur);

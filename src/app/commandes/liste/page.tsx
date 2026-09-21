@@ -19,6 +19,7 @@ import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import {
   BadgesAvancementCommande,
   DocumentFiliation,
@@ -850,6 +851,37 @@ export default function ListeCommandesPage() {
                           })}
                         />
                       </ExportDocumentPdfButton>
+                      <EnvoiDocumentBouton
+                        filename={c.numero}
+                        typeDocument="commande"
+                        numero={c.numero}
+                        entiteId={c.id}
+                        client={clients.find((x) => x.id === c.clientId)}
+                      >
+                        <DocumentPreview
+                          type="commande"
+                          numero={c.numero}
+                          date={c.date}
+                          client={clients.find((x) => x.id === c.clientId)}
+                          pdv={pointsDeVente.find(
+                            (p) => p.id === c.pointDeVenteId,
+                          )}
+                          parametres={parametres}
+                          modele={modele}
+                          lignes={c.lignes}
+                          totaux={totauxCommande(c, parametres, acomptes)}
+                          conditionsPaiement={c.conditionsPaiement}
+                          note={c.note}
+                          validiteJours={c.validiteJours}
+                          referenceDevis={
+                            devis.find((d) => d.id === c.devisId)?.numero
+                          }
+                          acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                            commandeId: c.id,
+                            devisId: c.devisId,
+                          })}
+                        />
+                      </EnvoiDocumentBouton>
                       <IconButton
                         label="Modifier"
                         onClick={() => ouvrirEdition(c.id)}
@@ -916,6 +948,35 @@ export default function ListeCommandesPage() {
                 sheetRef={previewSheetRef}
                 filename={`Commande ${preview.numero}`}
               />
+              <EnvoiDocumentBouton
+                filename={preview.numero}
+                typeDocument="commande"
+                numero={preview.numero}
+                entiteId={preview.id}
+                client={clients.find((c) => c.id === preview.clientId)}
+              >
+                <DocumentPreview
+                  type="commande"
+                  numero={preview.numero}
+                  date={preview.date}
+                  client={clients.find((c) => c.id === preview.clientId)}
+                  pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
+                  parametres={parametres}
+                  modele={modele}
+                  lignes={preview.lignes}
+                  totaux={totauxCommande(preview, parametres, acomptes)}
+                  conditionsPaiement={preview.conditionsPaiement}
+                  note={preview.note}
+                  validiteJours={preview.validiteJours}
+                  referenceDevis={
+                    devis.find((d) => d.id === preview.devisId)?.numero
+                  }
+                  acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                    commandeId: preview.id,
+                    devisId: preview.devisId,
+                  })}
+                />
+              </EnvoiDocumentBouton>
               <button
                 className="btn btn-secondary"
                 onClick={() => setPreviewId(null)}

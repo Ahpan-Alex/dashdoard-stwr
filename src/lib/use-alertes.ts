@@ -39,9 +39,9 @@ export function useAlertes() {
   const pointDeVenteActifId = useStore((s) => s.pointDeVenteActifId);
   const alertesSuivi = useStore((s) => s.alertesSuivi);
 
-  const toutes = useMemo(
-    () =>
-      evaluerAlertes({
+  const toutes = useMemo(() => {
+    try {
+      return evaluerAlertes({
         parametresAlertes,
         parametres,
         achats,
@@ -63,8 +63,12 @@ export function useAlertes() {
         bonsATirer,
         commandes,
         transfertsStock,
-      }),
-    [
+      });
+    } catch (err) {
+      console.error("Évaluation des alertes impossible.", err);
+      return [];
+    }
+  }, [
       parametresAlertes,
       parametres,
       achats,

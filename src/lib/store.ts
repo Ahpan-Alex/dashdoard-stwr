@@ -1133,6 +1133,13 @@ type Store = {
     note?: string;
     prochaineRelance?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
+  tracerEnvoiDocument: (data: {
+    entite: ActiviteEntite;
+    entiteId: string;
+    libelle: string;
+    canal: string;
+    destinataire: string;
+  }) => void;
   deleteTiers: (id: string) => { ok: boolean; reason?: string };
   /** Accessible à tout utilisateur connecté (pas réservé à l'admin). */
   updatePlafondCredit: (id: string, plafondCredit: number) => { ok: boolean; reason?: string };
@@ -6831,6 +6838,19 @@ export const useStore = create<Store>()((set, get) => ({
           ],
         }));
         return { ok: true as const, id };
+      },
+
+      tracerEnvoiDocument: (data) => {
+        set((s) => ({
+          journalActivites: [
+            entreeActivite("envoi", data.entite, {
+              entiteId: data.entiteId,
+              libelle: data.libelle,
+              detail: `${data.canal} → ${data.destinataire}`,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
       },
 
       addProduit: (produit) => {

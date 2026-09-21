@@ -192,6 +192,48 @@ ${collectHeadHtml()}
   }
 }
 
+/**
+ * Génère un PDF A4 (blob) de la même feuille que l'aperçu, pour l'envoi e-mail / WhatsApp.
+ */
+export async function pdfBlobDepuisFeuille(
+  sheet: HTMLElement,
+  opts: OptionsImpressionDocument = {},
+): Promise<Blob> {
+  const html2canvas = (await import("html2canvas")).default;
+  const { jsPDF } = await import("jspdf");
+  const paysage = opts.orientation === "landscape";
+  const canvas = await html2canvas(sheet, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+  const img = canvas.toDataURL("image/jpeg", 0.92);
+  const pdf = new jsPDF({
+    orientation: paysage ? "landscape" : "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgH = (canvas.height * pageW) / canvas.width;
+  let heightLeft = imgH;
+  let position = 0;
+  pdf.addImage(img, "JPEG", 0, position, pageW, imgH);
+  heightLeft -= pageH;
+  while (heightLeft > 0) {
+    position -= pageH;
+    pdf.addPage();
+    pdf.addImage(img, "JPEG", 0, position, pageW, imgH);
+    heightLeft -= pageH;
+  }
+  const blob = pdf.output("blob");
+  const name = nomFichierSafe(opts.filename ?? "document");
+  return new File([blob], name.endsWith(".pdf") ? name : `${name}.pdf`, {
+    type: "application/pdf",
+  });
+}
+
 export function feuilleDepuisConteneur(
   root: ParentNode | null,
 ): HTMLElement | null {

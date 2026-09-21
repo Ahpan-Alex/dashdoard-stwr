@@ -31,11 +31,11 @@ export function SelecteurDestinationAchat({
   };
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <fieldset className="sm:col-span-2">
-        <legend className="text-xs font-semibold text-muted">Destination</legend>
-        <div className="mt-2 flex flex-wrap gap-4 text-sm">
-          <label className="inline-flex items-center gap-2">
+    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+      <div className="min-w-0 sm:col-span-2">
+        <p className="text-xs font-semibold text-muted">Destination</p>
+        <div className="mt-2 flex flex-wrap gap-3 text-sm">
+          <label className="inline-flex min-w-0 items-center gap-2 rounded-[var(--radius)] border border-line bg-card px-3 py-2">
             <input
               type="radio"
               name={name}
@@ -47,7 +47,7 @@ export function SelecteurDestinationAchat({
             />
             {DESTINATION_ACHAT_LABELS.projet_client}
           </label>
-          <label className="inline-flex items-center gap-2">
+          <label className="inline-flex min-w-0 items-center gap-2 rounded-[var(--radius)] border border-line bg-card px-3 py-2">
             <input
               type="radio"
               name={name}
@@ -63,7 +63,7 @@ export function SelecteurDestinationAchat({
             {DESTINATION_ACHAT_LABELS.approvisionnement_stock}
           </label>
         </div>
-      </fieldset>
+      </div>
       {destination === "projet_client" && (
         <label className="block text-xs font-semibold text-muted sm:col-span-2">
           Commande client (projet)

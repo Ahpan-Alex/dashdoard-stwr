@@ -1638,6 +1638,7 @@ export type ActiviteAction =
   | "reception"
   | "activation"
   | "desactivation"
+  | "envoi"
   | "autre";
 
 /** Journal d'historique des actions utilisateur (traçabilité). */

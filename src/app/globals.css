@@ -59,6 +59,11 @@
   box-sizing: border-box;
 }
 
+fieldset {
+  min-width: 0;
+  min-inline-size: 0;
+}
+
 body {
   background:
     radial-gradient(ellipse 80% 50% at 100% -10%, rgba(61, 184, 196, 0.12), transparent),

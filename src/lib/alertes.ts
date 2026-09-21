@@ -417,7 +417,7 @@ function dernierMouvementPaiement(
 }
 
 function dateDerniereReception(achat: Achat): string {
-  const dates = achat.livraisons
+  const dates = (achat.livraisons ?? [])
     .filter((l) => l.statut !== "annulee")
     .filter((l) => l.lignes.some((x) => x.quantiteLivree > 0))
     .map((l) => l.date);
@@ -516,8 +516,10 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
   const cfg = normaliserParametresAlertes(ctx.parametresAlertes);
   const today = ctx.aujourdHui ?? jourISO();
   const out: AlerteInstance[] = [];
+  const achats = ctx.achats ?? [];
+  const ofs = ctx.ordresFabrication ?? [];
 
-  for (const achat of ctx.achats) {
+  for (const achat of achats) {
     if (achat.statut !== "valide") continue;
     const frn =
       ctx.fournisseurs.find((f) => f.id === achat.fournisseurId)?.nom ??
@@ -936,7 +938,6 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
     }
   }
 
-  const ofs = ctx.ordresFabrication ?? [];
   const ofsOuverts = ofs.filter(
     (o) => o.statut === "en_cours" || o.statut === "brouillon",
   );
@@ -977,7 +978,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
       let sorti = 0;
       let perte = 0;
       const retours = of_.retoursMatieres ?? [];
-      for (const s of of_.sorties) sorti += s.quantite;
+      for (const s of of_.sorties ?? []) sorti += s.quantite;
       for (const r of reliquatsMatieres(of_)) {
         const rendu = retours
           .filter((x) => x.composantId === r.composantId)
@@ -1006,7 +1007,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
 
   if (cfg.productionRuptureComposant.actif) {
     for (const of_ of ofsOuverts.filter((o) => o.statut === "en_cours")) {
-      for (const ligne of of_.nomenclatureLignes) {
+      for (const ligne of of_.nomenclatureLignes ?? []) {
         const besoin = quantiteTheoriqueComposantOf(of_, ligne.composantId);
         const sorti = quantiteSortieComposant(of_, ligne.composantId);
         const restant = Math.max(0, besoin - sorti);
@@ -1165,7 +1166,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
   }
 
   if (cfg.achatSansProjetClient.actif) {
-    for (const a of ctx.achats) {
+    for (const a of achats) {
       if (!achatSansLienProjetClient(a)) continue;
       out.push({
         id: `achat_sans_projet_client:${a.id}`,
@@ -1286,7 +1287,7 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
       ) {
         continue;
       }
-      const anomalies = anomaliesFournisseurRetenu(dp, ctx.achats);
+      const anomalies = anomaliesFournisseurRetenu(dp, achats);
       if (anomalies.length === 0) continue;
       out.push({
         id: `dp_fournisseur_atypique:${dp.id}`,

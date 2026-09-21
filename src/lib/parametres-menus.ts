@@ -73,6 +73,7 @@ export const REGLAGES_SECTIONS: ParametreSection[] = [
     description: "Modèles, colonnes des tableaux et numérotation des pièces.",
     groupe: "reglages",
     aliases: [
+      "/parametres/envoi",
       "/parametres/modeles",
       "/parametres/affichage",
       "/parametres/configuration/numerotation",
@@ -88,6 +89,12 @@ export const REGLAGES_SECTIONS: ParametreSection[] = [
         href: "/parametres/affichage",
         label: "Affichage",
         description: "Colonnes des tableaux et export A4.",
+      },
+      {
+        href: "/parametres/envoi",
+        label: "Envoi",
+        description: "E-mail SMTP et WhatsApp avec PDF des documents.",
+        permission: "parametres.gerer",
       },
       {
         href: "/parametres/documents-commerciaux",

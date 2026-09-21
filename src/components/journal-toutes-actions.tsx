@@ -60,6 +60,7 @@ const ACTION_LABELS: Record<ActiviteAction, string> = {
   reception: "Réception",
   activation: "Activation",
   desactivation: "Désactivation",
+  envoi: "Envoi",
   autre: "Autre",
 };
 
@@ -73,6 +74,7 @@ const ACTION_BADGE: Record<ActiviteAction, string> = {
   reception: "badge-success",
   activation: "badge-success",
   desactivation: "badge-sand",
+  envoi: "badge-sea",
   autre: "badge-muted",
 };
 

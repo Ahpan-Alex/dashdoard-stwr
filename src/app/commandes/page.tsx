@@ -44,7 +44,7 @@ function CommandesContent() {
   const {
     commandes,
     devis,
-    clients,
+    clients = [],
     produits,
     pointsDeVente,
     parametres,

@@ -19,6 +19,7 @@ import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
 } from "@/components/export-documents-pdf";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import { DocumentFiliation } from "@/components/document-filiation";
 import { TransformationValidationModal } from "@/components/transformation-validation";
 import { IconButton } from "@/components/icon-button";
@@ -608,6 +609,33 @@ export default function ListeDevisPage() {
                           })}
                         />
                       </ExportDocumentPdfButton>
+                      <EnvoiDocumentBouton
+                        filename={d.numero}
+                        typeDocument="devis"
+                        numero={d.numero}
+                        entiteId={d.id}
+                        client={clients.find((c) => c.id === d.clientId)}
+                      >
+                        <DocumentPreview
+                          type="devis"
+                          numero={d.numero}
+                          date={d.date}
+                          client={clients.find((c) => c.id === d.clientId)}
+                          pdv={pointsDeVente.find(
+                            (p) => p.id === d.pointDeVenteId,
+                          )}
+                          parametres={parametres}
+                          modele={modele}
+                          lignes={d.lignes}
+                          totaux={totauxDevis(d, parametres, acomptes)}
+                          conditionsPaiement={d.conditionsPaiement}
+                          note={d.note}
+                          validiteJours={d.validiteJours}
+                          acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                            devisId: d.id,
+                          })}
+                        />
+                      </EnvoiDocumentBouton>
                       <IconButton
                         label="Modifier"
                         onClick={() => ouvrirEdition(d.id)}
@@ -652,6 +680,31 @@ export default function ListeDevisPage() {
                 sheetRef={previewSheetRef}
                 filename={`Devis ${preview.numero}`}
               />
+              <EnvoiDocumentBouton
+                filename={preview.numero}
+                typeDocument="devis"
+                numero={preview.numero}
+                entiteId={preview.id}
+                client={clients.find((c) => c.id === preview.clientId)}
+              >
+                <DocumentPreview
+                  type="devis"
+                  numero={preview.numero}
+                  date={preview.date}
+                  client={clients.find((c) => c.id === preview.clientId)}
+                  pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
+                  parametres={parametres}
+                  modele={modele}
+                  lignes={preview.lignes}
+                  totaux={totauxDevis(preview, parametres, acomptes)}
+                  conditionsPaiement={preview.conditionsPaiement}
+                  note={preview.note}
+                  validiteJours={preview.validiteJours}
+                  acomptesDetail={lignesAcomptesPourDocument(acomptes, {
+                    devisId: preview.id,
+                  })}
+                />
+              </EnvoiDocumentBouton>
               <button
                 className="btn btn-secondary"
                 onClick={() => setPreviewId(null)}

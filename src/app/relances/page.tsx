@@ -2,12 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Mail } from "lucide-react";
+import { Bell } from "lucide-react";
+import { DocumentPreview } from "@/components/document-preview";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import { PageHeader } from "@/components/page-header";
 import { RequirePermission } from "@/components/require-permission";
 import { TableAffichageBarre } from "@/components/table-affichage-barre";
 import { TdCol, ThCol } from "@/components/table-col";
-import { libelleClient } from "@/lib/commercial";
+import {
+  detailAcomptesDocument,
+  libelleClient,
+  totauxFacture,
+} from "@/lib/commercial";
+import { presentationPourFacture } from "@/lib/document-presentation";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   RELANCE_CANAUX,
@@ -20,7 +27,8 @@ import {
 } from "@/lib/relances-impayes";
 import { useStore } from "@/lib/store";
 import { useAffichageTable } from "@/lib/use-affichage-table";
-import type { RelanceImpayeeCanal } from "@/lib/types";
+import { useModelePourType } from "@/lib/use-modele";
+import type { Facture, RelanceImpayeeCanal } from "@/lib/types";
 
 type FiltreFile = "aujourdhui" | "toutes" | "retard" | "jamais";
 
@@ -30,16 +38,6 @@ const FILTRES: { id: FiltreFile; label: string }[] = [
   { id: "jamais", label: "Jamais relancées" },
   { id: "toutes", label: "Toutes les impayées" },
 ];
-
-function ouvrirMailto(email: string | undefined, sujet: string, corps: string) {
-  if (!email?.trim()) {
-    alert("Aucun e-mail renseigné sur la fiche client.");
-    return false;
-  }
-  const href = `mailto:${encodeURIComponent(email.trim())}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
-  window.location.href = href;
-  return true;
-}
 
 export default function RelancesPage() {
   return (
@@ -114,17 +112,17 @@ function RelancesContent() {
 
   function ouvrir(ligne: FileRelance) {
     setOuvertId(ligne.facture.id);
-    setCanal("telephone");
+    setCanal("email");
     setNote("");
     const plusSept = new Date();
     plusSept.setDate(plusSept.getDate() + 7);
     setProchaine(jourCivilLocal(plusSept));
   }
 
-  function enregistrer(ligne: FileRelance, avecMailto: boolean) {
+  function enregistrer(ligne: FileRelance, canalForce?: RelanceImpayeeCanal) {
     const res = ajouterRelanceImpayee({
       factureId: ligne.facture.id,
-      canal,
+      canal: canalForce ?? canal,
       note,
       prochaineRelance: prochaine || undefined,
     });
@@ -132,29 +130,16 @@ function RelancesContent() {
       alert(res.reason);
       return;
     }
-    if (avecMailto || canal === "email") {
-      const client = clients.find((c) => c.id === ligne.facture.clientId);
-      ouvrirMailto(
-        client?.email,
-        `Relance facture ${ligne.facture.numero}`,
-        corpsMailtoRelance({
-          numero: ligne.facture.numero,
-          date: formatDate(ligne.facture.date),
-          reste: formatCurrency(ligne.reste),
-          echeance: ligne.echeanceJour
-            ? formatDate(`${ligne.echeanceJour}T12:00:00`)
-            : undefined,
-        }),
-      );
-    }
     setOuvertId(null);
   }
+
+  const envoiReel = canal === "email" || canal === "whatsapp";
 
   return (
     <div>
       <PageHeader
         title="Relances impayés"
-        description="File des factures encore dues, avec historique qui / quand / canal. L'envoi e-mail ouvre le client messagerie ; la relance est toujours enregistrée dans Négoo."
+        description="File des factures encore dues. E-mail et WhatsApp joignent le PDF de la facture (Paramètres → Documents → Envoi). Téléphone, visite et courrier s'enregistrent seulement."
       />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -300,20 +285,42 @@ function RelancesContent() {
                             />
                           </label>
                           <div className="flex flex-wrap gap-2">
+                            {envoiReel && (
+                              <EnvoiDocumentBouton
+                                variant="button"
+                                boutonLabel={
+                                  canal === "whatsapp"
+                                    ? "Envoyer par WhatsApp"
+                                    : "Envoyer par e-mail"
+                                }
+                                filename={f.numero}
+                                typeDocument="relance"
+                                numero={f.numero}
+                                entiteId={f.id}
+                                client={client}
+                                canalPrefere={canal === "whatsapp" ? "whatsapp" : "email"}
+                                sujetInitial={`Relance facture ${f.numero}`}
+                                messageInitial={corpsMailtoRelance({
+                                  numero: f.numero,
+                                  date: formatDate(f.date),
+                                  reste: formatCurrency(ligne.reste),
+                                  echeance: ligne.echeanceJour
+                                    ? formatDate(`${ligne.echeanceJour}T12:00:00`)
+                                    : undefined,
+                                })}
+                                onEnvoye={(canalEnvoye) =>
+                                  enregistrer(ligne, canalEnvoye)
+                                }
+                              >
+                                <ApercuFactureRelance facture={f} />
+                              </EnvoiDocumentBouton>
+                            )}
                             <button
                               type="button"
-                              className="btn btn-primary"
-                              onClick={() => enregistrer(ligne, false)}
+                              className={envoiReel ? "btn btn-secondary" : "btn btn-primary"}
+                              onClick={() => enregistrer(ligne)}
                             >
-                              Enregistrer
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() => enregistrer(ligne, true)}
-                            >
-                              <Mail className="h-4 w-4" />
-                              + e-mail
+                              {envoiReel ? "Enregistrer sans envoi" : "Enregistrer"}
                             </button>
                           </div>
                           {hist.length > 0 && (
@@ -327,11 +334,22 @@ function RelancesContent() {
                               ))}
                             </ul>
                           )}
-                          {!client?.email && (
+                          {canal === "email" && !client?.email && (
                             <p className="text-xs text-muted">
                               Pas d&apos;e-mail sur la fiche client.
                             </p>
                           )}
+                          {canal === "whatsapp" && !client?.telephone && (
+                            <p className="text-xs text-muted">
+                              Pas de téléphone sur la fiche client.
+                            </p>
+                          )}
+                          <p className="text-[11px] text-muted">
+                            SMTP / WhatsApp :{" "}
+                            <Link href="/parametres/envoi" className="underline">
+                              Paramètres → Envoi
+                            </Link>
+                          </p>
                         </div>
                       )}
                     </td>
@@ -343,5 +361,45 @@ function RelancesContent() {
         </table>
       </div>
     </div>
+  );
+}
+
+function ApercuFactureRelance({ facture }: { facture: Facture }) {
+  const parametres = useStore((s) => s.parametres);
+  const acomptes = useStore((s) => s.acomptes);
+  const clients = useStore((s) => s.clients);
+  const pointsDeVente = useStore((s) => s.pointsDeVente);
+  const devis = useStore((s) => s.devis);
+  const commandes = useStore((s) => s.commandes);
+  const factures = useStore((s) => s.factures);
+  const modele = useModelePourType("facture");
+  const pres = presentationPourFacture(facture, parametres, modele);
+  return (
+    <DocumentPreview
+      type="facture"
+      factureType={facture.type}
+      estProforma={facture.type === "proforma" || facture.statut === "proforma"}
+      numero={facture.numero}
+      date={facture.date}
+      echeance={facture.echeance}
+      client={clients.find((c) => c.id === facture.clientId)}
+      pdv={pointsDeVente.find((p) => p.id === facture.pointDeVenteId)}
+      parametres={pres.parametres}
+      modele={pres.modele}
+      lignes={facture.lignes}
+      totaux={totauxFacture(facture, parametres, acomptes)}
+      conditionsPaiement={facture.conditionsPaiement}
+      note={facture.note}
+      referenceFacture={
+        facture.factureParenteId
+          ? factures.find((x) => x.id === facture.factureParenteId)?.numero
+          : undefined
+      }
+      referenceDevis={devis.find((d) => d.id === facture.devisId)?.numero}
+      referenceCommande={
+        commandes.find((c) => c.id === facture.commandeId)?.numero
+      }
+      acomptesDetail={detailAcomptesDocument(facture, acomptes)}
+    />
   );
 }

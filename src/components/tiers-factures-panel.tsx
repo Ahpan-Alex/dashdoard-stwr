@@ -6,6 +6,7 @@ import { Eye, FileText, Mail } from "lucide-react";
 import { DocumentPreview } from "@/components/document-preview";
 import { DocumentPrintActions } from "@/components/document-print-actions";
 import { EmptyState } from "@/components/empty-state";
+import { EnvoiDocumentBouton } from "@/components/envoi-document-bouton";
 import { ExportDocumentPdfButton } from "@/components/export-documents-pdf";
 import { IconButton } from "@/components/icon-button";
 import { totauxAchat } from "@/lib/achats";
@@ -137,14 +138,7 @@ export function TiersFacturesPanel({ tiers }: Props) {
           acomptes={acomptes}
           journal={journalActivites}
           onVisionner={(id) => setPreviewFactureId(id)}
-          onMail={(f) => {
-            const ok = ouvrirMailto(
-              tiers.email,
-              `Facture ${f.numero}`,
-              `Bonjour,\n\nVeuillez trouver la facture ${f.numero} du ${formatDate(f.date)}.\n\nCordialement`,
-            );
-            if (ok) marquerEnvoyee(f);
-          }}
+          onEnvoye={marquerEnvoyee}
         />
       )}
 
@@ -287,7 +281,7 @@ function TableFactures({
   acomptes,
   journal,
   onVisionner,
-  onMail,
+  onEnvoye,
 }: {
   lignes: Facture[];
   tiers: Tiers;
@@ -295,7 +289,7 @@ function TableFactures({
   acomptes: ReturnType<typeof useStore.getState>["acomptes"];
   journal: ReturnType<typeof useStore.getState>["journalActivites"];
   onVisionner: (id: string) => void;
-  onMail: (f: Facture) => void;
+  onEnvoye: (f: Facture) => void;
 }) {
   if (lignes.length === 0) {
     return (
@@ -353,9 +347,16 @@ function TableFactures({
                     <ExportDocumentPdfButton label={`Imprimer ${f.numero}`}>
                       <FactureExportInline facture={f} tiers={tiers} />
                     </ExportDocumentPdfButton>
-                    <IconButton label="Envoyer par mail" onClick={() => onMail(f)}>
-                      <Mail className="h-4 w-4" />
-                    </IconButton>
+                    <EnvoiDocumentBouton
+                      filename={f.numero}
+                      typeDocument="facture"
+                      numero={f.numero}
+                      entiteId={f.id}
+                      client={clientDepuisTiers(tiers)}
+                      onEnvoye={() => onEnvoye(f)}
+                    >
+                      <FactureExportInline facture={f} tiers={tiers} />
+                    </EnvoiDocumentBouton>
                   </div>
                 </td>
               </tr>
