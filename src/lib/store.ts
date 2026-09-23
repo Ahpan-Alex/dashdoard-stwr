@@ -265,6 +265,7 @@ import {
   produitEstFabrique,
   usageCommercialDuProduit,
 } from "./nature-stock";
+import { modeApprovisionnementEnregistre } from "./mode-approvisionnement";
 import {
   motifSymboleUniteInvalide,
   nbProduitsParUnite,
@@ -677,6 +678,7 @@ type Store = {
     quantitePrevue: number;
     nomenclatureSource?: TypeNomenclature;
     commandeId?: string;
+    ligneCommandeId?: string;
     dateCloturePrevue?: string;
     note?: string;
     dimensionLargeur?: number;
@@ -4302,6 +4304,7 @@ export const useStore = create<Store>()((set, get) => ({
           nomenclatureNom: copie.nom,
           nomenclatureLignes: copie.lignes,
           commandeId: data.commandeId,
+          ligneCommandeId: data.ligneCommandeId,
           dimensionLargeur,
           dimensionHauteur,
           statut: "brouillon",
@@ -6885,6 +6888,10 @@ export const useStore = create<Store>()((set, get) => ({
             ...produit,
             id: uid("prod"),
             natureStock: nature,
+            modeApprovisionnement: modeApprovisionnementEnregistre(
+              nature,
+              produit.modeApprovisionnement,
+            ),
             usageCommercial: usage,
             nomenclatures,
           },
@@ -6958,6 +6965,12 @@ export const useStore = create<Store>()((set, get) => ({
         data = {
           ...data,
           natureStock: natureCible,
+          modeApprovisionnement: modeApprovisionnementEnregistre(
+            natureCible,
+            data.modeApprovisionnement !== undefined
+              ? data.modeApprovisionnement
+              : prev.modeApprovisionnement,
+          ),
           nomenclatures,
           usageCommercial: usageCommercialDuProduit(
             {

@@ -59,6 +59,13 @@ import {
   RemiseLigneSaisie,
 } from "@/components/remise-saisie";
 import { LigneDimensionsSaisie, ResumeSurfaceLigne } from "@/components/ligne-dimensions-saisie";
+import { AlerteMatieresCommande } from "@/components/commande-lignes-approvisionnement";
+import {
+  ligneEstFabricationCommande,
+  modeApprovisionnementDuProduit,
+  natureAdmetModeApprovisionnement,
+} from "@/lib/mode-approvisionnement";
+import { natureStockDuProduit } from "@/lib/nature-stock";
 
 export type DraftLigne = Omit<LigneDocument, "id"> & { key: string };
 export type EtapeDocument = "saisie" | "prevalidation";
@@ -90,6 +97,7 @@ export function draftToLignes(lignes: DraftLigne[]): LigneDocument[] {
       remisePercent: remise.remisePercent,
       remiseMontant: remise.remiseMontant,
       commentaire: l.commentaire,
+      modeApprovisionnement: l.modeApprovisionnement,
       ...champsSurfaceLigne(l),
     };
   });
@@ -230,6 +238,18 @@ export function DocumentSaisieWizard({
       reserveOf(produitId),
     );
   const produitsDispo = produitsVendablesActifs(produits, categoriesProduits);
+  const saisieClient =
+    previewMeta.type === "devis" || previewMeta.type === "commande";
+  function produitCommandableClient(p: Produit) {
+    return natureAdmetModeApprovisionnement(natureStockDuProduit(p));
+  }
+  function ligneSansControleStockFini(
+    l: Pick<DraftLigne, "modeApprovisionnement" | "produitId" | "type">,
+  ) {
+    if (!saisieClient) return false;
+    const prod = produits.find((p) => p.id === l.produitId);
+    return ligneEstFabricationCommande(l, prod);
+  }
   const [etape, setEtape] = useState<EtapeDocument>("saisie");
   const previewSheetRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<DraftLigne[]>(initialLignes);
@@ -268,6 +288,7 @@ export function DocumentSaisieWizard({
   const catalogueFiltre = useMemo(() => {
     const q = rechercheProduit.trim().toLowerCase();
     return produitsDispo
+      .filter((p) => !saisieClient || produitCommandableClient(p))
       .filter((p) => {
         if (filtreFamille) {
           if (p.categorieId === filtreFamille) return true;
@@ -285,7 +306,13 @@ export function DocumentSaisieWizard({
         );
       })
       .sort((a, b) => a.code.localeCompare(b.code));
-  }, [produitsDispo, filtreFamille, rechercheProduit, categoriesProduits]);
+  }, [
+    produitsDispo,
+    filtreFamille,
+    rechercheProduit,
+    categoriesProduits,
+    saisieClient,
+  ]);
 
   function libelleFamille(categorieId: string) {
     return (
@@ -316,14 +343,23 @@ export function DocumentSaisieWizard({
     const prod = produitsDispo.find((p) => p.id === produitId);
     if (!prod) return;
     setStockError(null);
+    if (saisieClient && !produitCommandableClient(prod)) {
+      setStockError(
+        "Les matières premières et les semi-finis ne se commandent pas directement.",
+      );
+      return;
+    }
     if (!pointDeVenteId) {
       setStockError(
         "Sélectionnez un point de vente avant d'ajouter un produit.",
       );
       return;
     }
+    const fabrication =
+      saisieClient &&
+      modeApprovisionnementDuProduit(prod) === "fabrication_commande";
     const dispo = stockSaisie(produitId, lignes);
-    if (dispo <= 0) {
+    if (!fabrication && dispo <= 0) {
       setStockError(
         `Stock insuffisant pour « ${prod.libelleCourt} » (disponible : 0 ${prod.unite}).`,
       );
@@ -348,6 +384,8 @@ export function DocumentSaisieWizard({
           unite: prod.unite,
           tauxTVA: assujettiTVA ? prod.tauxTVA : 0,
           venduAuM2: prod.venduAuM2 || undefined,
+          modeApprovisionnement:
+            modeApprovisionnementDuProduit(prod) ?? undefined,
         },
       ]),
     );
@@ -413,8 +451,13 @@ export function DocumentSaisieWizard({
           merged.produitId &&
           patch.quantite !== undefined
         ) {
-          const max = stockSaisie(merged.produitId, prev, key);
-          merged.quantite = Math.min(Math.max(0, Number(patch.quantite) || 0), max);
+          const qte = Math.max(0, Number(patch.quantite) || 0);
+          if (ligneSansControleStockFini(merged)) {
+            merged.quantite = qte;
+          } else {
+            const max = stockSaisie(merged.produitId, prev, key);
+            merged.quantite = Math.min(qte, max);
+          }
         }
         return merged;
       });
@@ -436,6 +479,7 @@ export function DocumentSaisieWizard({
       if (l.quantite <= 0) {
         return `Quantité invalide pour « ${l.designation} ».`;
       }
+      if (ligneSansControleStockFini(l)) continue;
       if (l.quantite > max) {
         return `Stock insuffisant pour « ${l.designation} » (disponible : ${formatNumber(max)} ${l.unite}).`;
       }
@@ -530,6 +574,15 @@ export function DocumentSaisieWizard({
         </div>
       </div>
 
+      {previewMeta.type === "commande" && (
+        <div className="mb-4">
+          <AlerteMatieresCommande
+            lignes={draftToLignes(lignes)}
+            pointDeVenteId={pointDeVenteId}
+          />
+        </div>
+      )}
+
       {etape === "saisie" ? (
         <div className="grid gap-4">
           {headerFields}
@@ -588,6 +641,13 @@ export function DocumentSaisieWizard({
                 Sélectionnez un point de vente pour afficher le stock.
               </p>
             )}
+            {saisieClient &&
+              produitsDispo.some((p) => !produitCommandableClient(p)) && (
+                <p className="mb-2 text-xs text-muted">
+                  Les matières premières et les semi-finis ne se commandent pas
+                  tels quels.
+                </p>
+              )}
 
             <div className="table-shell max-h-[320px] overflow-auto">
               <table className="data">
@@ -618,9 +678,13 @@ export function DocumentSaisieWizard({
                   ) : (
                     catalogueFiltre.map((p) => {
                       const nbLignes = lignesProduitParId.counts.get(p.id) ?? 0;
+                      const fabrication =
+                        saisieClient &&
+                        modeApprovisionnementDuProduit(p) ===
+                          "fabrication_commande";
                       const stock = stockLibreAffiche(p.id);
                       const restant = stockSaisie(p.id, lignes);
-                      const indispo = restant <= 0;
+                      const indispo = !fabrication && restant <= 0;
                       const prix = resolvePrixVenteHT(p, {
                         clientId,
                         quantite: 1,
@@ -667,10 +731,16 @@ export function DocumentSaisieWizard({
                                   {p.libelleLong}
                                 </p>
                               )}
-                            {indispo && (
-                              <p className="text-xs font-medium text-danger">
-                                Rupture de stock
+                            {fabrication ? (
+                              <p className="text-xs font-medium text-sea-800">
+                                Fabrication sur commande
                               </p>
+                            ) : (
+                              indispo && (
+                                <p className="text-xs font-medium text-danger">
+                                  Rupture de stock
+                                </p>
+                              )
                             )}
                           </td>
                           <td className="text-sm">
@@ -678,10 +748,10 @@ export function DocumentSaisieWizard({
                           </td>
                           <td
                             className={`font-semibold tabular-nums ${
-                              stock <= 0 ? "text-danger" : ""
+                              !fabrication && stock <= 0 ? "text-danger" : ""
                             }`}
                           >
-                            {formatNumber(stock)}
+                            {fabrication ? "—" : formatNumber(stock)}
                           </td>
                           <td>{p.unite}</td>
                           <td className="font-semibold">
@@ -866,6 +936,7 @@ export function DocumentSaisieWizard({
                         </tr>
                       );
                     }
+                    const fabricationLigne = ligneSansControleStockFini(l);
                     const stockLigne = l.produitId ? stockLibreAffiche(l.produitId) : 0;
                     const maxLigne = l.produitId
                       ? stockSaisie(l.produitId, lignes, l.key)
@@ -876,7 +947,9 @@ export function DocumentSaisieWizard({
                         <td>
                           <p className="font-medium">{l.designation}</p>
                           <p className="text-xs text-muted">
-                            Stock : {formatNumber(stockLigne)} {l.unite}
+                            {fabricationLigne
+                              ? "Fabrication sur commande"
+                              : `Stock : ${formatNumber(stockLigne)} ${l.unite}`}
                           </p>
                           <input
                             className="input mt-1 text-xs"
@@ -898,7 +971,7 @@ export function DocumentSaisieWizard({
                             type="number"
                             className="input w-20"
                             min={0}
-                            max={maxLigne}
+                            max={fabricationLigne ? undefined : maxLigne}
                             value={l.quantite}
                             onChange={(e) =>
                               updateLigne(l.key, {

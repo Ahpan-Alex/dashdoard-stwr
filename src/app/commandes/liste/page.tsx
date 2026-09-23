@@ -27,6 +27,10 @@ import {
 } from "@/components/document-filiation";
 import { BatCommandePanel } from "@/components/bat-commande";
 import {
+  PanneauApprovisionnementCommande,
+  ResumeLignesFabrication,
+} from "@/components/commande-lignes-approvisionnement";
+import {
   BAT_STATUTS,
   badgeBat,
   batCourant,
@@ -797,6 +801,7 @@ export default function ListeCommandesPage() {
                   <TdCol id="acomptes" show={visible}>{formatCurrency(t.acomptesTTC)}</TdCol>
                   <TdCol id="avancement" show={visible}>
                     <BadgesAvancementCommande commande={c} />
+                    <ResumeLignesFabrication commande={c} />
                   </TdCol>
                   <TdCol id="statut" show={visible}>
                     <select
@@ -1007,6 +1012,7 @@ export default function ListeCommandesPage() {
               })}
             />
             <DocumentFiliation documentId={preview.id} />
+            <PanneauApprovisionnementCommande commande={preview} />
             <OfLiesCommande commandeId={preview.id} />
             <BatCommandePanel commandeId={preview.id} />
           </div>

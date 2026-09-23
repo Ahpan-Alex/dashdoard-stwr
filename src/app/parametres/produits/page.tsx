@@ -42,6 +42,12 @@ import {
   TYPES_ACHAT_PRODUIT,
 } from "@/lib/comptabilite";
 import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeAchat, UsageCommercialProduit } from "@/lib/types";
+import {
+  MODE_APPROVISIONNEMENT_LABELS,
+  modeApprovisionnementDuProduit,
+  natureAdmetModeApprovisionnement,
+  type ModeApprovisionnement,
+} from "@/lib/mode-approvisionnement";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { NomenclatureEditor } from "@/components/nomenclature-editor";
 import { FournisseursProduitPanel } from "@/components/fournisseurs-produit-panel";
@@ -93,6 +99,7 @@ type ProduitFormState = {
   compteChargeId: string;
   compteVenteId: string;
   natureStock: NatureStock;
+  modeApprovisionnement: ModeApprovisionnement | "";
   achatSousTraitance: boolean;
   usageCommercial: UsageCommercialProduit;
   nomenclatures: NomenclatureProduit[];
@@ -132,6 +139,7 @@ function formDepuisProduit(
     compteChargeId: p.compteChargeId ?? "",
     compteVenteId: p.compteVenteId ?? "",
     natureStock: natureStockDuProduit(p),
+    modeApprovisionnement: modeApprovisionnementDuProduit(p) ?? "",
     achatSousTraitance: achatSousTraitanceDuProduit(p),
     usageCommercial: usageCommercialDuProduit(p, categories),
     nomenclatures: nomenclaturesDuProduit(p),
@@ -237,6 +245,7 @@ function ParametresProduitsContent() {
       compteChargeId: "",
       compteVenteId: "",
       natureStock: "matiere_premiere",
+      modeApprovisionnement: "",
       achatSousTraitance: false,
       usageCommercial: usageFamille,
       nomenclatures: [],
@@ -530,6 +539,9 @@ function ParametresProduitsContent() {
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
       natureStock: form.natureStock,
+      modeApprovisionnement: natureAdmetModeApprovisionnement(form.natureStock)
+        ? form.modeApprovisionnement || "sur_stock"
+        : undefined,
       achatSousTraitance: produitEstFabrique(form)
         ? form.achatSousTraitance
         : undefined,
@@ -1025,15 +1037,23 @@ function ParametresProduitsContent() {
               nomenclatures={form.nomenclatures}
               parentId={editingId ?? undefined}
               produits={produits}
-              onNatureChange={(n) =>
+              onNatureChange={(n) => {
+                const admet = natureAdmetModeApprovisionnement(n);
+                const admetAvant = natureAdmetModeApprovisionnement(
+                  form.natureStock,
+                );
+                let mode = form.modeApprovisionnement;
+                if (!admet) mode = "";
+                else if (!admetAvant || !mode) mode = "sur_stock";
                 setForm({
                   ...form,
                   natureStock: n,
+                  modeApprovisionnement: mode,
                   nomenclatures: produitEstFabrique({ natureStock: n })
                     ? form.nomenclatures
                     : [],
-                })
-              }
+                });
+              }}
               onNomenclaturesChange={(nomenclatures) =>
                 setForm({ ...form, nomenclatures })
               }
@@ -1094,6 +1114,42 @@ function ParametresProduitsContent() {
                 </>
               }
             />
+            {natureAdmetModeApprovisionnement(form.natureStock) ? (
+              <label className="block text-xs font-semibold text-muted sm:col-span-2">
+                Mode d&apos;approvisionnement
+                <select
+                  className="select mt-1"
+                  value={form.modeApprovisionnement || "sur_stock"}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      modeApprovisionnement: e.target
+                        .value as ModeApprovisionnement,
+                    })
+                  }
+                >
+                  {(
+                    Object.entries(MODE_APPROVISIONNEMENT_LABELS) as [
+                      ModeApprovisionnement,
+                      string,
+                    ][]
+                  ).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] font-normal text-muted">
+                  Marchandise et produit fini sont proposés sur stock. Un fini
+                  sur mesure peut rester en fabrication sur commande.
+                </p>
+              </label>
+            ) : (
+              <p className="text-[11px] text-muted sm:col-span-2">
+                Les matières premières et les semi-finis ne se commandent pas
+                directement par un client.
+              </p>
+            )}
             {moduleCompta && (
               <>
                 {typeAchatEstAttendu(form) && (
@@ -1429,6 +1485,11 @@ function ParametresProduitsContent() {
                   <td className="font-mono text-xs">{p.unite}</td>
                   <td className="text-xs">
                     {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
+                    {p.modeApprovisionnement === "fabrication_commande" && (
+                      <span className="mt-0.5 block text-[11px] text-sea-800">
+                        Fabrication sur commande
+                      </span>
+                    )}
                   </td>
                   <td className="text-xs">
                     {USAGE_COMMERCIAL_LABELS[usageCommercialDuProduit(p, categoriesProduits)]}
@@ -1532,6 +1593,11 @@ function ParametresProduitsContent() {
                 </p>
                 <p className="text-xs text-muted">
                   {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]}
+                  {selected.modeApprovisionnement === "fabrication_commande"
+                    ? " · Fabrication sur commande"
+                    : modeApprovisionnementDuProduit(selected) === "sur_stock"
+                      ? " · Sur stock"
+                      : ""}
                   {produitEstFabrique(selected)
                     ? achatSousTraitanceDuProduit(selected)
                       ? " · Sous-traitance possible"

@@ -333,6 +333,12 @@ export type Produit = {
    */
   natureStock?: NatureStock;
   /**
+   * Sur stock (négoce) ou fabrication sur commande.
+   * Pertinent seulement pour marchandise standard et produit fini.
+   * Absent = sur stock.
+   */
+  modeApprovisionnement?: "sur_stock" | "fabrication_commande";
+  /**
    * Semi-fini / fini aussi acheté en sous-traitance (entrée directe fournisseur).
    * Ignoré pour matière première et marchandise standard.
    */
@@ -1163,6 +1169,11 @@ export type LigneDocument = {
   siteStockId?: string;
   /** Casier / allée de picking (référentiel emplacements). */
   emplacementId?: string;
+  /**
+   * Figé à la saisie de la commande (ou du devis).
+   * Absent : relu sur la fiche produit.
+   */
+  modeApprovisionnement?: "sur_stock" | "fabrication_commande";
 };
 
 export type DevisStatut =
@@ -1869,6 +1880,8 @@ export type OrdreFabrication = {
   nomenclatureLignes: OfNomenclatureLigne[];
   /** Fabrication sur commande (MTO). Vide = réappro stock (MTS). */
   commandeId?: string;
+  /** Ligne de commande à l'origine de cet OF, quand il est créé depuis elle. */
+  ligneCommandeId?: string;
   /** Largeur (m) de l'unité fabriquée — reprise commande MTO ou saisie MTS. */
   dimensionLargeur?: number;
   /** Hauteur (m) de l'unité fabriquée. */
