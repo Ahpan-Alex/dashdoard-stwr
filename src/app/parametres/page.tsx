@@ -73,7 +73,17 @@ export default function ParametresHubPage() {
         }
       />
 
-      <section className="mb-8">
+      <section className="mb-8 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/parametres/manuel"
+          className="block rounded-[var(--radius)] border border-sea-200 bg-sea-50/70 p-5 transition-shadow hover:border-sea-400 hover:shadow-md"
+        >
+          <p className="font-display text-lg font-semibold text-ink">Manuel</p>
+          <p className="mt-1 text-sm text-muted">
+            Guide complet : mise en service, puis une affaire suivie du stock
+            jusqu&apos;à la relance. Téléchargement PDF.
+          </p>
+        </Link>
         <Link
           href="/parametres/recuperation"
           className="block rounded-[var(--radius)] border border-sea-200 bg-sea-50/70 p-5 transition-shadow hover:border-sea-400 hover:shadow-md"

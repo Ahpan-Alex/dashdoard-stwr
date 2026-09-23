@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Négoo — Manuel d'utilisation</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 18mm 16mm;
+    @top-left {
+      content: "Négoo";
+      font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+      font-weight: 700;
+      font-size: 11pt;
+      color: #0f4a5c;
+    }
+    @top-right {
+      content: "Manuel d'utilisation";
+      font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+      font-size: 9pt;
+      color: #5c6b73;
+    }
+    @bottom-left {
+      content: "Fil rouge — Hôtel Soma";
+      font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+      font-size: 8pt;
+      color: #5c6b73;
+    }
+    @bottom-right {
+      content: counter(page);
+      font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+      font-size: 9pt;
+      color: #0f4a5c;
+    }
+  }
+  @page :first {
+    margin: 0;
+    @top-left { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-right { content: none; }
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 11pt; }
+  body {
+    margin: 0;
+    font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+    color: #1c2428;
+    line-height: 1.45;
+  }
+  a { color: #0f4a5c; text-decoration: none; }
+  h1, h2, h3, h4 { font-family: "Palatino Linotype", Palatino, serif; color: #0c3344; line-height: 1.2; page-break-after: avoid; }
+  h1 { font-size: 22pt; margin: 0 0 0.3em; }
+  h2 { font-size: 16pt; margin: 1.4em 0 0.4em; border-bottom: 2px solid #0f4a5c; padding-bottom: 0.15em; }
+  h3 { font-size: 13pt; margin: 1.1em 0 0.35em; color: #0f4a5c; }
+  p { margin: 0.35em 0 0.55em; }
+  ul, ol { margin: 0.3em 0 0.6em; padding-left: 1.2em; }
+  li { margin: 0.15em 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5em 0 0.8em; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #c5d0d4; padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #e7f1f4; color: #0c3344; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .cover {
+    height: 297mm;
+    padding: 28mm 22mm;
+    background: #0c3344;
+    color: #f4f7f8;
+    page-break-after: always;
+  }
+  .cover .marque { font-size: 13pt; letter-spacing: 0.18em; text-transform: uppercase; color: #8fd4de; }
+  .cover h1 { color: white; font-size: 36pt; margin-top: 18mm; }
+  .cover .sous { font-size: 14pt; color: #d5e6ea; max-width: 140mm; }
+  .cover .bas { margin-top: 28mm; font-size: 11pt; color: #d5e6ea; }
+  .cover .bas strong { color: white; }
+  .bloc { margin: 0.6em 0 0.9em; padding: 0.55em 0.75em; border-left: 3px solid #0f4a5c; background: #f4f8f9; page-break-inside: avoid; }
+  .bloc.cas { border-left-color: #b86e2a; background: #fbf6ef; }
+  .bloc.fini { border-left-color: #1f7a4d; background: #f3f8f5; }
+  .bloc.erreur { border-left-color: #9b3a3a; background: #fbf4f4; }
+  .bloc strong.etq { display: block; font-size: 9pt; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.2em; }
+  .sommaire { page-break-after: always; }
+  .sommaire ol { list-style: none; padding-left: 0; }
+  .sommaire li { margin: 0.08em 0; font-size: 10.5pt; line-height: 1.3; }
+  .sommaire .part { margin-top: 0.45em; font-weight: 700; font-size: 11pt; }
+  .sommaire a { border-bottom: 1px dotted #9bb0b6; }
+  .memo td.num { font-variant-numeric: tabular-nums; }
+  h2.partie { page-break-before: always; }
+  .check li { list-style: none; margin-left: -1em; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <p class="marque">Négoo</p>
+  <h1>Manuel d'utilisation</h1>
+  <p class="sous">Mettre l'atelier en service, puis suivre une affaire de supports publicitaires du stock jusqu'à la relance.</p>
+  <div class="bas">
+    <p>Exemple suivi de bout en bout<br><strong>Atelier Voalohany</strong> — Antananarivo<br>Client <strong>Hôtel Soma</strong> — 3 bâches et 1 enseigne<br>Fournisseur <strong>Import Plast</strong> — bâche frontlit</p>
+    <p>À l'usage du comptable et de l'exploitant.<br>Septembre 2026</p>
+  </div>
+</section>
+
+<section class="sommaire" id="sommaire">
+  <h1>Sommaire</h1>
+  <ol>
+    <li class="part">Partie 0 — Avant de commencer</li>
+    <li><a href="#p0-connexion">Connexion, mot de passe, session inactive</a></li>
+    <li><a href="#p0-menu">Se repérer dans la colonne de gauche</a></li>
+    <li><a href="#p0-regle">Règle d'or : rien facturer ni fabriquer trop tôt</a></li>
+    <li><a href="#p0-fil">Le fil rouge Hôtel Soma</a></li>
+
+    <li class="part">Partie 1 — Mise en service</li>
+    <li><a href="#p1-societe">1. Société</a></li>
+    <li><a href="#p1-sites">2. Sites</a></li>
+    <li><a href="#p1-compta">3. Compta</a></li>
+    <li><a href="#p1-treso">4. Trésorerie</a></li>
+    <li><a href="#p1-docs">5. Documents</a></li>
+    <li><a href="#p1-catalogue">6. Catalogue</a></li>
+    <li><a href="#p1-tiers">7. Tiers</a></li>
+    <li><a href="#p1-achats">8. Achats (réglages)</a></li>
+    <li><a href="#p1-stock">9. Stock</a></li>
+    <li><a href="#p1-fab">10. Fabrication</a></li>
+    <li><a href="#p1-pilotage">11. Pilotage</a></li>
+    <li><a href="#p1-users">12. Utilisateurs</a></li>
+    <li><a href="#p1-checklist">Checklist « prêt »</a></li>
+
+    <li class="part">Partie 2 — Le quotidien, une seule affaire</li>
+    <li><a href="#p2-memo">Mémo des chiffres (à garder sous les yeux)</a></li>
+    <li><a href="#p2-dp">A1. Demande de prix à Import Plast</a></li>
+    <li><a href="#p2-achat">A2. Comparaison, puis commande d'achat</a></li>
+    <li><a href="#p2-reception">A3. Réception : 48 m² au lieu de 50</a></li>
+    <li><a href="#p2-paiement-achat">A4. Paiement : 30 % à la commande, solde à la réception</a></li>
+    <li><a href="#p2-mission">A5. Cas court — mission d'achat avec avance de caisse</a></li>
+    <li><a href="#p2-devis">B1. Devis Hôtel Soma</a></li>
+    <li><a href="#p2-commande">B2. Acceptation et commande client</a></li>
+    <li><a href="#p2-of">B3. Ordre de fabrication « projet client »</a></li>
+    <li><a href="#p2-cloture">B4. Sorties de matières, production, clôture</a></li>
+    <li><a href="#p2-bp">B5. Bon de préparation, puis bon de livraison</a></li>
+    <li><a href="#p2-facture">B6. Acompte, proforma et facture fiscale du solde</a></li>
+    <li><a href="#p2-encaisse">B7. Envoi de la facture et encaissement</a></li>
+    <li><a href="#p2-relance">B8. Impayé et relances</a></li>
+    <li><a href="#p2-situation">B9. Situation de compte Hôtel Soma</a></li>
+    <li><a href="#p2-stocks">C. Stocks : transfert, inventaire, fiche article</a></li>
+    <li><a href="#p2-treso">D. Trésorerie après l'affaire</a></li>
+    <li><a href="#p2-compta">E. Où retrouver les écritures</a></li>
+    <li><a href="#p2-alertes">F. Pilotage et alertes</a></li>
+    <li><a href="#p2-soir">G. Fin de journée</a></li>
+
+    <li class="part">Partie 3 — Annexes</li>
+    <li><a href="#p3-glossaire">Glossaire</a></li>
+    <li><a href="#p3-table">Je veux faire… je vais où</a></li>
+    <li><a href="#p3-erreurs">Huit erreurs fréquentes</a></li>
+    <li><a href="#p3-recup">Récupération des données</a></li>
+  </ol>
+</section>
+
+<h2 class="partie" id="p0">Partie 0 — Avant de commencer</h2>
+<p>Cette partie se lit une fois, avant toute saisie. Les personnages et les montants de l'exemple ne changent plus ensuite : vous retrouverez les mêmes noms dans chaque chapitre.</p>
+
+<h3 id="p0-connexion">Connexion, mot de passe, session inactive</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Négoo ne s'ouvre qu'avec un compte. Sans cela, personne ne sait qui a créé le devis ou encaissé la caisse.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Écran de connexion Négoo (logo au centre). Deux champs : <strong>Identifiant</strong> et <strong>Mot de passe</strong>. Bouton <strong>Se connecter</strong>. Le lien <strong>Mot de passe oublié ?</strong> se trouve sous le bouton : il prévient l'administrateur de l'entreprise, il ne change pas le mot de passe tout seul.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>L'identifiant est l'adresse e-mail du compte. Le mot de passe est celui remis à la création de l'utilisateur. Exemple du gérant : identifiant <strong>hery@voalohany.mg</strong>.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Lundi 1<sup>er</sup> septembre 2026, 8 h 10, Hery Rakoto ouvre Négoo pour la première fois avec le compte administrateur. Il saisit hery@voalohany.mg et le mot de passe reçu à l'installation, puis <strong>Se connecter</strong>. L'après-midi, il laisse l'écran ouvert pendant un rendez-vous d'une heure. Au retour, Négoo affiche la phrase exacte : <strong>« Session expirée pour inactivité. Reconnectez-vous. »</strong> Il ressaisit identifiant et mot de passe. Rien de ce qu'il avait déjà enregistré n'est perdu : seule la session s'est fermée, au bout d'une heure sans activité.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Après connexion, la colonne de gauche apparaît, avec le nom de l'entreprise en haut dès qu'il aura été saisi (chapitre Société). En cas d'inactivité, le bandeau sable « Session expirée pour inactivité » revient sur l'écran de connexion.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous voyez le menu, et vous savez que quitter le poste plus d'une heure impose de se reconnecter.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Saisir le nom « Hery Rakoto » dans Identifiant. Négoo attend l'e-mail du compte. Corrigez en mettant hery@voalohany.mg.</p>
+</div>
+
+<h3 id="p0-menu">Se repérer dans la colonne de gauche</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Tout le travail part de cette colonne. Les titres que vous y lisez sont ceux de ce manuel. Un clic sur un titre ouvre parfois des lignes en dessous.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Sept blocs, de haut en bas :</p>
+  <ul>
+    <li><strong>Pilotage</strong> — Dashboard, Alertes.</li>
+    <li><strong>Exploitation</strong> — Achats, Stocks, Transferts de stock, Fabrication, Missions d'achat, Inventaires.</li>
+    <li><strong>Commercial</strong> — Vue commerciale, Historique documents, Tiers, Devis, Commandes, Bons de préparation (s'il est activé), Bons de livraison, Acomptes, Factures, Relances impayés.</li>
+    <li><strong>Trésorerie</strong> — Soldes, Appro / retrait, Échéancier, Chèques à échéance proche, Suivi, Rapprochement.</li>
+    <li><strong>Comptabilité</strong> — Plan comptable, Journaux, Transfert, Produits sans compte.</li>
+    <li><strong>Patrimoine</strong> — Sites, puis Paramètres.</li>
+    <li><strong>Administration</strong> — Utilisateurs &amp; sécurité.</li>
+  </ul>
+  <p>En haut à droite de l'écran, le sélecteur de site limite les listes au lieu où vous travaillez (Entrepôt, Atelier ou Boutique). En bas de la colonne : le nom de la personne connectée et <strong>Déconnexion</strong>.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Naina Rasoanaivo, vendeuse, cherche le devis de l'Hôtel Soma. Elle n'ouvre pas Paramètres. Elle ouvre <strong>Commercial → Devis → Liste des devis</strong>. Le titre de l'écran est « Liste des devis ».</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Le titre en haut de la page correspond au lien que vous venez d'ouvrir. Si un menu est absent, c'est en général que le module n'est pas encore activé (bon de préparation) ou que votre rôle ne le voit pas (la caisse ne gère pas les utilisateurs).</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous savez distinguer Paramètres (mise en service) et Commercial (la vente du jour).</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Il existe deux liens « Sites ». Celui placé juste au-dessus de Paramètres montre les sites déjà créés. Pour les créer, ouvrez <strong>Paramètres</strong>, puis le lien <strong>Sites</strong> qui se trouve dessous. L'écran s'intitule aussi « Sites », mais c'est là que l'on coche entrepôt, atelier ou boutique.</p>
+</div>
+
+<h3 id="p0-regle">Règle d'or</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Une facture ou un ordre de fabrication posé avant la société, les sites, la caisse et le stock de départ produit des montants faux, ou bloque l'écran.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi retenir</strong>
+  <p>Tant que la checklist de la fin de la Partie 1 n'est pas cochée, vous n'ouvrez ni <strong>Nouvelle facture</strong>, ni <strong>Ordres de fabrication</strong>. Vous pouvez préparer les fiches. Vous ne lancez pas l'affaire Hôtel Soma.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Toute l'équipe a lu cette règle avant le premier devis.</p>
+</div>
+
+<h3 id="p0-fil">Le fil rouge, en une demi-page</h3>
+<p><strong>Atelier Voalohany</strong> est une SARL d'impression et d'enseignes à Ankorondrano, Antananarivo. Trois lieux : l'entrepôt (la matière), l'atelier du 67 ha (la fabrication), la boutique showroom (la vente et la caisse).</p>
+<p>Le client <strong>Hôtel Soma</strong> (Ivandry) commande <strong>3 bâches imprimées de 3 × 2 m</strong> et <strong>1 enseigne dibond de 2 × 0,80 m</strong>. Devis : <strong>750 000 Ar HT</strong>, TVA 20 % soit <strong>150 000 Ar</strong>, total <strong>900 000 Ar TTC</strong>. Il verse 40 % à la commande (<strong>360 000 Ar</strong>) et doit le solde <strong>540 000 Ar</strong> sous 15 jours. Ce solde restera impayé : c'est lui que vous relancerez.</p>
+<p>La matière vient d'<strong>Import Plast</strong> (Tanjombato) : de la bâche frontlit 440 g. Vous en avez déjà <strong>80 m² à 12 000 Ar</strong> en stock. Vous en recommandez 50 m² à <strong>15 000 Ar HT</strong> le mètre carré. Le livreur n'en apporte que <strong>48 m²</strong>. Le coût moyen du mètre carré devient <strong>13 125 Ar</strong>. L'atelier en consomme 18 m² pour les trois bâches.</p>
+<p>Personnes que vous croiserez : Hery Rakoto (gérant), Naina Rasoanaivo (vendeuse, 034 22 110 08), Tiana Andria (caisse), Jean-Luc Rajaonarison (directeur de l'hôtel, 034 44 200 15), Lalao Rabe (Import Plast, 034 55 678 90).</p>
+
+<h2 class="partie" id="p1">Partie 1 — Mise en service</h2>
+<p>Faites les chapitres dans l'ordre. Chaque écran se termine par « Enregistrer » ou l'équivalent indiqué. Ne passez pas au suivant si le résultat attendu n'est pas à l'écran.</p>
+
+<h3 id="p1-societe">1. Société</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le nom, le NIF et le STAT s'impriment sur chaque devis et chaque facture. Sans eux, le document n'est pas présentable à un client malagasy.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Colonne de gauche → <strong>Paramètres</strong> → écran <strong>Paramètres</strong> → carte <strong>Société</strong> → <strong>Entreprise / fiscalité</strong>. L'écran s'intitule <strong>Infos Entreprise / Fiscalité</strong>. Ensuite, dans le même bloc Société : <strong>Identité du menu</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Raison sociale, forme juridique, capital, NIF, STAT, RCS, adresse, ville, téléphone, e-mail. Régime fiscal : <strong>Assujetti TVA</strong>. Taux TVA : <strong>20</strong>. Cochez <strong>Assujetti à la TVA</strong>. Ajoutez le logo (fichier image) et, si vous l'avez, la signature du gérant avec la qualité « Le Gérant ». Sur Identité du menu : le nom court affiché en haut de la colonne, et le même logo si vous le souhaitez.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — Atelier Voalohany</strong>
+  <ul>
+    <li>Raison sociale : Atelier Voalohany</li>
+    <li>Forme juridique : SARL</li>
+    <li>Capital : 10 000 000</li>
+    <li>NIF : 4000123456 (fictif, pour l'exercice)</li>
+    <li>STAT : 12345 11 2006 0 10001</li>
+    <li>RCS : RCS Antananarivo 2026 B 00123</li>
+    <li>Adresse : Lot II M 45 Ankorondrano</li>
+    <li>Ville : Antananarivo 101</li>
+    <li>Téléphone : 034 12 345 67</li>
+    <li>E-mail : contact@voalohany.mg</li>
+    <li>Régime : Assujetti TVA, taux 20, case cochée</li>
+  </ul>
+  <p>Identité du menu : nom affiché « Voalohany ».</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>La fiche récapitulative montre NIF, STAT et « 20 % · assujetti ». En haut de la colonne de gauche, vous lisez Voalohany.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>NIF et STAT sont visibles sur la fiche, et le menu porte le nom Voalohany.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Laisser le régime sur « Franchise de TVA ». Les devis de l'Hôtel Soma sortiront sans les 150 000 Ar de TVA. Revenez sur Infos Entreprise / Fiscalité, choisissez Assujetti TVA, taux 20, et enregistrez.</p>
+</div>
+
+<h3 id="p1-sites">2. Sites</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>La bâche de l'entrepôt n'est pas la bâche déjà descendue à l'atelier. Chaque lieu a son stock. La boutique, elle, encaisse.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Sites</strong>. Écran <strong>Sites</strong>. Bouton pour une nouvelle fiche. Cochez au moins un rôle : entrepôt, point de vente, ou atelier. Un atelier et un « atelier final » ne se cochent pas ensemble.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Nom, adresse, téléphone. Rôle. Pour l'atelier : capacité (nombre d'ordres en même temps, et heures par jour). Le point de vente exigera ensuite un compte de caisse ou de banque : vous le relierez au chapitre Trésorerie. L'atelier peut rester sans caisse.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — trois lieux</strong>
+  <table>
+    <tr><th>Nom</th><th>Rôle</th><th>Adresse</th><th>Détail</th></tr>
+    <tr><td>Entrepôt Ankorondrano</td><td>Entrepôt</td><td>Lot II M 45 Ankorondrano</td><td>034 12 345 67</td></tr>
+    <tr><td>Atelier 67ha</td><td>Atelier de fabrication</td><td>Zone 67 ha, Antananarivo</td><td>8 heures par jour. Capacité : 4 ordres en même temps. Le taux horaire se pose au chapitre Fabrication.</td></tr>
+    <tr><td>Boutique Showroom</td><td>Point de vente</td><td>Avenue de l'Indépendance, showroom</td><td>034 22 110 08 — c'est ici que Naina reçoit l'Hôtel Soma</td></tr>
+  </table>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Trois lignes actives. Le sélecteur de site en haut de l'écran propose les trois noms.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les trois sites sont actifs, avec le bon rôle chacun.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Un seul site « Voalohany » pour tout. Le transfert entrepôt → atelier devient impossible. Créez les trois fiches, ne fusionnez pas l'atelier et l'entrepôt.</p>
+</div>
+
+<h3 id="p1-compta">3. Compta</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le client a un compte 411, le fournisseur un 401, la banque un 512, la caisse un 53, la TVA et les ventes leurs comptes. Sans longueur de numéro fixée, le plan ne se construit pas proprement.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Dans l'ordre :</p>
+  <ol>
+    <li><strong>Paramètres → Compta</strong> (écran <strong>Compta</strong>) : longueur des numéros.</li>
+    <li>Lien <strong>Exercices</strong> : écran <strong>Exercices comptables</strong>.</li>
+    <li><strong>Comptabilité → Plan comptable</strong>.</li>
+    <li>Les journaux de caisse et de banque se créent tout seuls quand vous ajoutez les comptes de trésorerie (chapitre suivant). Vous les vérifierez dans <strong>Paramètres → Journaux de trésorerie</strong>.</li>
+  </ol>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Longueur : 6 chiffres. Elle ne pourra qu'augmenter plus tard, pas diminuer. Exercice 2026 : du 1<sup>er</sup> janvier 2026 au 31 décembre 2026, année civile. Dans le plan, créez au minimum les comptes ci-dessous s'ils n'existent pas déjà.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — plan minimum de Voalohany</strong>
+  <table>
+    <tr><th>Numéro</th><th>Intitulé</th><th>À quoi il sert ici</th></tr>
+    <tr><td>411000</td><td>Clients</td><td>Compte collectif</td></tr>
+    <tr><td>411100</td><td>Hôtel Soma</td><td>Un seul client par compte</td></tr>
+    <tr><td>401000</td><td>Fournisseurs</td><td>Compte collectif</td></tr>
+    <tr><td>401100</td><td>Import Plast</td><td>Le fournisseur de bâche</td></tr>
+    <tr><td>512000</td><td>Banque BNI</td><td>Virements et chèques</td></tr>
+    <tr><td>530000</td><td>Caisse principale</td><td>Espèces du showroom</td></tr>
+    <tr><td>531000</td><td>MVola</td><td>Mobile money</td></tr>
+    <tr><td>445710</td><td>TVA collectée</td><td>Les 20 % des factures clients</td></tr>
+    <tr><td>445660</td><td>TVA déductible</td><td>La TVA d'Import Plast</td></tr>
+    <tr><td>701000</td><td>Ventes de produits finis</td><td>Bâches et enseignes</td></tr>
+    <tr><td>311000</td><td>Stocks de matières</td><td>Bâche, dibond, encre, profilé</td></tr>
+    <tr><td>601000</td><td>Achats de matières</td><td>Facture Import Plast</td></tr>
+  </table>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Plan comptable : ces lignes sont présentes. Exercices comptables : 2026 est l'exercice ouvert.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>La longueur est enregistrée à 6, l'exercice 2026 est ouvert, et 411100 ainsi que 401100 existent.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Mettre Hôtel Soma et un autre hôtel sur le même 411100. Négoo refuse : un compte 411 ou 401 n'est lié qu'à un seul tiers. Créez 411101 pour le second client.</p>
+</div>
+
+<h3 id="p1-treso">4. Trésorerie</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Encaisser l'acompte de l'hôtel et payer Import Plast suppose une caisse, une banque, et des modes de paiement (espèces, virement, chèque, mobile money).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Trésorerie</strong>. Écran <strong>Trésorerie</strong>. Rubrique <strong>Comptes de trésorerie</strong>, puis rubrique <strong>Modes de paiement</strong>. Laissez la fenêtre des chèques proches à <strong>15 jours</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Pour chaque compte : nom, type (caisse, banque ou mobile monnaie), compte du plan (classe 5), solde d'ouverture, sens (débiteur si l'argent est chez vous), date d'ouverture. Reliez la caisse et la banque à la Boutique Showroom. L'entrepôt et l'atelier n'encaissent pas.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — ouvertures au 1<sup>er</sup> septembre 2026</strong>
+  <table>
+    <tr><th>Compte</th><th>Type</th><th>Plan</th><th>Ouverture</th></tr>
+    <tr><td>Caisse principale</td><td>Caisse</td><td>530000</td><td class="num">2 000 000 Ar</td></tr>
+    <tr><td>Banque BNI</td><td>Banque</td><td>512000</td><td class="num">8 000 000 Ar</td></tr>
+    <tr><td>MVola Voalohany</td><td>Mobile monnaie</td><td>531000</td><td class="num">500 000 Ar</td></tr>
+  </table>
+  <p>Sens : débiteur. Modes à avoir : espèces (caisse), virement (banque), chèque à paiement différé (banque), transfert mobile (MVola). Le chèque différé demandera une date d'échéance : ce sera le cas d'Import Plast.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Trois comptes. Plus tard, <strong>Trésorerie → Soldes</strong> (écran <strong>Trésorerie</strong>) affichera 2 000 000, 8 000 000 et 500 000. <strong>Journaux de trésorerie</strong> liste un journal par compte.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les trois soldes d'ouverture sont visibles, et la Boutique Showroom a au moins la caisse et la BNI.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Oublier le solde d'ouverture. La caisse part de zéro et l'acompte espèces de 60 000 Ar semble sortir de nulle part. Rouvrez le compte et posez 2 000 000 Ar au 1<sup>er</sup> septembre, sens débiteur, avant tout encaissement.</p>
+</div>
+
+<h3 id="p1-docs">5. Documents</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le client doit reconnaître vos papiers : numéros, pied de page, couleurs. L'envoi par e-mail ou WhatsApp est utile, mais vous pouvez travailler sans lui.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Documents</strong> (écran <strong>Documents</strong>) pour la numérotation et le bon de préparation. Puis <strong>Modèles</strong> (écran <strong>Modèles de documents</strong>), <strong>Affichage</strong> (écran <strong>Types d'affichage</strong>), <strong>Envoi</strong> (écran <strong>Envoi des documents</strong>).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Sur Documents, une ligne par pièce : préfixe, année sur 4 caractères, longueur du numéro. Cochez <strong>Activer le bon de préparation</strong> : c'est l'étape de rassemblement entre la commande et le bon de livraison. Le lien direct commande → bon de livraison reste possible.</p>
+  <p>Sur Modèles de documents, ouvrez l'onglet Facture, le modèle par défaut, et le pied de page. Sur Envoi des documents, les pastilles E-mail et WhatsApp peuvent rester sur <strong>Non configuré</strong>.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <table>
+    <tr><th>Pièce</th><th>Préfixe</th><th>Premier numéro utile</th></tr>
+    <tr><td>Devis</td><td>DEV</td><td>DEV-2026-0001</td></tr>
+    <tr><td>Commande client</td><td>CMD</td><td>CMD-2026-0001</td></tr>
+    <tr><td>Bon de préparation</td><td>BP</td><td>BP-2026-0001</td></tr>
+    <tr><td>Bon de livraison</td><td>BL</td><td>BL-2026-0001</td></tr>
+    <tr><td>Facture client</td><td>FAC</td><td>FAC-2026-0001</td></tr>
+  </table>
+  <p>Pied de page du modèle facture : « Arrêtée la présente facture à la somme de… ». Le modèle <strong>Modèle bon de préparation (législation MG)</strong> est déjà là, marqué Par défaut, couleur Cuivre : vous n'avez pas à le recréer.</p>
+  <p>SMTP : Hery n'a pas encore le mot de passe de la boîte contact@voalohany.mg. Il laisse E-mail sur Non configuré. Naina pourra imprimer et télécharger les PDF. Elle ne pourra pas cliquer sur Envoyer tant que la pastille n'est pas Prêt.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>La case du bon de préparation est cochée : le menu <strong>Bons de préparation</strong> apparaît sous Commercial. Envoi des documents : deux pastilles « Non configuré ».</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les préfixes sont enregistrés, le bon de préparation est activé, le pied de page facture est saisi. L'envoi peut attendre.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Bloquer toute la mise en service parce que l'e-mail n'est pas branché. Ce n'est pas nécessaire. Continuez. Vous brancherez le serveur plus tard sur Envoi des documents, rubrique E-mail (SMTP).</p>
+</div>
+
+<h3 id="p1-catalogue">6. Catalogue</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>On ne vend pas « une bâche » en texte libre si l'on veut le stock, le coût et la fabrication. Chaque article a une nature : matière, composant consommé, ou produit fini fabriqué.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Catalogue → Fiches articles</strong>. Écran <strong>Catalogue de produits et articles</strong>. Pour les unités : dans la fiche, sous le champ unité, lien <strong>Gérer les unités (ajouter / supprimer)</strong>. Écran <strong>Unités de mesure</strong>. Revenez ensuite aux fiches.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>D'abord les unités m² et pièce (et litre, mètre linéaire). Puis chaque fiche : nom, unité, nature, prix d'achat, prix de vente, compte de vente 701000 pour les finis, compte de stock 311000 et compte d'achat 601000 pour les matières. Pour un produit fini : la nomenclature (ce qu'il consomme) et le temps d'atelier.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — les articles de l'affaire</strong>
+  <p>Unités : m², pièce, L, m.</p>
+  <table>
+    <tr><th>Article</th><th>Nature</th><th>Unité</th><th>Achat</th><th>Vente HT</th></tr>
+    <tr><td>Bâche frontlit 440 g</td><td>Matière première</td><td>m²</td><td class="num">12 000</td><td>—</td></tr>
+    <tr><td>Dibond 3 mm</td><td>Matière première</td><td>m²</td><td class="num">25 000</td><td>—</td></tr>
+    <tr><td>Encre solvant</td><td>Matière première</td><td>L</td><td class="num">40 000</td><td>—</td></tr>
+    <tr><td>Profilé alu 40 mm</td><td>Matière première</td><td>m</td><td class="num">8 000</td><td>—</td></tr>
+    <tr><td>Bâche imprimée 3×2 m</td><td>Produit fini</td><td>pièce</td><td>—</td><td class="num">150 000</td></tr>
+    <tr><td>Enseigne dibond 2×0,80 m</td><td>Produit fini</td><td>pièce</td><td>—</td><td class="num">300 000</td></tr>
+  </table>
+  <p>Nomenclature de <strong>Bâche imprimée 3×2 m</strong> (une pièce) : 6 m² de bâche frontlit, 0,3 L d'encre, 1,5 heure d'atelier.</p>
+  <p>Nomenclature de <strong>Enseigne dibond 2×0,80 m</strong> : 2 m² de dibond (la chute est incluse), 0,2 L d'encre, 3 m de profilé, 2 heures d'atelier.</p>
+  <p>Seuil d'alerte de la bâche frontlit : <strong>120 m²</strong>. Vous verrez l'alerte après fabrication, quand il en restera 108.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Six fiches. Les deux produits finis affichent leur nomenclature. La bâche frontlit est « Matière première ».</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les six articles existent, les deux finis ont une nomenclature, l'unité m² existe.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Classer la bâche frontlit en « Produit fini » et la vendre telle quelle. L'ordre de fabrication n'aura rien à consommer. La matière reste « Matière première ». Ce que vous vendez à l'hôtel, c'est « Bâche imprimée 3×2 m ».</p>
+</div>
+
+<h3 id="p1-tiers">7. Tiers</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le devis, la facture et la relance partent d'une fiche : compte, délai, e-mail, WhatsApp, plafond. Un nom tapé au dernier moment ne suffit pas.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Clients</strong>, écran <strong>Clients</strong>, bouton <strong>Nouveau client</strong>. Le lien <strong>Gérer les types de clients</strong> ouvre l'écran <strong>Types de clients</strong>. Fournisseur : <strong>Paramètres → Fournisseurs</strong>, écran <strong>Fournisseurs</strong>, fiche fournisseur.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Type, raison sociale, contact, téléphone (format 034…), e-mail, adresse, NIF s'il est connu, délai de paiement, plafond de crédit, compte 411 ou 401.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Type de client : <strong>Hôtellerie</strong>.</p>
+  <p><strong>Hôtel Soma</strong> — client. Contact : Jean-Luc Rajaonarison, directeur. Téléphone et WhatsApp : 034 44 200 15. E-mail : jl.rajaonarison@hotelsoma.mg. Adresse : Lot près d'Ivandry, Antananarivo. NIF client : 5000987654. Conditions : 30 jours. Plafond de crédit : 2 000 000 Ar. Compte : 411100.</p>
+  <p><strong>Import Plast</strong> — fournisseur. Contact : Lalao Rabe. Téléphone : 034 55 678 90. E-mail : lalao@importplast.mg. Adresse : Zone Forello, Tanjombato. Conditions : 30 jours. Compte : 401100.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Les deux fiches sont dans <strong>Commercial → Tiers</strong> (écran <strong>Tiers</strong>). Hôtel Soma a un solde client à zéro. Import Plast a un solde fournisseur à zéro.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les deux fiches ont un compte, un téléphone et un e-mail.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Créer l'hôtel sans e-mail. La relance par e-mail dira « Pas d'e-mail sur la fiche client ». Complétez jl.rajaonarison@hotelsoma.mg avant le devis.</p>
+</div>
+
+<h3 id="p1-achats">8. Achats (réglages)</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>La demande de prix et la mission d'achat ont une durée de validité et des natures de dépense (carburant, parking). On les fixe une fois.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Écran <strong>Paramètres</strong>, carte <strong>Achats</strong>. Titre de l'écran : <strong>Achats</strong>. Rubrique <strong>Demandes de prix et commandes fournisseurs</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Validité par défaut : <strong>15</strong> jours, puis <strong>Enregistrer</strong>. Type d'achat de la bâche : <strong>Achat de matières premières (transformation)</strong>, compte de charge 601000. Nature de dépense de mission : <strong>Carburant</strong>, pour l'avance de Tiana.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Hery pose 15 jours. La demande de prix du 2 septembre à Import Plast sera donc valable jusqu'au 17 septembre. Il ajoute la nature « Carburant » : Tiana s'en servira pour les 80 000 Ar d'essence du trajet Tanjombato.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Le message confirme « Validité par défaut enregistrée : 15 jours ». La nature Carburant apparaît dans la liste.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>15 jours sont enregistrés et Carburant existe.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Choisir « Achat de marchandises (revente en l'état) » pour la bâche. Elle est transformée en bâche imprimée : le type est « matières premières (transformation) ».</p>
+</div>
+
+<h3 id="p1-stock">9. Stock</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le stock de départ est la photo du matin, avant le premier achat. Sans elle, le coût moyen et l'alerte sont faux. L'emplacement dit à l'opérateur où prendre le rouleau.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Écran <strong>Paramètres</strong>, carte <strong>Stock</strong>, puis <strong>Emplacements d'entrepôt</strong> (écran du même nom) et <strong>Stock initial</strong> (écran <strong>Stock initial</strong>).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Un casier par site utile. Puis, sur Stock initial, une ligne par article et par site : quantité, coût unitaire, date. Le stock initial se saisit avant les achats et les fabrications.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — au 1<sup>er</sup> septembre, Entrepôt Ankorondrano, allée A</strong>
+  <table>
+    <tr><th>Article</th><th>Casier</th><th>Quantité</th><th>Coût</th><th>Valeur</th></tr>
+    <tr><td>Bâche frontlit 440 g</td><td>A1</td><td class="num">80 m²</td><td class="num">12 000</td><td class="num">960 000</td></tr>
+    <tr><td>Dibond 3 mm</td><td>A2</td><td class="num">10 m²</td><td class="num">25 000</td><td class="num">250 000</td></tr>
+    <tr><td>Encre solvant</td><td>A3</td><td class="num">5 L</td><td class="num">40 000</td><td class="num">200 000</td></tr>
+    <tr><td>Profilé alu 40 mm</td><td>A4</td><td class="num">20 m</td><td class="num">8 000</td><td class="num">160 000</td></tr>
+  </table>
+  <p>Atelier 67ha et Boutique Showroom : zéro. Les produits finis (bâche imprimée, enseigne) : zéro, ils n'existent pas encore.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p><strong>Exploitation → Stocks</strong> (écran <strong>Stocks</strong>), site Entrepôt Ankorondrano : 80 m² de bâche. La valeur suit le coût saisi.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>80 m² sont visibles sur l'entrepôt, casier A1, et les trois autres matières aussi.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Saisir les 80 m² sur la Boutique Showroom parce que c'est le site affiché en haut de l'écran. Changez le site de la ligne pour Entrepôt Ankorondrano avant d'enregistrer.</p>
+</div>
+
+<h3 id="p1-fab">10. Fabrication</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'heure d'atelier entre dans le coût de l'enseigne. Le bon à tirer empêche d'imprimer une façade que l'hôtel n'a pas validée.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Écran <strong>Paramètres</strong>, carte <strong>Fabrication</strong>. Titre : <strong>Fabrication</strong>. Rubrique <strong>Taux horaire MOD et capacité par atelier</strong>. Le rôle autorisé à valider un bon à tirer se règle dans le même bloc (administrateur et, si vous le cochez, le comptable).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Pour Atelier 67ha : taux horaire, nombre d'ordres simultanés, heures par jour.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Taux : <strong>15 000 Ar / heure</strong>. Capacité : <strong>4</strong> ordres en même temps, <strong>8 h / jour</strong>. Hery reste le seul à pouvoir valider le bon à tirer de l'enseigne. Les 3 bâches prendront 4,5 h (67 500 Ar de main-d'œuvre) et l'enseigne 2 h (30 000 Ar). Vous ne saisissez pas ces heures ici : elles sont dans la nomenclature. Ici, vous ne posez que le taux.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Atelier 67ha affiche 15 000 Ar / h, 4 ordres, 8 h.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le taux n'est plus vide. Un message du type « taux non renseigné » ne doit plus apparaître pour cet atelier.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Mettre 15 000 dans « heures par jour ». Le taux est en ariary de l'heure. Les heures par jour sont 8.</p>
+</div>
+
+<h3 id="p1-pilotage">11. Pilotage</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le tableau de bord compare le mois à un objectif. Les alertes préviennent quand la bâche passe sous 120 m², quand un ordre traîne, ou quand une facture est à relancer.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Pilotage</strong>. Écran <strong>Pilotage</strong>. Onglet <strong>Objectifs</strong>, puis onglet <strong>Alertes</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Un objectif de chiffre d'affaires et de marge pour la Boutique Showroom, septembre 2026. Seuils d'alerte : stock (le seuil est déjà sur la fiche bâche), production (retard d'ordre), ventes (relance).</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Objectif septembre, Boutique Showroom : <strong>3 000 000 Ar</strong> de chiffre d'affaires HT, marge visée <strong>40 %</strong>. L'affaire Soma (750 000 Ar HT) couvrira un quart de l'objectif. Alerte stock : la fiche bâche a déjà 120 m². Alerte vente : une facture due non relancée doit apparaître dans Relances impayés. Vous vérifierez ces alertes au chapitre F, après l'affaire.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>L'objectif de septembre est enregistré pour la boutique. <strong>Dashboard → Ventes &amp; Rentabilité</strong> pourra le comparer au réel, qui est encore à zéro.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>L'objectif 3 000 000 Ar est visible pour septembre, site Boutique Showroom.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Poser l'objectif sur Entrepôt Ankorondrano. L'entrepôt ne vend pas. Le chiffre d'affaires de l'hôtel sera porté par la boutique : c'est là qu'il faut l'objectif.</p>
+</div>
+
+<h3 id="p1-users">12. Utilisateurs</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le gérant voit tout. La vendeuse fait les devis. La caisse encaisse. Chacun se connecte avec son compte : le journal indique qui a validé.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Administration → Utilisateurs &amp; sécurité → Utilisateurs</strong>. Écran <strong>Utilisateurs</strong>. Les droits types se lisent dans <strong>Rôles &amp; permissions</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Nom, e-mail (ce sera l'identifiant), mot de passe initial, rôle.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <table>
+    <tr><th>Personne</th><th>E-mail</th><th>Rôle affiché</th><th>Elle peut</th></tr>
+    <tr><td>Hery Rakoto</td><td>hery@voalohany.mg</td><td>Administrateur entreprise</td><td>Tout, y compris valider le bon à tirer et activer les réglages</td></tr>
+    <tr><td>Naina Rasoanaivo</td><td>naina@voalohany.mg</td><td>Vendeur</td><td>Devis, commandes, clients. Pas la compta complète</td></tr>
+    <tr><td>Tiana Andria</td><td>tiana@voalohany.mg</td><td>Caissier</td><td>Encaisser, lire le commercial. Pas créer les utilisateurs</td></tr>
+  </table>
+  <p>Téléphones internes : Naina 034 22 110 08, Tiana 034 33 440 21.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Trois lignes. Naina, connectée, ne voit pas Utilisateurs. Tiana voit Acomptes et Factures. Hery voit Paramètres.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Chacun s'est connecté une fois avec son e-mail.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Donner « Administrateur entreprise » à toute l'équipe pour « aller plus vite ». Tiana pourrait alors effacer un réglage. Laissez-la en Caissier.</p>
+</div>
+
+<h3 id="p1-checklist">Checklist « prêt »</h3>
+<p>Cochez à la main. Tant qu'une ligne est vide, vous ne passez pas à la Partie 2.</p>
+<ul class="check">
+  <li>☐ Société Voalohany, NIF, STAT, TVA 20 %.</li>
+  <li>☐ Trois sites : Entrepôt Ankorondrano, Atelier 67ha, Boutique Showroom.</li>
+  <li>☐ Exercice 2026 ouvert, comptes 411100 et 401100 créés.</li>
+  <li>☐ Caisse 2 000 000 Ar, BNI 8 000 000 Ar, MVola 500 000 Ar.</li>
+  <li>☐ Au moins la bâche frontlit et la bâche imprimée 3×2 m (dans notre fil : six articles).</li>
+  <li>☐ Hôtel Soma et Import Plast, avec e-mail et téléphone.</li>
+  <li>☐ Stock initial : 80 m² de bâche à 12 000 Ar sur l'entrepôt.</li>
+</ul>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les sept lignes sont cochées. Alors seulement Naina a le droit d'ouvrir le devis de l'hôtel.</p>
+</div>
+
+<h2 class="partie" id="p2">Partie 2 — Le quotidien : l'affaire Hôtel Soma</h2>
+<p>On est le 2 septembre 2026. La Partie 1 est cochée. Vous suivez une seule affaire. Les chiffres du mémo ne se contredisent pas d'un chapitre à l'autre.</p>
+
+<h3 id="p2-memo">Mémo des chiffres</h3>
+<table class="memo">
+  <tr><th>Repère</th><th class="num">Montant</th></tr>
+  <tr><td>Stock départ bâche, entrepôt</td><td class="num">80 m² × 12 000 = 960 000 Ar</td></tr>
+  <tr><td>Commande Import Plast</td><td class="num">50 m² × 15 000 HT = 750 000 HT, TVA 150 000, TTC 900 000</td></tr>
+  <tr><td>Acompte achat 30 % (chèque, échéance 5 octobre)</td><td class="num">270 000 Ar</td></tr>
+  <tr><td>Réception réelle</td><td class="num">48 m² → 720 000 HT, TVA 144 000, TTC 864 000</td></tr>
+  <tr><td>Solde achat payé par virement BNI</td><td class="num">864 000 − 270 000 = 594 000 Ar</td></tr>
+  <tr><td>Coût moyen après réception</td><td class="num">(960 000 + 720 000) / 128 m² = 13 125 Ar / m²</td></tr>
+  <tr><td>Devis Hôtel Soma</td><td class="num">3 × 150 000 + 300 000 = 750 000 HT, TVA 150 000, TTC 900 000</td></tr>
+  <tr><td>Acompte client 40 %</td><td class="num">360 000 Ar (300 000 virement + 60 000 espèces)</td></tr>
+  <tr><td>Facture de solde, échue le 20 septembre, impayée</td><td class="num">540 000 Ar</td></tr>
+  <tr><td>BNI après virement solde et acompte client (le chèque n'est pas encore débité)</td><td class="num">8 000 000 − 594 000 + 300 000 = 7 706 000 Ar</td></tr>
+  <tr><td>Caisse après mission et espèces hôtel</td><td class="num">2 000 000 − 80 000 + 60 000 = 1 980 000 Ar</td></tr>
+</table>
+
+<h3 id="p2-dp">A1. Demande de prix à Import Plast</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Avant de commander 50 m², vous figez le prix de Lalao. La demande de prix n'entre rien en stock et ne génère aucune écriture.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Exploitation → Achats → Demandes de prix</strong>. Écran <strong>Demandes de prix</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Fournisseur Import Plast, article Bâche frontlit 440 g, quantité 50, unité m², date 2 septembre 2026. Validité : 15 jours (déjà proposée).</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Naina prépare la demande, Hery la valide. Lalao répond le jour même : <strong>15 000 Ar HT le m²</strong>, départ Tanjombato, délai 6 jours. Vous notez ce prix sur la demande. Rien n'a encore bougé à l'entrepôt : Stocks montre toujours 80 m².</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Une demande de prix au nom d'Import Plast, 50 m², pas un achat.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le prix 15 000 Ar HT est noté, et le stock est inchangé.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Croire que la demande de prix a commandé la bâche. Le menu Achats a deux entrées : Demandes de prix, et Commandes fournisseurs. Tant que vous êtes sur la première, Import Plast n'a rien à livrer.</p>
+</div>
+
+<h3 id="p2-achat">A2. Comparaison, puis commande d'achat</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le prix catalogue de la fiche est 12 000 Ar, le prix du jour est 15 000. Vous commandez au prix du jour, pas au prix de la fiche.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Achats → Commandes fournisseurs</strong>. Écran <strong>Achats</strong>. Nouvelle commande. Destination : <strong>Approvisionnement stock</strong> (ce n'est pas le chantier de l'hôtel : la bâche rejoint l'entrepôt). Type : matières premières.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Fournisseur Import Plast, site de réception Entrepôt Ankorondrano, 50 m², prix 15 000 Ar HT, TVA 20 %, date 3 septembre 2026.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Hery compare : 12 000 en stock contre 15 000 chez Import Plast. Il n'a pas d'autre offre cette semaine. Il commande quand même, parce que 80 m² ne couvrent pas l'hôtel (18 m²) et le seuil de 120 m². Total commande : <strong>750 000 Ar HT, 150 000 Ar de TVA, 900 000 Ar TTC</strong>. Le stock ne monte pas encore : une commande n'est pas une réception.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>La commande apparaît dans Achats, livraison non reçue, solde fournisseur à payer selon ce que vous aurez réglé au chapitre A4.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>La commande 50 m² à 15 000 Ar est enregistrée sur Entrepôt Ankorondrano, et Stocks affiche toujours 80 m².</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Destination « Projet client » sur cet achat, en choisissant Hôtel Soma. Ce rouleau n'est pas réservé à l'hôtel : il réapprovisionne l'entrepôt. Le projet client, ce sera l'ordre de fabrication, plus tard.</p>
+</div>
+
+<h3 id="p2-reception">A3. Réception : 48 m² au lieu de 50</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>On stocke ce qui est sur le quai, pas ce qui était sur le bon de commande. Deux mètres carrés manquants ne doivent pas gonfler le stock.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Écran <strong>Achats</strong>, ouvrez la commande Import Plast, onglet <strong>Livraisons</strong>. Saisissez la quantité reçue. Bouton <strong>Enregistrer la réception</strong>. Si le chiffre diffère de la commande, cochez <strong>Je valide malgré l'écart</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Date 8 septembre 2026. Quantité livrée : <strong>48</strong>. Ne laissez pas 50.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le chauffeur dépose un rouleau. Naina mesure : 48 m², pas 50. Elle saisit 48. Négoo signale l'écart et demande la case « Je valide malgré l'écart ». Elle la coche, puis Enregistrer la réception. Marchandise reçue : 48 × 15 000 = <strong>720 000 Ar HT</strong>, TVA <strong>144 000 Ar</strong>, TTC <strong>864 000 Ar</strong>. Stock entrepôt : 80 + 48 = <strong>128 m²</strong>. Coût moyen : (960 000 + 720 000) / 128 = <strong>13 125 Ar / m²</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Stocks, Entrepôt Ankorondrano, bâche frontlit : 128 m². L'achat n'est plus « rien reçu ». Un badge signale l'écart de quantité.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous lisez 128 m², pas 130.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Laisser la quantité proposée (50) pour « aller vite ». Le stock ment de 2 m² et le coût moyen est faux. Rouvrez la livraison si elle n'est pas figée, ou faites un inventaire d'écart au chapitre C. Mieux : saisissez 48 tout de suite.</p>
+</div>
+
+<h3 id="p2-paiement-achat">A4. Paiement : 30 % à la commande, solde à la réception</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Import Plast demande 30 % pour lancer la coupe, et le reste quand le rouleau est chez vous. Le premier paiement est un chèque daté : il ne quitte pas la banque aujourd'hui.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Même commande, dans Achats, zone de paiement. Mode <strong>Chèque à paiement différé</strong> pour l'acompte, compte <strong>Banque BNI</strong>, date d'échéance. Puis, après réception, un second paiement en <strong>virement</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Le 3 septembre : 270 000 Ar, chèque, échéance <strong>5 octobre 2026</strong>. Le 8 septembre, après la réception à 48 m² : 594 000 Ar en virement BNI.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>30 % de 900 000 = <strong>270 000 Ar</strong>, chèque remis à Lalao le 3 septembre, encaissable le 5 octobre. Le 8 septembre, le TTC réel est 864 000, pas 900 000. Déjà engagé : 270 000. Reste : <strong>594 000 Ar</strong>, virement BNI le jour de la réception. La banque baisse tout de suite de 594 000 : 8 000 000 − 594 000 = <strong>7 406 000 Ar</strong>. Le chèque de 270 000 reste « en attente » : il apparaîtra dans <strong>Trésorerie → Échéancier</strong> et, début octobre, dans <strong>Chèques à échéance proche</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>L'achat Import Plast n'a plus de solde ouvert une fois les 594 000 saisis (le chèque couvre les 270 000). Soldes : BNI 7 406 000 Ar. Échéancier : un chèque de 270 000 au 5 octobre.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Deux règlements existent, 270 000 et 594 000, et la BNI a baissé seulement de 594 000.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Payer 630 000 de solde (30 % du TTC commandé 900 000, reste 630 000) alors que vous n'avez reçu que 48 m². Le solde juste est 594 000. Recalculez sur 864 000 TTC reçus.</p>
+</div>
+
+<h3 id="p2-mission">A5. Cas court — mission d'achat avec avance de caisse</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Tiana avance de l'essence pour aller chercher un échantillon à Tanjombato. Ce n'est pas la facture Import Plast. C'est une petite caisse, à justifier.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Exploitation → Missions d'achat</strong>. Écran <strong>Missions d'achat</strong>. Le suivi des restes à rendre est dans <strong>Suivi des avances</strong> (écran <strong>Suivi des avances par acheteur</strong>).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Acheteur, compte <strong>Caisse principale</strong>, avance 100 000 Ar. Dépense : nature <strong>Carburant</strong>, 80 000 Ar. Reliquat rendu : 20 000 Ar.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le 9 septembre, Tiana prend 100 000 Ar. Ticket d'essence : 80 000 Ar. Elle remet 20 000 Ar le soir. Caisse : 2 000 000 − 100 000 + 20 000 = <strong>1 920 000 Ar</strong>. L'achat de bâche, lui, n'a pas bougé.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>La mission est close. Suivi des avances : Tiana n'a plus d'avance ouverte. Caisse : 1 920 000 Ar.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le reliquat de 20 000 Ar est rendu et la mission n'affiche plus d'écart.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Payer l'essence sans choisir Caisse principale. Le mouvement reste informatif et la caisse ment. Rouvrez la remise d'avance et choisissez le compte.</p>
+</div>
+
+<h3 id="p2-devis">B1. Devis Hôtel Soma</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'hôtel signe un prix avant que l'atelier coupe la bâche. Le devis n'est pas une facture : pas d'écriture, pas de sortie de stock.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Commercial → Devis → Nouveau devis</strong>. Écran <strong>Nouveau devis</strong>. Pour l'envoyer : depuis <strong>Liste des devis</strong>, l'aperçu, puis l'envoi ou le téléchargement PDF.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Client Hôtel Soma, site Boutique Showroom, date 10 septembre 2026, deux lignes, conditions 30 jours.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — DEV-2026-0001</strong>
+  <table>
+    <tr><th>Ligne</th><th class="num">Qté</th><th class="num">Prix HT</th><th class="num">Total HT</th></tr>
+    <tr><td>Bâche imprimée 3×2 m</td><td class="num">3</td><td class="num">150 000</td><td class="num">450 000</td></tr>
+    <tr><td>Enseigne dibond 2×0,80 m</td><td class="num">1</td><td class="num">300 000</td><td class="num">300 000</td></tr>
+    <tr><td>Total HT</td><td></td><td></td><td class="num">750 000</td></tr>
+    <tr><td>TVA 20 %</td><td></td><td></td><td class="num">150 000</td></tr>
+    <tr><td>Total TTC</td><td></td><td></td><td class="num">900 000</td></tr>
+  </table>
+  <p>Naina télécharge le PDF (les couleurs du modèle suivent l'aperçu). L'envoi e-mail et WhatsApp reste gris : Envoi des documents est encore « Non configuré ». Elle envoie le PDF à la main sur le 034 44 200 15 de Jean-Luc, et note dans le devis que le fichier est parti. Dès que Hery branchera la boîte mail, le bouton d'envoi joindra le même PDF.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Liste des devis : DEV-2026-0001, Hôtel Soma, 900 000 Ar TTC. Stock inchangé : 128 m².</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le total TTC affiché est 900 000 Ar, TVA comprise, et le PDF reprend le nom Atelier Voalohany avec le NIF.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Mettre la bâche frontlit (matière) sur le devis au lieu de « Bâche imprimée 3×2 m ». L'hôtel achèterait du rouleau, pas une bâche finie. Changez la ligne avant transformation en commande.</p>
+</div>
+
+<h3 id="p2-commande">B2. Acceptation et commande client</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'atelier ne fabrique pas sur un devis. Il fabrique sur une commande. Si vous ouvrez l'ordre de fabrication sans commande, vous devrez revenir ici.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Liste des devis</strong>, bouton <strong>→ Commande</strong>. Un écran demande de confirmer : titre « Transformer DEV-2026-0001 en commande ». Vous avez dix minutes pour confirmer. Sinon le devis se déverrouille.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Rien à retaper si les lignes sont bonnes. Confirmez. La commande reprend client, site, lignes et totaux.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le 11 septembre, Jean-Luc dit oui par WhatsApp. Naina clique → Commande. Naît <strong>CMD-2026-0001</strong>, statut confirmé, mêmes 900 000 Ar TTC. Elle n'a pas créé une deuxième saisie dans Nouvelle commande : la transformation évite l'écart de prix.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p><strong>Liste des commandes</strong> : CMD-2026-0001, Hôtel Soma. Le devis indique qu'il a été transformé, avec le nom de Naina et l'heure.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>CMD-2026-0001 existe avant que quiconque ouvre Ordres de fabrication.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Ouvrir l'ordre de fabrication, ne pas trouver la commande, et fabriquer « dans le vide ». Arrêtez. Créez la commande (→ Commande sur le devis), puis revenez à l'ordre.</p>
+</div>
+
+<h3 id="p2-of">B3. Ordre de fabrication « projet client »</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'ordre dit à l'atelier quoi couper, pour qui, et sur quelle commande. Sans destination, Négoo refuse de continuer.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>D'abord le visuel : <strong>Commercial → Commandes → Bons à tirer</strong>, écran <strong>Bons à tirer</strong>, sur CMD-2026-0001. Bouton <strong>Nouveau BAT (fichier)</strong>, puis <strong>Valider</strong> (Hery, pas Naina). Ensuite <strong>Exploitation → Fabrication → Ordres de fabrication</strong>, écran <strong>Ordres de fabrication</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Destination : <strong>Projet client</strong>. Client : Hôtel Soma. Commande : CMD-2026-0001. Atelier : Atelier 67ha. Articles : 3 bâches imprimées et 1 enseigne. Nomenclature standard.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le 12 septembre au matin, Jean-Luc a validé le visuel de l'enseigne (logo or sur fond vert). Hery dépose le fichier et clique Valider. Naina crée l'ordre : projet client, Hôtel Soma, CMD-2026-0001, quantités 3 et 1. Sans ce bon à tirer validé, le bouton <strong>Démarrer l'OF</strong> expliquerait qu'aucun bon à tirer validé n'est lié à la commande.</p>
+  <p><strong>Cas parallèle, le même jour, dix minutes.</strong> Hery lance un second ordre, destination <strong>Approvisionnement stock</strong>, sans client : 2 bâches imprimées 3×2 m pour le showroom, à fabriquer quand l'hôtel sera livré. Pas de Hôtel Soma sur cet ordre. Vous ne le clôturez pas dans ce manuel : il sert seulement à montrer l'autre destination. Laissez-le en attente.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>L'ordre de l'hôtel est lié à CMD-2026-0001. Le second ordre n'a pas de client.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>L'ordre Soma affiche Projet client, le numéro de commande, et un bon à tirer validé.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Destination vide. Le message demande de choisir projet client ou approvisionnement stock. Cochez Projet client et rattachez CMD-2026-0001.</p>
+</div>
+
+<h3 id="p2-cloture">B4. Sorties de matières, production, clôture</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Clôturer sans sortie de matière laisse le rouleau en stock alors qu'il est déjà imprimé. Le bon de préparation, lui, attend que l'ordre soit clos.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Ouvrez l'ordre (écran de l'ordre). <strong>Démarrer l'OF</strong>. Les consommations suivent la nomenclature. En fin de poste : <strong>Clôturer</strong>. Les mouvements d'atelier se relisent dans <strong>Sorties atelier</strong> et <strong>Transferts matière OF</strong> si vous déplacez de la matière réservée.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Avant de démarrer, descendez la matière : voir le transfert du chapitre C si elle est encore tout à l'entrepôt. Pour ce fil, transférez d'abord <strong>20 m²</strong> de bâche de l'entrepôt vers l'atelier (chapitre C, faites-le maintenant), puis revenez clôturer.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — 12 septembre, après-midi</strong>
+  <p>Après le transfert de 20 m², l'atelier a de quoi couper. Consommation de l'ordre Soma :</p>
+  <ul>
+    <li>Bâche : 3 × 6 m² = <strong>18 m²</strong> à 13 125 Ar, soit 236 250 Ar.</li>
+    <li>Encre : 3 × 0,3 L + 0,2 L = <strong>1,1 L</strong>.</li>
+    <li>Dibond : <strong>2 m²</strong>. Profilé : <strong>3 m</strong>.</li>
+    <li>Main-d'œuvre : 4,5 h + 2 h = 6,5 h × 15 000 = <strong>97 500 Ar</strong>.</li>
+  </ul>
+  <p>Hery clique Clôturer. Il reste à l'atelier <strong>2 m²</strong> de bâche (20 − 18). À l'entrepôt : <strong>108 m²</strong> (128 − 20). Total bâche : <strong>110 m²</strong>. Les 3 bâches et l'enseigne existent comme produits finis, prêts à préparer.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>L'ordre Soma est clôturé. Stocks : la bâche a baissé de 18 m² au total une fois le transfert compté. L'ordre « réappro showroom » est toujours ouvert : il apparaîtra dans les alertes production.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le statut de l'ordre hôtel est clôturé, et vous ne le modifiez plus.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Clôturer alors que les 20 m² sont encore à Ankorondrano. La sortie ne trouve pas la matière à l'atelier. Faites le transfert Entrepôt → Atelier d'abord, puis redémarrez la consommation.</p>
+</div>
+
+<h3 id="p2-bp">B5. Bon de préparation, puis bon de livraison</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le bon de préparation est la liste de picking : quoi prendre, dans quel casier, sur quel site. Il ne facture pas, il n'a pas de TVA, il n'écrit rien en comptabilité. Le bon de livraison, ensuite, dit que l'hôtel a reçu les pièces.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Liste des commandes</strong>, sur CMD-2026-0001, bouton <strong>→ BP</strong>. Confirmez « Transformer CMD-2026-0001 en bon de préparation ». Puis <strong>Commercial → Bons de préparation → Liste des BP</strong>, écran <strong>Bons de préparation</strong>. Quand tout est coché : transformer en bon de livraison. Écran final : <strong>Liste des bons de livraison</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Le bon reprend les lignes de la commande. Cochez chaque ligne « Préparé ». Site et casier : ceux du stock (la bâche finie sort de l'atelier). Bouton <strong>Visa préparateur</strong> : c'est la signature de celui qui a rassemblé. La case <strong>Afficher les prix</strong> reste décochée : l'opérateur n'a pas besoin des 150 000 Ar sur sa feuille. Vous pouvez la cocher si Hery veut un double chiffré.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le 12 septembre, 16 h. L'ordre est clos, donc → BP est accepté. Naît <strong>BP-2026-0001</strong>, statut À préparer. L'opérateur de l'atelier coche les 3 bâches et l'enseigne, vise. Le statut passe à <strong>Prêt</strong>. Il enregistre une version (la pastille d'information à côté de « Préparation » rappelle que chaque statut garde qui et quand). Puis il transforme en <strong>BL-2026-0001</strong>. La commande, elle, n'est pas devenue une facture. Le bouton → BL direct existe toujours pour une vente sans préparation : ici vous ne l'utilisez pas, le bon de préparation est passé devant.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>BP-2026-0001 : Transformé en BL. BL-2026-0001 : Hôtel Soma, lié à la commande. Filiation : commande, puis bon de préparation, puis bon de livraison, avec le nom et l'heure. Le PDF du bon de préparation reprend la couleur Cuivre du modèle, comme à l'écran.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le bon de livraison existe, et le bon de préparation n'est plus modifiable.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Cliquer → BP alors que l'ordre de l'enseigne est encore ouvert. Négoo demande de clôturer les ordres liés. Revenez au chapitre B4, clôturez, puis relancez → BP.</p>
+</div>
+
+<h3 id="p2-facture">B6. Acompte, proforma et facture fiscale du solde</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'hôtel veut un papier avant de virer, puis un acompte, puis la facture du reste. Ces trois papiers n'ont pas le même poids. Seule la facture fiscale entre dans le chiffre d'affaires et dans le compte 411.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Proforma : <strong>Factures → Nouvelle facture</strong>, écran <strong>Nouvelle facture</strong>, bouton <strong>Enregistrer proforma</strong>. Acompte : <strong>Commercial → Acomptes</strong>, écran <strong>Acomptes</strong>. Facture du solde : encore <strong>Nouvelle facture</strong>, bouton <strong>Valider &amp; émettre (série FAC)</strong>, après avoir déduit les acomptes.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Mêmes lignes que le devis. Pour la proforma, n'encaissez rien. Pour les acomptes, deux lignes qui font 360 000 Ar. Pour la facture fiscale, les lignes complètes, les acomptes déjà saisis viennent en déduction, échéance à 15 jours, et vous n'encaissez pas le solde.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — trois papiers, un seul devis</strong>
+  <p><strong>Proforma.</strong> Le 11 septembre, avant le virement, Jean-Luc demande « une facture pour la compta de l'hôtel, sans numéro fiscal ». Naina ouvre Nouvelle facture, reprend les deux lignes (750 000 HT, 900 000 TTC) et clique <strong>Enregistrer proforma</strong>. Le numéro n'est pas dans la série FAC. Aucune écriture. Le stock ne sort pas. Ce papier ne se relance pas.</p>
+  <p><strong>Acomptes, 40 %.</strong> Le 12 septembre, après le bon de livraison, Tiana saisit deux acomptes liés à CMD-2026-0001 :</p>
+  <ul>
+    <li>300 000 Ar, virement, Banque BNI ;</li>
+    <li>60 000 Ar, espèces, Caisse principale (Jean-Luc paie le complément au showroom).</li>
+  </ul>
+  <p>Total 360 000 Ar, soit 40 % de 900 000. Si la case propose une facture d'acompte, laissez-la : c'est le justificatif de l'acompte, distinct de la facture de solde.</p>
+  <p><strong>Facture fiscale du solde.</strong> Nouvelle facture, client Hôtel Soma, mêmes lignes, acomptes 360 000 déduits. Net à payer : <strong>540 000 Ar</strong>. Date 12 septembre 2026. Échéance <strong>27 septembre</strong> serait 15 jours pile ; pour ce fil, vous mettez l'échéance au <strong>20 septembre</strong> afin que, le 23, elle soit déjà en retard de trois jours quand vous ouvrirez les relances. Bouton <strong>Valider &amp; émettre (série FAC)</strong>. Numéro : <strong>FAC-2026-0001</strong>. Vous n'encaissez pas les 540 000.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Liste des factures : la proforma d'un côté (filtre Proformas), FAC-2026-0001 de l'autre, reste à payer 540 000 Ar. Acomptes : 360 000 Ar imputés ou reliés à cette facture. BNI : 7 406 000 + 300 000 = <strong>7 706 000 Ar</strong>. Caisse : 1 920 000 + 60 000 = <strong>1 980 000 Ar</strong>.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>FAC-2026-0001 affiche 540 000 Ar de reste à payer, et la proforma n'est pas dans les impayés.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Cliquer Valider &amp; émettre sur le premier papier, celui que Jean-Luc voulait « juste pour voir ». Vous consommez FAC-2026-0001 trop tôt. Pour un papier non fiscal, le bouton est Enregistrer proforma.</p>
+</div>
+
+<h3 id="p2-encaisse">B7. Envoi de la facture et encaissement</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>L'hôtel ne paie pas un écran. Il paie un PDF. L'encaissement, lui, est déjà fait pour l'acompte : ce chapitre vérifie qu'il est au bon compte, et montre les deux modes.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Envoi : <strong>Liste des factures</strong>, FAC-2026-0001, téléchargement PDF ou bouton d'envoi. Encaissement déjà saisi : <strong>Acomptes</strong>. Pour contrôler les comptes : <strong>Trésorerie → Soldes</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Si les pastilles d'envoi sont devenues « Prêt », envoyez à jl.rajaonarison@hotelsoma.mg et au 034 44 200 15. Sinon, téléchargez le PDF. Ne saisissez pas un troisième encaissement de 540 000 : ce solde est volontairement ouvert.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Tiana relit les deux acomptes. Virement BNI 300 000 Ar : la banque est à 7 706 000 Ar. Espèces 60 000 Ar : la caisse est à 1 980 000 Ar. MVola est resté à 500 000 Ar, personne n'a payé par mobile sur cette affaire. Le PDF de FAC-2026-0001 montre 900 000 Ar, acompte 360 000 Ar, net 540 000 Ar, pied de page « Arrêtée la présente facture à la somme de… ». Naina le remet en main propre au showroom, parce que l'e-mail n'est pas encore branché.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Liste des factures : payé 360 000, reste 540 000. Trésorerie : les trois soldes du mémo.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous pouvez expliquer à Hery d'où viennent les 300 000 et les 60 000, sans avoir soldé les 540 000.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Encaisser les 540 000 « pour que le tableau soit propre », puis vouloir faire la relance. La relance ne voit que les factures encore dues. Laissez le reste à payer.</p>
+</div>
+
+<h3 id="p2-relance">B8. Impayé et relances</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Une facture due sans trace de relance se perd. Vous notez chaque tentative : e-mail, WhatsApp, puis téléphone.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Commercial → Relances impayés</strong>. Écran <strong>Relances impayés</strong>. Le canal se choisit sur la ligne. E-mail et WhatsApp joignent le PDF si Envoi des documents est prêt. Téléphone, visite et courrier s'enregistrent seulement.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>FAC-2026-0001. Trois passages, trois canaux, une note courte à chaque fois.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — on est le 23 septembre, échéance dépassée depuis le 20</strong>
+  <p>Hery a enfin renseigné la boîte mail. Les pastilles E-mail et WhatsApp sont sur Prêt.</p>
+  <ol>
+    <li>23 septembre, canal e-mail, à jl.rajaonarison@hotelsoma.mg : « Facture FAC-2026-0001, solde 540 000 Ar, échue le 20 septembre. » Le PDF part avec le message.</li>
+    <li>Le lendemain, canal WhatsApp, 034 44 200 15 : même rappel, PDF joint.</li>
+    <li>Le surlendemain, Naina appelle. Canal <strong>téléphone</strong>. Elle écrit : « Jean-Luc promet le virement vendredi. » Rien n'est envoyé : la ligne s'ajoute à l'historique, avec la date et le nom de Naina.</li>
+  </ol>
+  <p>Le reste à payer est toujours 540 000 Ar.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Sous la facture, trois lignes d'historique : e-mail, WhatsApp, téléphone. La facture reste dans la file du jour tant qu'elle n'est pas payée.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les trois canaux sont visibles dans l'historique, et le solde n'a pas bougé.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Relancer la proforma. Elle n'est pas dans cette liste. Si FAC-2026-0001 n'apparaît pas, vérifiez qu'elle a été émise avec Valider &amp; émettre, pas enregistrée en proforma, et que le reste à payer est supérieur à zéro.</p>
+</div>
+
+<h3 id="p2-situation">B9. Situation de compte Hôtel Soma</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Jean-Luc demande « où on en est ». Vous lui montrez les factures, les acomptes, le solde et l'échéance, pas un extrait de banque.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Commercial → Tiers</strong>, ouvrez Hôtel Soma. Onglet <strong>Factures</strong> : la liste, l'aperçu, l'impression et l'envoi de chaque pièce. Onglet <strong>Soldes</strong> : le résumé. Onglet <strong>Historique</strong> : devis, commande, livraison, factures, acomptes, filtrables par dates.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi lire</strong>
+  <p>Vous n'avez rien à ressaisir. Vous contrôlez les cartes et vous imprimez FAC-2026-0001 depuis l'onglet Factures.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — ce que Hery lit à Jean-Luc</strong>
+  <ul>
+    <li>Factures ouvertes : <strong>540 000 Ar</strong> (FAC-2026-0001).</li>
+    <li>Acomptes : <strong>360 000 Ar</strong> déjà versés, déduits de cette facture (300 000 + 60 000).</li>
+    <li>Avoirs : 0.</li>
+    <li>Échéance dépassée : 20 septembre 2026.</li>
+    <li>Proforma : visible dans l'historique, elle ne gonfle pas le solde.</li>
+  </ul>
+  <p>Hery imprime FAC-2026-0001 depuis l'onglet Factures. L'envoi reprend l'e-mail de la fiche. L'onglet Soldes suffit comme situation de compte : il n'y a pas un autre écran caché.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Carte « Factures ouvertes » = 540 000 Ar. Historique : DEV-2026-0001, CMD-2026-0001, BL-2026-0001, les acomptes, la proforma, FAC-2026-0001.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous pouvez lire le solde sans ouvrir la comptabilité.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Chercher la situation dans Trésorerie. La banque montre le virement de 300 000, pas la dette de 540 000. La dette est sur la fiche du tiers, onglet Soldes.</p>
+</div>
+
+<h3 id="p2-stocks">C. Stocks : transfert, inventaire, fiche article</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>La bâche utile à l'atelier ne doit plus être comptée à l'entrepôt. L'inventaire corrige ce que le mètre ruban contredit.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Transfert : <strong>Exploitation → Transferts de stock</strong>, écran <strong>Transferts de stock</strong>. Inventaire : <strong>Inventaires</strong>, écran <strong>Inventaires</strong>. Lecture : <strong>Stocks</strong>, puis la fiche dans Catalogue.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Transfert (à faire avant la clôture de l'ordre, chapitre B4) : article bâche frontlit, 20 m², de Entrepôt Ankorondrano vers Atelier 67ha. Inventaire, après fabrication : site entrepôt, comptage 106 m² au lieu de 108.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Transfert du 12 septembre matin : <strong>20 m²</strong>. Entrepôt 108 m², atelier 20 m². L'ordre en consomme 18 à l'atelier. Reste atelier : <strong>2 m²</strong>. Reste entrepôt théorique : <strong>108 m²</strong>.</p>
+  <p>Le 13 septembre, Naina recompte l'allée A1 : <strong>106 m²</strong>. Écart <strong>−2 m²</strong>. Elle saisit l'inventaire et le justifie (« chute abîmée au déchargement, jetée »). Après validation : entrepôt 106, atelier 2, total <strong>108 m²</strong>. Le seuil de la fiche est 120 : l'alerte stock peut s'allumer.</p>
+  <p>Fiche article, écran Stocks : vous lisez le coût moyen <strong>13 125 Ar</strong> (il ne change pas avec l'inventaire de quantité de la même façon qu'un achat : la quantité, elle, baisse de 2 m²). Historique du transfert : <strong>Transferts de stock → Historique par article</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Stocks filtrés sur Entrepôt Ankorondrano : 106 m². Atelier 67ha : 2 m². Dibond : 10 − 2 = 8 m². Encre : 5 − 1,1 = 3,9 L. Profilé : 20 − 3 = 17 m. Ces trois-là n'ont pas été transférés dans ce fil : ils sont sortis depuis l'entrepôt avec l'ordre. Si votre écran les montre encore à 10, 5 et 20, la sortie d'ordre n'a pas été passée : revenez à B4.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>La bâche totale fait 108 m², et l'inventaire −2 m² est justifié.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Inventorier 106 m² avant le transfert et la fabrication. Vous écrasez les 128 m² et l'ordre ne trouve plus de matière. L'inventaire se fait après les mouvements du jour, pas avant.</p>
+</div>
+
+<h3 id="p2-treso">D. Trésorerie après l'affaire</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Hery veut les soldes, le chèque qui partira le 5 octobre, et la preuve que le virement de l'hôtel est bien celui de la banque.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Trésorerie → Soldes</strong> (écran <strong>Trésorerie</strong>). Puis <strong>Échéancier</strong>. Puis <strong>Chèques à échéance proche</strong> (écran <strong>Chèques différés à échéance proche</strong>). Puis <strong>Rapprochement</strong> (écran <strong>Rapprochement bancaire</strong>).</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi remplir</strong>
+  <p>Sur le rapprochement : importez un fichier du relevé BNI. Trois lignes suffisent. Pointez à la main la ligne qui correspond au virement Hôtel Soma. Négoo ne rapproche pas tout seul.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <table>
+    <tr><th>Compte</th><th class="num">Solde</th><th>D'où il vient</th></tr>
+    <tr><td>Caisse principale</td><td class="num">1 980 000</td><td>2 000 000 − 80 000 d'essence + 60 000 espèces Soma</td></tr>
+    <tr><td>Banque BNI</td><td class="num">7 706 000</td><td>8 000 000 − 594 000 Import Plast + 300 000 Soma</td></tr>
+    <tr><td>MVola</td><td class="num">500 000</td><td>Inchangé</td></tr>
+  </table>
+  <p>Échéancier : chèque Import Plast <strong>270 000 Ar</strong>, échéance <strong>5 octobre 2026</strong>, encore en attente. Il n'est pas dans les 7 706 000 : la banque ne l'a pas encore payé.</p>
+  <p>Fichier du relevé (trois lignes), importé sur Banque BNI :</p>
+  <table>
+    <tr><th>Date</th><th>Libellé</th><th class="num">Montant</th></tr>
+    <tr><td>12/09/2026</td><td>VIR HOTEL SOMA ACOMPTE</td><td class="num">300 000</td></tr>
+    <tr><td>08/09/2026</td><td>VIR IMPORT PLAST SOLDE</td><td class="num">−594 000</td></tr>
+    <tr><td>15/09/2026</td><td>FRAIS TENUE DE COMPTE</td><td class="num">−15 000</td></tr>
+  </table>
+  <p>Vous pointez la ligne Hôtel Soma sur le mouvement de 300 000 Ar. La ligne Import Plast se pointe sur le virement de 594 000. La ligne des frais 15 000 Ar reste non pointée : vous n'avez pas encore saisi ce frais dans Appro / retrait. C'est normal. Le solde Négoo reste 7 706 000 tant que ce frais n'est pas enregistré.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Deux lignes de relevé pointées, une ligne orpheline (les frais). Échéancier : le chèque du 5 octobre.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous avez pointé le virement Hôtel Soma et vous savez pourquoi les 15 000 Ar de frais ne le sont pas.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Soustraire déjà les 270 000 du chèque « parce que le chèque est parti ». Tant qu'il est en attente, la BNI dans Négoo ne baisse pas. Le débit viendra à l'échéance, quand le chèque sera traité.</p>
+</div>
+
+<h3 id="p2-compta">E. Où retrouver les écritures</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Le comptable ne refait pas la facture. Il la retrouve dans le journal, avec le règlement et l'achat.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Comptabilité → Journaux</strong>. Écran <strong>Journaux</strong>. Filtrez par date (septembre 2026) et par journal. Le plan se relit dans <strong>Plan comptable</strong>. Un article sans compte serait listé dans <strong>Produits sans compte</strong> : les vôtres ont 701000 et 601000, cette liste doit rester vide pour cette affaire.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi chercher</strong>
+  <p>Trois pièces, trois endroits.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <ul>
+    <li><strong>FAC-2026-0001</strong>, facture de solde. Vous voyez le client 411100 Hôtel Soma débité du net dû, la vente 701000 pour la part HT, la TVA collectée 445710. Le net à payer de 540 000 Ar est le solde après l'acompte de 360 000 Ar déjà sorti du compte client ou porté en acompte, selon que la facture d'acompte a été émise. Ouvrez l'écriture : le numéro FAC-2026-0001 est dans le libellé.</li>
+    <li><strong>Règlement de 300 000 Ar</strong>. Journal de la Banque BNI : la banque augmente, le compte client (ou l'acompte) diminue d'autant. Les 60 000 Ar sont dans le journal de la Caisse principale, pas dans la banque.</li>
+    <li><strong>Achat Import Plast</strong>. Compte 401100, achat 601000 pour 720 000 Ar HT (les 48 m²), TVA déductible 144 000 Ar. Le virement de 594 000 Ar est dans le journal BNI. Le chèque de 270 000 Ar n'y est pas encore, il est à l'échéance.</li>
+  </ul>
+  <p>La proforma n'a pas d'écriture. Le bon de préparation non plus. Le devis non plus.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>En filtrant septembre, vous retrouvez FAC-2026-0001, le virement client et le virement fournisseur. Produits sans compte : rien sur la bâche imprimée ni sur la bâche frontlit.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous avez ouvert l'écriture de FAC-2026-0001 et celle du virement de 300 000 Ar.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Chercher 900 000 Ar TTC en une seule ligne de banque. La banque n'a reçu que 300 000. Les 540 000 restent une créance, pas un mouvement de trésorerie.</p>
+</div>
+
+<h3 id="p2-alertes">F. Pilotage et alertes</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Après l'affaire, trois voyants doivent pouvoir s'allumer : la bâche sous le seuil, l'ordre showroom non clos, la facture Soma à relancer.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Pilotage → Dashboard → Vue d'ensemble</strong>, écran <strong>Dashboard</strong>. Puis <strong>Stock</strong> (écran <strong>Dashboard — Stock</strong>) : bloc <strong>En attente de préparation</strong> s'il reste un bon non prêt. Puis <strong>Alertes → Stock</strong>, <strong>Alertes → Production</strong>, <strong>Alertes → Ventes</strong>. Le chiffre du mois : <strong>Dashboard → Ventes &amp; Rentabilité</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Quoi lire</strong>
+  <p>Vous ne saisissez rien. Vous vérifiez que les trois signaux de l'affaire sont cohérents avec le mémo.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel — 23 septembre</strong>
+  <ul>
+    <li>Stock bâche : 108 m² au total, seuil 120. <strong>Alertes — Stock</strong> signale la bâche frontlit.</li>
+    <li>L'ordre « 2 bâches pour le showroom » est encore ouvert depuis le 12. <strong>Alertes — Production</strong> le montre en retard. L'ordre Hôtel Soma, clôturé, n'y est plus.</li>
+    <li>FAC-2026-0001 est échue. <strong>Alertes — Ventes</strong> et <strong>Relances impayés</strong> la proposent. Vous l'avez déjà relancée trois fois : l'historique est là, la dette aussi.</li>
+    <li>Dashboard ventes : 750 000 Ar HT sur un objectif de 3 000 000. Il reste 2 250 000 Ar à faire en septembre. Le bon de préparation est déjà transformé : « En attente de préparation » est vide, c'est normal.</li>
+  </ul>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Trois alertes distinctes, trois menus. Le dashboard ne mélange pas le stock et la relance.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Vous avez ouvert les trois écrans d'alertes et reconnu l'affaire dans chacun.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Chercher la facture impayée dans Alertes — Stock. La relance est dans Alertes — Ventes et dans Relances impayés.</p>
+</div>
+
+<h3 id="p2-soir">G. Fin de journée</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Cinq minutes le soir évitent de découvrir le 5 octobre qu'un chèque ou une relance a été oublié.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p>Dans cet ordre, sans rien créer :</p>
+  <ol>
+    <li><strong>Trésorerie</strong> (Soldes) : caisse 1 980 000 Ar, BNI 7 706 000 Ar, MVola 500 000 Ar.</li>
+    <li><strong>Liste des factures</strong> : FAC-2026-0001 envoyée ou remise, reste 540 000 Ar.</li>
+    <li><strong>Ordres de fabrication</strong> : l'ordre Soma est clos ; l'ordre showroom est encore ouvert, vous le savez.</li>
+    <li><strong>Relances impayés</strong> : la file du jour. Hôtel Soma est dedans, avec trois relances déjà notées.</li>
+    <li><strong>Échéancier</strong> : le chèque de 270 000 Ar au 5 octobre est toujours là.</li>
+  </ol>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>Le 23 septembre, 17 h 40, Tiana coche la caisse (les 60 000 Ar d'espèces sont dans le tiroir, en plus du fond). Naina confirme que le PDF est parti. Hery voit l'ordre showroom encore ouvert et décide de le lancer lundi, pas ce soir. Il se déconnecte. Si quelqu'un rouvre l'écran après une heure d'absence, la phrase « Session expirée pour inactivité » reviendra : c'est voulu.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Les cinq écrans ont été ouverts et aucun solde du mémo ne vous surprend.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Fermer l'ordinateur sur Nouvelle facture encore en brouillon. Le brouillon n'est pas FAC-2026-0001 et ne part pas en relance. Soit vous validez, soit vous notez pourquoi le brouillon attend.</p>
+</div>
+
+<h2 class="partie" id="p3">Partie 3 — Annexes</h2>
+
+<h3 id="p3-glossaire">Glossaire</h3>
+<table>
+  <tr><th>Mot</th><th>Dans Négoo, cela veut dire</th></tr>
+  <tr><td>Devis</td><td>Prix proposé au client. Pas une facture. Écran Nouveau devis.</td></tr>
+  <tr><td>Commande client</td><td>Le devis accepté. C'est elle que l'atelier et la livraison reconnaissent.</td></tr>
+  <tr><td>DP, demande de prix</td><td>Question au fournisseur. N'entre pas en stock. Écran Demandes de prix.</td></tr>
+  <tr><td>Commande fournisseur</td><td>L'achat ferme. Écran Achats. Le stock bouge à la réception, pas à la commande.</td></tr>
+  <tr><td>OF, ordre de fabrication</td><td>Consigne d'atelier. Destination Projet client (avec commande) ou Approvisionnement stock (sans client).</td></tr>
+  <tr><td>BAT, bon à tirer</td><td>Le visuel validé avant d'imprimer. Écran Bons à tirer. Sans lui, l'ordre client ne démarre pas.</td></tr>
+  <tr><td>Bon de préparation</td><td>Liste de picking. Pas de TVA, pas d'écriture. Entre la commande et le bon de livraison.</td></tr>
+  <tr><td>BL, bon de livraison</td><td>Preuve que la marchandise est partie ou remise. Écran Liste des bons de livraison.</td></tr>
+  <tr><td>Proforma</td><td>Facture « pour voir », hors série FAC. N'alimente ni le chiffre d'affaires ni les relances.</td></tr>
+  <tr><td>Facture fiscale</td><td>Celle du bouton Valider &amp; émettre (série FAC). Seule elle est due et relançable.</td></tr>
+  <tr><td>Acompte</td><td>Argent reçu avant le solde. Écran Acomptes. Chez Soma : 360 000 Ar.</td></tr>
+  <tr><td>Situation de compte</td><td>Onglets Factures, Soldes et Historique de la fiche tiers. Pas l'écran Trésorerie.</td></tr>
+  <tr><td>Relance</td><td>Rappel d'une facture encore due. Écran Relances impayés. Le téléphone s'enregistre sans envoi.</td></tr>
+  <tr><td>CUMP</td><td>Coût unitaire moyen pondéré : la moyenne du prix de la matière en stock. Ici, 13 125 Ar / m² après la réception.</td></tr>
+  <tr><td>Stock initial</td><td>Quantités déjà là le jour de la mise en service. Écran Stock initial.</td></tr>
+  <tr><td>Écart de réception</td><td>Quantité livrée différente de la commande. Case « Je valide malgré l'écart ».</td></tr>
+  <tr><td>Chèque différé</td><td>Chèque avec une date d'échéance. Il reste en attente jusqu'à cette date. Écran Échéancier.</td></tr>
+  <tr><td>Mission d'achat</td><td>Avance de caisse à une personne, avec justificatifs. Distincte de la facture fournisseur.</td></tr>
+</table>
+
+<h3 id="p3-table">Je veux faire… je vais où</h3>
+<table>
+  <tr><th>Je veux</th><th>J'ouvre</th><th>Mini-exemple Voalohany</th></tr>
+  <tr><td>Me connecter</td><td>Écran de connexion</td><td>hery@voalohany.mg</td></tr>
+  <tr><td>Changer le NIF</td><td>Paramètres → Société → Infos Entreprise / Fiscalité</td><td>NIF 4000123456</td></tr>
+  <tr><td>Créer un atelier</td><td>Paramètres → Sites</td><td>Atelier 67ha, 8 h / jour</td></tr>
+  <tr><td>Ouvrir l'exercice</td><td>Exercices comptables</td><td>Année 2026</td></tr>
+  <tr><td>Créer la caisse</td><td>Paramètres → Trésorerie</td><td>2 000 000 Ar</td></tr>
+  <tr><td>Numéroter les factures</td><td>Paramètres → Documents</td><td>FAC-2026-0001</td></tr>
+  <tr><td>Activer le bon de préparation</td><td>Paramètres → Documents</td><td>Case à cocher</td></tr>
+  <tr><td>Changer le pied de page</td><td>Modèles de documents</td><td>« Arrêtée la présente… »</td></tr>
+  <tr><td>Brancher l'e-mail</td><td>Envoi des documents</td><td>Pastille E-mail : Prêt</td></tr>
+  <tr><td>Ajouter une unité</td><td>Unités de mesure</td><td>m²</td></tr>
+  <tr><td>Créer la bâche</td><td>Catalogue de produits et articles</td><td>Matière première, 12 000 Ar</td></tr>
+  <tr><td>Créer l'hôtel</td><td>Paramètres → Clients</td><td>Plafond 2 000 000 Ar</td></tr>
+  <tr><td>Créer Import Plast</td><td>Paramètres → Fournisseurs</td><td>Compte 401100</td></tr>
+  <tr><td>Poser le stock de départ</td><td>Stock initial</td><td>80 m² à Ankorondrano</td></tr>
+  <tr><td>Fixer l'heure d'atelier</td><td>Paramètres → Fabrication</td><td>15 000 Ar / h</td></tr>
+  <tr><td>Demander un prix</td><td>Demandes de prix</td><td>50 m² à Lalao</td></tr>
+  <tr><td>Commander au fournisseur</td><td>Achats</td><td>50 m² × 15 000 HT</td></tr>
+  <tr><td>Réceptionner</td><td>Achats, onglet Livraisons</td><td>48 m², valider l'écart</td></tr>
+  <tr><td>Avancer de l'essence</td><td>Missions d'achat</td><td>100 000 Ar, carburant 80 000</td></tr>
+  <tr><td>Faire le devis</td><td>Nouveau devis</td><td>900 000 Ar TTC</td></tr>
+  <tr><td>Transformer en commande</td><td>Liste des devis, → Commande</td><td>CMD-2026-0001</td></tr>
+  <tr><td>Valider le visuel</td><td>Bons à tirer</td><td>Nouveau BAT, puis Valider</td></tr>
+  <tr><td>Lancer l'atelier</td><td>Ordres de fabrication</td><td>Projet client, Hôtel Soma</td></tr>
+  <tr><td>Déplacer de la bâche</td><td>Transferts de stock</td><td>20 m² vers l'atelier</td></tr>
+  <tr><td>Préparer la livraison</td><td>Liste des commandes, → BP</td><td>BP-2026-0001</td></tr>
+  <tr><td>Livrer</td><td>Bons de préparation, puis liste des BL</td><td>BL-2026-0001</td></tr>
+  <tr><td>Encaisser l'acompte</td><td>Acomptes</td><td>300 000 + 60 000</td></tr>
+  <tr><td>Émettre la facture</td><td>Nouvelle facture, Valider &amp; émettre</td><td>FAC-2026-0001, reste 540 000</td></tr>
+  <tr><td>Relancer</td><td>Relances impayés</td><td>E-mail, puis WhatsApp, puis téléphone</td></tr>
+  <tr><td>Voir ce que l'hôtel doit</td><td>Tiers → Hôtel Soma → Soldes</td><td>540 000 Ar ouverts</td></tr>
+  <tr><td>Compter le stock</td><td>Inventaires</td><td>Écart −2 m²</td></tr>
+  <tr><td>Voir la banque</td><td>Trésorerie</td><td>BNI 7 706 000 Ar</td></tr>
+  <tr><td>Voir le chèque d'octobre</td><td>Échéancier</td><td>270 000 Ar au 5 octobre</td></tr>
+  <tr><td>Pointer le relevé</td><td>Rapprochement bancaire</td><td>Ligne VIR HOTEL SOMA</td></tr>
+  <tr><td>Lire l'écriture</td><td>Comptabilité → Journaux</td><td>FAC-2026-0001</td></tr>
+  <tr><td>Voir l'alerte bâche</td><td>Alertes → Stock</td><td>108 m² sous le seuil de 120</td></tr>
+  <tr><td>Ajouter un vendeur</td><td>Utilisateurs</td><td>Naina, rôle Vendeur</td></tr>
+  <tr><td>Emporter les données</td><td>Récupération des données</td><td>Fichier complet</td></tr>
+  <tr><td>Relire ce manuel</td><td>Paramètres → Manuel</td><td>Télécharger le PDF</td></tr>
+</table>
+
+<h3 id="p3-erreurs">Huit erreurs fréquentes</h3>
+
+<h3>1. Facture sans client</h3>
+<p>Tiana ouvre Nouvelle facture et tape « Soma » dans un commentaire, sans choisir la fiche. Le compte 411100 ne bouge pas, et Relances impayés ne trouve personne. Corrigez : sélectionnez Hôtel Soma dans la liste des clients. Si la fiche n'existe pas, créez-la dans Paramètres → Clients avant la facture.</p>
+
+<h3>2. Ordre de fabrication sans destination</h3>
+<p>Naina veut « juste lancer les 3 bâches ». Destination vide : Négoo s'arrête. Elle coche Projet client, choisit Hôtel Soma et CMD-2026-0001. Le second ordre du showroom, lui, est Approvisionnement stock, sans client. Les deux cases ne se mélangent pas.</p>
+
+<h3>3. Envoi sans boîte mail</h3>
+<p>Le 10 septembre, Naina clique pour envoyer le devis. La pastille E-mail est sur Non configuré. Rien ne part, et ce n'est pas un bug du devis. Elle télécharge le PDF. Hery remplira plus tard Envoi des documents. Le travail (devis, commande, facture) n'attend pas cette pastille. Seul l'envoi automatique l'attend.</p>
+
+<h3>4. Stock initial oublié</h3>
+<p>L'équipe réceptionne 48 m² alors que les 80 m² du matin n'ont jamais été saisis. Le stock affiche 48 au lieu de 128, et le coût moyen tombe à 15 000 Ar au lieu de 13 125. Corrigez dans Stock initial, site Entrepôt Ankorondrano, 80 m² à 12 000 Ar, datés du 1<sup>er</sup> septembre, avant de raisonner sur les alertes.</p>
+
+<h3>5. Réception sans achat</h3>
+<p>Le rouleau est sur le quai, personne n'a ouvert Commandes fournisseurs. Il n'y a rien à réceptionner : l'onglet Livraisons vit sur un achat. Créez d'abord la commande Import Plast, 50 m², puis saisissez 48. Une demande de prix ne suffit pas.</p>
+
+<h3>6. Relance sans facture fiscale</h3>
+<p>Jean-Luc a reçu la proforma de 900 000 Ar. Le 23 septembre, elle n'est pas dans Relances impayés. C'est voulu. Émettez FAC-2026-0001 avec Valider &amp; émettre, laissez 540 000 Ar ouverts, et relancez cette pièce-là.</p>
+
+<h3>7. Bon de préparation alors que l'atelier n'a pas fini</h3>
+<p>Naina clique → BP le 12 septembre à 11 h. L'ordre de l'enseigne est encore ouvert. Le message demande de clôturer les ordres liés. Elle attend 16 h, Hery clôture, elle relance → BP. Pour une vente de marchandise déjà en rayon, sans fabrication, → BL reste possible sans bon de préparation.</p>
+
+<h3>8. Acompte saisi deux fois</h3>
+<p>Tiana encaisse 300 000 Ar sur Acomptes, puis ressaisit 300 000 Ar dans « paiement à l'émission » de la facture. L'hôtel paraît avoir payé 600 000 Ar. Elle annule le doublon et ne garde que les deux acomptes (300 000 et 60 000) déduits de FAC-2026-0001. Le net reste 540 000 Ar.</p>
+
+<h3 id="p3-recup">Récupération des données</h3>
+<div class="bloc">
+  <strong class="etq">Pourquoi</strong>
+  <p>Si vous quittez Négoo, ou si vous voulez une copie de sécurité lisible dans un tableur, les fichiers se téléchargent sans effacer le dossier.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Où cliquer</strong>
+  <p><strong>Paramètres → Récupération des données</strong>. Écran du même nom. Bouton <strong>Fichier complet</strong>, puis les tableaux proposés ligne par ligne (clients, factures, stocks…). Les PDF de FAC-2026-0001, du devis et du bon de livraison se reprennent aussi un par un dans chaque liste, colonne d'export PDF.</p>
+</div>
+<div class="bloc cas">
+  <strong class="etq">Cas réel</strong>
+  <p>En décembre 2026, Hery télécharge le fichier complet de l'Atelier Voalohany et le tableau des factures. Il y retrouve FAC-2026-0001, le solde de 540 000 Ar s'il n'a toujours pas été payé, et l'hôtel. Rien ne disparaît de Négoo au moment du téléchargement. Le manuel que vous lisez s'obtient, lui, dans <strong>Paramètres → Manuel</strong>.</p>
+</div>
+<div class="bloc">
+  <strong class="etq">Résultat à l'écran</strong>
+  <p>Un fichier se télécharge. Le bouton ne demande pas de confirmer une suppression.</p>
+</div>
+<div class="bloc fini">
+  <strong class="etq">Vous avez fini quand…</strong>
+  <p>Le fichier complet est sur votre ordinateur, et l'écran Tiers montre toujours Hôtel Soma.</p>
+</div>
+<div class="bloc erreur">
+  <strong class="etq">Erreur fréquente</strong>
+  <p>Confondre Récupération des données et le bouton « Reset données » de l'écran Paramètres. Le reset vide le dossier et demande votre mot de passe. N'y touchez pas pour faire une copie. La copie, c'est Fichier complet.</p>
+</div>
+
+<p>Fin du manuel. Les montants de l'affaire Hôtel Soma tiennent sur le mémo de la Partie 2 : si un écran s'en écarte, reprenez le chapitre indiqué plutôt que de « corriger » le chiffre à la main.</p>
+
+</body>
+</html>
