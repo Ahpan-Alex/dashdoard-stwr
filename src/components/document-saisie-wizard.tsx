@@ -345,7 +345,7 @@ export function DocumentSaisieWizard({
     setStockError(null);
     if (saisieClient && !produitCommandableClient(prod)) {
       setStockError(
-        "Les matières premières et les semi-finis ne se commandent pas directement.",
+        "Une matière première ne se commande pas par un client.",
       );
       return;
     }
@@ -644,8 +644,7 @@ export function DocumentSaisieWizard({
             {saisieClient &&
               produitsDispo.some((p) => !produitCommandableClient(p)) && (
                 <p className="mb-2 text-xs text-muted">
-                  Les matières premières et les semi-finis ne se commandent pas
-                  tels quels.
+                  Les matières premières ne se commandent pas telles quelles.
                 </p>
               )}
 

@@ -45,6 +45,8 @@ import type { CategorieProduit, NatureStock, NomenclatureProduit, Produit, TypeA
 import {
   MODE_APPROVISIONNEMENT_LABELS,
   modeApprovisionnementDuProduit,
+  modeApprovisionnementEnregistre,
+  modeApprovisionnementSuggere,
   natureAdmetModeApprovisionnement,
   type ModeApprovisionnement,
 } from "@/lib/mode-approvisionnement";
@@ -539,9 +541,10 @@ function ParametresProduitsContent() {
       gerePeremption: form.gerePeremption,
       typeAchat: form.typeAchat,
       natureStock: form.natureStock,
-      modeApprovisionnement: natureAdmetModeApprovisionnement(form.natureStock)
-        ? form.modeApprovisionnement || "sur_stock"
-        : undefined,
+      modeApprovisionnement: modeApprovisionnementEnregistre(
+        form.natureStock,
+        form.modeApprovisionnement || undefined,
+      ),
       achatSousTraitance: produitEstFabrique(form)
         ? form.achatSousTraitance
         : undefined,
@@ -1038,17 +1041,10 @@ function ParametresProduitsContent() {
               parentId={editingId ?? undefined}
               produits={produits}
               onNatureChange={(n) => {
-                const admet = natureAdmetModeApprovisionnement(n);
-                const admetAvant = natureAdmetModeApprovisionnement(
-                  form.natureStock,
-                );
-                let mode = form.modeApprovisionnement;
-                if (!admet) mode = "";
-                else if (!admetAvant || !mode) mode = "sur_stock";
                 setForm({
                   ...form,
                   natureStock: n,
-                  modeApprovisionnement: mode,
+                  modeApprovisionnement: modeApprovisionnementSuggere(n) ?? "",
                   nomenclatures: produitEstFabrique({ natureStock: n })
                     ? form.nomenclatures
                     : [],
@@ -1119,7 +1115,11 @@ function ParametresProduitsContent() {
                 Mode d&apos;approvisionnement
                 <select
                   className="select mt-1"
-                  value={form.modeApprovisionnement || "sur_stock"}
+                  value={
+                    form.modeApprovisionnement ||
+                    modeApprovisionnementSuggere(form.natureStock) ||
+                    "sur_stock"
+                  }
                   onChange={(e) =>
                     setForm({
                       ...form,
@@ -1140,14 +1140,14 @@ function ParametresProduitsContent() {
                   ))}
                 </select>
                 <p className="mt-1 text-[11px] font-normal text-muted">
-                  Marchandise et produit fini sont proposés sur stock. Un fini
-                  sur mesure peut rester en fabrication sur commande.
+                  Produit fini et marchandise : sur stock. Semi-fini :
+                  fabrication sur commande, commandable même sans stock. Vous
+                  pouvez changer le mode sur chaque fiche.
                 </p>
               </label>
             ) : (
               <p className="text-[11px] text-muted sm:col-span-2">
-                Les matières premières et les semi-finis ne se commandent pas
-                directement par un client.
+                Une matière première ne se commande pas par un client.
               </p>
             )}
             {moduleCompta && (
@@ -1485,9 +1485,9 @@ function ParametresProduitsContent() {
                   <td className="font-mono text-xs">{p.unite}</td>
                   <td className="text-xs">
                     {NATURE_STOCK_LABELS[natureStockDuProduit(p)]}
-                    {p.modeApprovisionnement === "fabrication_commande" && (
+                    {modeApprovisionnementDuProduit(p) && (
                       <span className="mt-0.5 block text-[11px] text-sea-800">
-                        Fabrication sur commande
+                        {MODE_APPROVISIONNEMENT_LABELS[modeApprovisionnementDuProduit(p)!]}
                       </span>
                     )}
                   </td>
@@ -1593,11 +1593,9 @@ function ParametresProduitsContent() {
                 </p>
                 <p className="text-xs text-muted">
                   {NATURE_STOCK_LABELS[natureStockDuProduit(selected)]}
-                  {selected.modeApprovisionnement === "fabrication_commande"
-                    ? " · Fabrication sur commande"
-                    : modeApprovisionnementDuProduit(selected) === "sur_stock"
-                      ? " · Sur stock"
-                      : ""}
+                  {modeApprovisionnementDuProduit(selected)
+                    ? ` · ${MODE_APPROVISIONNEMENT_LABELS[modeApprovisionnementDuProduit(selected)!]}`
+                    : ""}
                   {produitEstFabrique(selected)
                     ? achatSousTraitanceDuProduit(selected)
                       ? " · Sous-traitance possible"

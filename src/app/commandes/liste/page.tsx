@@ -49,6 +49,8 @@ import {
   creerSnapshotAcomptesDocument,
   libelleClient,
   lignesAcomptesPourDocument,
+  calculerTotaux,
+  modeRemiseGlobale,
   totauxCommande,
   persisterRemiseGlobale,
 } from "@/lib/commercial";
@@ -64,7 +66,7 @@ import {
   avancementLivraisonCommande,
   clonerLignesDocument,
   documentEstVerrouille,
-  LABEL_AVANCEMENT_LIVRAISON,
+  libelleAvancementLivraison,
   raisonDocumentNonModifiable,
   statutCommandeSelonLivraison,
   verrouTransformationActif,
@@ -75,6 +77,13 @@ import {
   moduleBonDePreparationActif,
   raisonGenerationBp,
 } from "@/lib/bon-de-preparation";
+import {
+  analyseLivraisonCommande,
+  lignesSortieCommande,
+  motifAucuneLigneLivrable,
+  nombreLignesEnFabricationNonLivrees,
+  STATUT_LIGNE_FABRICATION,
+} from "@/lib/mode-approvisionnement";
 import type { CommandeStatut, ModeRemise } from "@/lib/types";
 
 type Filtre = "tous" | CommandeStatut;
@@ -196,13 +205,18 @@ export default function ListeCommandesPage() {
         client: client?.nom ?? "",
         totalTTC: formatCurrency(t.totalTTC),
         acomptes: formatCurrency(t.acomptesTTC),
-        avancement:
-          LABEL_AVANCEMENT_LIVRAISON[
-            avancementLivraisonCommande(c, bonsDeLivraison)
-          ],
+        avancement: libelleAvancementLivraison(
+          avancementLivraisonCommande(c, bonsDeLivraison),
+          nombreLignesEnFabricationNonLivrees({
+            commande: c,
+            produits,
+            ofs: ordresFabrication ?? [],
+            bons: bonsDeLivraison,
+          }),
+        ),
         statut: COMMANDE_STATUTS[c.statut] ?? c.statut,
       })),
-    [lignes, bonsDeLivraison],
+    [lignes, bonsDeLivraison, produits, ordresFabrication],
   );
 
   const resume = useMemo(() => {
@@ -254,7 +268,23 @@ export default function ListeCommandesPage() {
         commande: c,
         ofs: ordresFabrication ?? [],
         parametres,
+        produits,
+        bons: bonsDeLivraison,
       });
+      if (motif) {
+        alert(motif);
+        return;
+      }
+    }
+    if (cible === "bon_de_livraison") {
+      const motif = motifAucuneLigneLivrable(
+        analyseLivraisonCommande({
+          commande: c,
+          produits,
+          ofs: ordresFabrication ?? [],
+          bons: bonsDeLivraison,
+        }),
+      );
       if (motif) {
         alert(motif);
         return;
@@ -287,6 +317,19 @@ export default function ListeCommandesPage() {
       );
       return;
     }
+    const etat = useStore.getState();
+    const analyse = analyseLivraisonCommande({
+      commande: c,
+      produits: etat.produits,
+      ofs: etat.ordresFabrication ?? [],
+      bons: etat.bonsDeLivraison,
+    });
+    const motifLivraison = motifAucuneLigneLivrable(analyse);
+    if (motifLivraison) {
+      alert(motifLivraison);
+      fermerValidation();
+      return;
+    }
     const numero = numeroPieceSuivant(
       "livraison",
       bonsDeLivraison.map((b) => b.numero),
@@ -303,8 +346,8 @@ export default function ListeCommandesPage() {
       devisId: c.devisId,
       tauxTVA: c.tauxTVA,
       conditionsPaiement: c.conditionsPaiement,
-      lignes: clonerLignesDocument(c.lignes, "bl"),
-      remiseGlobale: c.remiseGlobale,
+      lignes: clonerLignesDocument(lignesSortieCommande(c, analyse), "bl"),
+      remiseGlobale: analyse.integral ? c.remiseGlobale : 0,
       remiseGlobaleMode: c.remiseGlobaleMode,
       note: c.note,
     });
@@ -337,6 +380,19 @@ export default function ListeCommandesPage() {
       );
       return;
     }
+    const etat = useStore.getState();
+    const analyse = analyseLivraisonCommande({
+      commande: c,
+      produits: etat.produits,
+      ofs: etat.ordresFabrication ?? [],
+      bons: etat.bonsDeLivraison,
+    });
+    const motifLivraison = motifAucuneLigneLivrable(analyse);
+    if (motifLivraison) {
+      alert(motifLivraison);
+      fermerValidation();
+      return;
+    }
     const numero = numeroPieceSuivant(
       "preparation",
       (bonsDePreparation ?? []).map((b) => b.numero),
@@ -353,7 +409,7 @@ export default function ListeCommandesPage() {
       note: c.note,
       afficherPrix: false,
       lignes: lignesPreparationDepuisCommande(
-        c.lignes,
+        lignesSortieCommande(c, analyse),
         c.pointDeVenteId,
         emplacementsStock,
       ),
@@ -460,6 +516,31 @@ export default function ListeCommandesPage() {
   }
 
   const pendingCmd = commandes.find((c) => c.id === pending?.commandeId);
+  const analyseLivraisonPending = useMemo(() => {
+    if (!pendingCmd) return null;
+    return analyseLivraisonCommande({
+      commande: pendingCmd,
+      produits,
+      ofs: ordresFabrication ?? [],
+      bons: bonsDeLivraison,
+    });
+  }, [pendingCmd, produits, ordresFabrication, bonsDeLivraison]);
+  const lignesSortiePending =
+    pendingCmd && analyseLivraisonPending
+      ? lignesSortieCommande(pendingCmd, analyseLivraisonPending)
+      : [];
+  const totauxSortiePending = pendingCmd
+    ? analyseLivraisonPending?.integral
+      ? totauxCommande(pendingCmd, parametres, acomptes)
+      : calculerTotaux(
+          lignesSortiePending,
+          pendingCmd.tauxTVA ?? parametres.tauxTVA,
+          0,
+          assujettiTVA,
+          0,
+          modeRemiseGlobale(pendingCmd.remiseGlobaleMode),
+        )
+    : null;
   const numeroBlProvisoire = numeroPieceSuivant(
     "livraison",
     bonsDeLivraison.map((b) => b.numero),
@@ -1049,6 +1130,21 @@ export default function ListeCommandesPage() {
             );
           }}
         >
+          {pending.cible !== "facture" &&
+            analyseLivraisonPending &&
+            analyseLivraisonPending.enAttente.length > 0 && (
+              <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                Ces lignes restent sur la commande, elles ne sont pas encore
+                prêtes :{" "}
+                {analyseLivraisonPending.enAttente
+                  .map(
+                    (l) =>
+                      `${l.designation} (${STATUT_LIGNE_FABRICATION[l.statut]})`,
+                  )
+                  .join(", ")}
+                .
+              </p>
+            )}
           {pending.cible === "bon_de_preparation" ? (
             <DocumentPreview
               type="bon_de_preparation"
@@ -1063,11 +1159,11 @@ export default function ListeCommandesPage() {
               parametres={parametres}
               modele={modeleBp}
               lignes={lignesPreparationDepuisCommande(
-                pendingCmd.lignes,
+                lignesSortiePending,
                 pendingCmd.pointDeVenteId,
                 emplacementsStock,
               )}
-              totaux={totauxCommande(pendingCmd, parametres, acomptes)}
+              totaux={totauxSortiePending ?? totauxCommande(pendingCmd, parametres, acomptes)}
               note={pendingCmd.note}
               referenceCommande={pendingCmd.numero}
               afficherPrix={false}
@@ -1084,8 +1180,8 @@ export default function ListeCommandesPage() {
               )}
               parametres={parametres}
               modele={modeleBl}
-              lignes={pendingCmd.lignes}
-              totaux={totauxCommande(pendingCmd, parametres, acomptes)}
+              lignes={lignesSortiePending}
+              totaux={totauxSortiePending ?? totauxCommande(pendingCmd, parametres, acomptes)}
               conditionsPaiement={pendingCmd.conditionsPaiement}
               note={pendingCmd.note}
               referenceDevis={

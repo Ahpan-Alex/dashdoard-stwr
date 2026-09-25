@@ -37,6 +37,25 @@ export const LABEL_AVANCEMENT_LIVRAISON: Record<AvancementQuantite, string> = {
   totale: "Totalement livrée",
 };
 
+/**
+ * Libellé du statut global de livraison d'une commande.
+ * Le calcul (non livrée / partielle / totale) ne change pas.
+ * Si le reste à livrer inclut des lignes dont la fabrication n'est pas terminée,
+ * le libellé indique cette cause.
+ */
+export function libelleAvancementLivraison(
+  avancement: AvancementQuantite,
+  lignesEnFabrication = 0,
+): string {
+  const base = LABEL_AVANCEMENT_LIVRAISON[avancement];
+  if (avancement === "totale" || lignesEnFabrication <= 0) return base;
+  const cause =
+    lignesEnFabrication === 1
+      ? "1 ligne en fabrication"
+      : "plusieurs lignes en fabrication";
+  return `${base} — ${cause}`;
+}
+
 export const LABEL_AVANCEMENT_FACTURATION: Record<AvancementQuantite, string> = {
   aucune: "Non facturée",
   partielle: "Partiellement facturée",

@@ -48,21 +48,26 @@ export const STATUT_LIGNE_SUR_STOCK: Record<StatutLigneSurStock, string> = {
   livree: "Livrée",
 };
 
-/** Marchandise et fini se commandent. Matière et semi-fini, non. */
+/**
+ * Marchandise, fini et semi-fini se commandent.
+ * La matière première n'est pas une ligne de vente client.
+ */
 export function natureAdmetModeApprovisionnement(
   nature: ReturnType<typeof natureStockDuProduit>,
 ) {
-  return nature === "marchandise" || nature === "fini";
+  return nature === "marchandise" || nature === "fini" || nature === "semi_fini";
 }
 
 /**
- * Suggestion à l'ouverture du champ. Le choix reste libre :
- * un fini sur mesure peut être « fabrication sur commande ».
+ * Suggestion à l'ouverture du champ. Le choix reste libre ensuite :
+ * un fini sur mesure peut passer en fabrication sur commande,
+ * un semi-fini vendu tel quel peut passer sur stock.
  */
 export function modeApprovisionnementSuggere(
   nature: ReturnType<typeof natureStockDuProduit>,
 ): ModeApprovisionnement | null {
   if (!natureAdmetModeApprovisionnement(nature)) return null;
+  if (nature === "semi_fini") return "fabrication_commande";
   return "sur_stock";
 }
 
@@ -71,7 +76,8 @@ export function modeApprovisionnementEnregistre(
   choisi: ModeApprovisionnement | undefined | null,
 ): ModeApprovisionnement | undefined {
   if (!natureAdmetModeApprovisionnement(nature)) return undefined;
-  return choisi === "fabrication_commande" ? "fabrication_commande" : "sur_stock";
+  if (choisi === "fabrication_commande" || choisi === "sur_stock") return choisi;
+  return modeApprovisionnementSuggere(nature) ?? "sur_stock";
 }
 
 export function modeApprovisionnementDuProduit(
@@ -80,9 +86,13 @@ export function modeApprovisionnementDuProduit(
   if (!produit) return null;
   const nature = natureStockDuProduit(produit);
   if (!natureAdmetModeApprovisionnement(nature)) return null;
-  return produit.modeApprovisionnement === "fabrication_commande"
-    ? "fabrication_commande"
-    : "sur_stock";
+  if (
+    produit.modeApprovisionnement === "fabrication_commande" ||
+    produit.modeApprovisionnement === "sur_stock"
+  ) {
+    return produit.modeApprovisionnement;
+  }
+  return modeApprovisionnementSuggere(nature);
 }
 
 /** Snapshot de la ligne s'il existe, sinon la fiche actuelle. */
@@ -182,11 +192,7 @@ export function quantiteLivreeAffecteeLigne(
   return 0;
 }
 
-/**
- * Statut de ligne seulement. Le badge global de la commande
- * (par exemple « partiellement livrée ») n'intègre pas encore l'état des
- * ordres de fabrication. À reprendre avec les bons de livraison sur commandes mixtes.
- */
+/** Statut d'une ligne sur stock : disponibilité, puis livraisons déjà faites. */
 export function statutLigneSurStock(opts: {
   ligne: LigneDocument;
   commande: Pick<Commande, "id" | "lignes">;
@@ -304,4 +310,102 @@ export function lignesFabricationSansNomenclature(
     }
   }
   return noms;
+}
+
+export type AnalyseLivraisonCommande = {
+  /** Lignes produit prêtes, quantité = reste à livrer. */
+  livrables: LigneDocument[];
+  /** Lignes encore en fabrication, pas encore prêtes. */
+  enAttente: {
+    id: string;
+    designation: string;
+    statut: StatutLigneFabrication;
+  }[];
+  /**
+   * Toutes les lignes produit partent en une fois, à leur quantité d'origine.
+   * On peut alors recopier aussi les commentaires et sous-totaux.
+   */
+  integral: boolean;
+};
+
+/**
+ * Une commande mixte livre chaque ligne selon son état.
+ * Sur stock : le reste non encore livré.
+ * Fabrication sur commande : seulement quand l'ordre de fabrication est terminé
+ * (Prêt à livrer).
+ */
+export function analyseLivraisonCommande(opts: {
+  commande: Pick<Commande, "id" | "lignes">;
+  produits: Produit[];
+  ofs: OrdreFabrication[];
+  bons: BonDeLivraison[];
+}): AnalyseLivraisonCommande {
+  const livrables: LigneDocument[] = [];
+  const enAttente: AnalyseLivraisonCommande["enAttente"] = [];
+  let produitCount = 0;
+  let integral = true;
+  for (const ligne of opts.commande.lignes) {
+    if (!isLigneProduit(ligne) || !ligne.produitId) continue;
+    produitCount += 1;
+    const produit = opts.produits.find((p) => p.id === ligne.produitId);
+    const livree = quantiteLivreeAffecteeLigne(
+      opts.commande,
+      ligne,
+      opts.bons,
+    );
+    const reste = Math.max(0, ligne.quantite - livree);
+    if (ligneEstFabricationCommande(ligne, produit)) {
+      const statut = statutLigneFabrication(ligne, opts.commande.id, opts.ofs);
+      if (statut !== "pret_a_livrer") {
+        if (reste > 1e-9) {
+          enAttente.push({
+            id: ligne.id,
+            designation: ligne.designation,
+            statut,
+          });
+        }
+        integral = false;
+        continue;
+      }
+    }
+    if (reste <= 1e-9) {
+      integral = false;
+      continue;
+    }
+    if (reste + 1e-9 < ligne.quantite) integral = false;
+    livrables.push({ ...ligne, quantite: reste });
+  }
+  if (produitCount === 0 || livrables.length !== produitCount) integral = false;
+  return { livrables, enAttente, integral };
+}
+
+/** Lignes à recopier sur le bon : document entier, ou seulement le prêt à partir. */
+export function lignesSortieCommande(
+  commande: Pick<Commande, "lignes">,
+  analyse: AnalyseLivraisonCommande,
+): LigneDocument[] {
+  return analyse.integral ? [...commande.lignes] : analyse.livrables;
+}
+
+/** Lignes à fabriquer encore non livrées, ordre de fabrication non terminé. */
+export function nombreLignesEnFabricationNonLivrees(opts: {
+  commande: Pick<Commande, "id" | "lignes">;
+  produits: Produit[];
+  ofs: OrdreFabrication[];
+  bons: BonDeLivraison[];
+}): number {
+  return analyseLivraisonCommande(opts).enAttente.length;
+}
+
+export function motifAucuneLigneLivrable(
+  analyse: AnalyseLivraisonCommande,
+): string | null {
+  if (analyse.livrables.length > 0) return null;
+  if (analyse.enAttente.length === 0) {
+    return "Cette commande est déjà livrée.";
+  }
+  const details = analyse.enAttente
+    .map((l) => `${l.designation} (${STATUT_LIGNE_FABRICATION[l.statut]})`)
+    .join(", ");
+  return `Aucune ligne n'est prête à livrer : ${details}. Terminez la fabrication depuis la commande, puis relancez le bon de livraison.`;
 }

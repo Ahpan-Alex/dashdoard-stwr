@@ -4,7 +4,12 @@ import { isLigneProduit } from "./commercial";
 import { createId } from "./id";
 import { produitEstFabrique } from "./nature-stock";
 import { emplacementParDefautDuSite } from "./emplacements-stock";
+import {
+  analyseLivraisonCommande,
+  motifAucuneLigneLivrable,
+} from "./mode-approvisionnement";
 import type {
+  BonDeLivraison,
   BonDePreparation,
   BonDePreparationStatut,
   Commande,
@@ -74,6 +79,8 @@ export function raisonGenerationBp(opts: {
   commande: Commande | undefined;
   ofs: OrdreFabrication[];
   parametres?: Parametres | null;
+  produits?: Produit[];
+  bons?: BonDeLivraison[];
 }): string | null {
   if (!moduleBonDePreparationActif(opts.parametres)) {
     return "Le bon de préparation n'est pas activé (Paramètres → Documents commerciaux).";
@@ -84,9 +91,19 @@ export function raisonGenerationBp(opts: {
   if (c.statut === "brouillon") {
     return "Confirmez d'abord la commande avant de générer un bon de préparation.";
   }
+  if (opts.produits) {
+    return motifAucuneLigneLivrable(
+      analyseLivraisonCommande({
+        commande: c,
+        produits: opts.produits,
+        ofs: opts.ofs,
+        bons: opts.bons ?? [],
+      }),
+    );
+  }
   const ouverts = ofsOuvertsPourCommande(c.id, opts.ofs);
   if (ouverts.length > 0) {
-    return `Clôturez d'abord les OF liés (${ouverts.map((o) => o.numero).join(", ")}).`;
+    return `Terminez d'abord la fabrication liée (${ouverts.map((o) => o.numero).join(", ")}).`;
   }
   return null;
 }

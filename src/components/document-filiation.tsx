@@ -7,12 +7,13 @@ import {
   avancementPreparationCommande,
   couleurAvancement,
   LABEL_AVANCEMENT_FACTURATION,
-  LABEL_AVANCEMENT_LIVRAISON,
   LABEL_AVANCEMENT_PREPARATION,
+  libelleAvancementLivraison,
   LABEL_CIBLE_TRANSFORMATION,
   LABEL_SOURCE_TRANSFORMATION,
 } from "@/lib/transformation-document";
 import { moduleBonDePreparationActif } from "@/lib/bon-de-preparation";
+import { nombreLignesEnFabricationNonLivrees } from "@/lib/mode-approvisionnement";
 import { formatDateTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { BonDeLivraison, Commande } from "@/lib/types";
@@ -96,10 +97,18 @@ export function BadgesAvancementCommande({ commande }: { commande: Commande }) {
   const bonsDePreparation = useStore((s) => s.bonsDePreparation ?? []);
   const factures = useStore((s) => s.factures);
   const parametres = useStore((s) => s.parametres);
+  const produits = useStore((s) => s.produits);
+  const ordresFabrication = useStore((s) => s.ordresFabrication);
   const liv = avancementLivraisonCommande(commande, bonsDeLivraison);
   const fac = avancementFacturationCommande(commande, factures);
   const prep = avancementPreparationCommande(commande, bonsDePreparation);
   const showPrep = moduleBonDePreparationActif(parametres);
+  const lignesEnFabrication = nombreLignesEnFabricationNonLivrees({
+    commande,
+    produits,
+    ofs: ordresFabrication ?? [],
+    bons: bonsDeLivraison,
+  });
   return (
     <div className="flex flex-wrap gap-1">
       {showPrep && (
@@ -108,7 +117,7 @@ export function BadgesAvancementCommande({ commande }: { commande: Commande }) {
         </span>
       )}
       <span className={`badge badge-${couleurAvancement(liv)}`}>
-        {LABEL_AVANCEMENT_LIVRAISON[liv]}
+        {libelleAvancementLivraison(liv, lignesEnFabrication)}
       </span>
       <span className={`badge badge-${couleurAvancement(fac)}`}>
         {LABEL_AVANCEMENT_FACTURATION[fac]}

@@ -334,8 +334,8 @@ export type Produit = {
   natureStock?: NatureStock;
   /**
    * Sur stock (négoce) ou fabrication sur commande.
-   * Pertinent seulement pour marchandise standard et produit fini.
-   * Absent = sur stock.
+   * Marchandise, fini et semi-fini. Pas les matières premières.
+   * Absent : sur stock pour marchandise et fini, fabrication sur commande pour un semi-fini.
    */
   modeApprovisionnement?: "sur_stock" | "fabrication_commande";
   /**
