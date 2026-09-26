@@ -51,6 +51,7 @@ import {
   ttcAvoirsValides,
   motifDestinationAchatManquante,
 } from "@/lib/achats";
+import { MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE } from "@/lib/besoins-achat";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { achatConcerneSite, sommeRepartitions } from "@/lib/sites";
@@ -570,6 +571,11 @@ function AchatsListe() {
                       >
                         {a.numero}
                       </button>
+                      {a.commandeClientOrigineSupprimee && (
+                        <span className="badge badge-sand ml-2">
+                          {MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE}
+                        </span>
+                      )}
                     </TdCol>
                     <TdCol id="date" show={visible}>{formatDate(a.date)}</TdCol>
                     <TdCol id="fournisseur" show={visible}>{nomFrn(a.fournisseurId)}</TdCol>
@@ -843,6 +849,13 @@ function AchatEditor({
           <Link href={`/commandes?id=${commandeLiee.id}`} className="font-semibold text-sea-800">
             {commandeLiee.numero}
           </Link>
+        </p>
+      )}
+      {achat.commandeClientOrigineSupprimee && !commandeLiee && (
+        <p className="mb-3">
+          <span className="badge badge-sand">
+            {MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE}
+          </span>
         </p>
       )}
       {achat.destinationAchat === "approvisionnement_stock" && !commandeLiee && (

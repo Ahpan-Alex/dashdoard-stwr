@@ -154,3 +154,85 @@ export function besoinsPourOf(besoins: BesoinAchat[], ofId: string) {
 export function modePaiementAchatVisible(achat: Achat) {
   return achat.modePaiement || achat.paiements[0]?.modePaiement;
 }
+
+export const MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE =
+  "Commande client d'origine supprimée";
+
+function achatVientDeLaDemande(achat: Achat, besoinIds: Set<string>, commandeId: string) {
+  if (achat.alerteMatiereCommandeId === commandeId) return true;
+  if (achat.besoinAchatId && besoinIds.has(achat.besoinAchatId)) return true;
+  return (achat.lignes ?? []).some(
+    (l) => l.besoinAchatId != null && besoinIds.has(l.besoinAchatId),
+  );
+}
+
+function achatFerme(achat: Achat) {
+  return achat.statut !== "annule";
+}
+
+/**
+ * Suppression d'une commande client : les DA nées de son alerte matière
+ * disparaissent tant qu'elles n'ont pas de commande fournisseur.
+ * Dès qu'une commande fournisseur non annulée existe, elle reste et son lien
+ * vers la commande client est marqué rompu. Les achats créés hors de ce flux
+ * ne sont pas modifiés.
+ */
+export function cascadeDemandeAchatSuppressionCommande(opts: {
+  commandeId: string;
+  besoins: BesoinAchat[];
+  achats: Achat[];
+}): {
+  besoins: BesoinAchat[];
+  achats: Achat[];
+  besoinsSupprimes: BesoinAchat[];
+  achatsOrphelins: Achat[];
+} {
+  const lies = (opts.besoins ?? []).filter(
+    (b) =>
+      b.origine === "alerte_matiere_commande" && b.commandeId === opts.commandeId,
+  );
+  const ids = new Set(lies.map((b) => b.id));
+  const concerne = (a: Achat) => achatVientDeLaDemande(a, ids, opts.commandeId);
+  const achatsConcernes = (opts.achats ?? []).filter(concerne);
+
+  const supprimer = new Set<string>();
+  for (const besoin of lies) {
+    const fermes = achatsConcernes.filter(
+      (a) => achatFerme(a) && achatCouvreBesoin(a, besoin.id),
+    );
+    if (fermes.length === 0) supprimer.add(besoin.id);
+  }
+
+  const achats = (opts.achats ?? []).map((achat) => {
+    if (!concerne(achat)) return achat;
+    if (achat.commandeId && achat.commandeId !== opts.commandeId) return achat;
+    if (achat.commandeClientOrigineSupprimee && achat.commandeId === opts.commandeId) {
+      return achat;
+    }
+    return {
+      ...achat,
+      commandeId: achat.commandeId ?? opts.commandeId,
+      commandeClientOrigineSupprimee: true,
+    };
+  });
+
+  const achatsOrphelins = achats.filter(
+    (achat, index) =>
+      achat !== (opts.achats ?? [])[index] &&
+      achat.commandeClientOrigineSupprimee === true &&
+      achatFerme(achat),
+  );
+
+  const besoins = (opts.besoins ?? []).flatMap((besoin) => {
+    if (!ids.has(besoin.id)) return [besoin];
+    if (supprimer.has(besoin.id)) return [];
+    return [{ ...besoin, commandeClientOrigineSupprimee: true }];
+  });
+
+  return {
+    besoins,
+    achats,
+    besoinsSupprimes: lies.filter((b) => supprimer.has(b.id)),
+    achatsOrphelins,
+  };
+}

@@ -120,9 +120,9 @@ const OF_IGNORES = new Set(["annule", "cloture_annule"]);
 export function ofsLiesALaLigne(
   ligne: Pick<LigneDocument, "id" | "produitId">,
   commandeId: string,
-  ofs: OrdreFabrication[],
+  ofs: OrdreFabrication[] | null | undefined,
 ) {
-  const vivants = ofs.filter((o) => !OF_IGNORES.has(o.statut));
+  const vivants = (ofs ?? []).filter((o) => !OF_IGNORES.has(o.statut));
   const directs = vivants.filter((o) => o.ligneCommandeId === ligne.id);
   if (directs.length > 0) return directs;
   if (!ligne.produitId) return [];
@@ -137,7 +137,7 @@ export function ofsLiesALaLigne(
 export function statutLigneFabrication(
   ligne: Pick<LigneDocument, "id" | "produitId" | "quantite">,
   commandeId: string,
-  ofs: OrdreFabrication[],
+  ofs: OrdreFabrication[] | null | undefined,
 ): StatutLigneFabrication {
   const lies = ofsLiesALaLigne(ligne, commandeId, ofs);
   const qteClose = lies

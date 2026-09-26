@@ -14,6 +14,7 @@ import {
   badgeClasseBesoin,
   BESOIN_ACHAT_STATUT_LABELS,
   couvertureBesoin,
+  MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE,
   statutBesoinAchat,
 } from "@/lib/besoins-achat";
 import { formatDate } from "@/lib/format";
@@ -149,6 +150,11 @@ export default function BesoinsAchatPage() {
                       >
                         {b.numero}
                       </Link>
+                      {b.commandeClientOrigineSupprimee && (
+                        <span className="badge badge-sand ml-2">
+                          {MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE}
+                        </span>
+                      )}
                     </td>
                     <td>{formatDate(b.date)}</td>
                     <td>{p ? `${p.code} — ${libelleProduit(p)}` : "Article"}</td>

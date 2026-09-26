@@ -9,6 +9,7 @@ import {
   natureStockDuProduit,
   produitEstFabrique,
 } from "./nature-stock";
+import { produitPeutEntrerDansNomenclature } from "./of-chaine";
 import { TYPE_CALCUL_NOMENCLATURE_LABELS } from "./nomenclature-formules";
 import {
   isCodeProduitValide,
@@ -632,8 +633,12 @@ export function analyserLignesImportNomenc(
       ligne.erreurs.push(`Composant « ${champs.codeComposant} » introuvable.`);
     } else {
       const nat = natureStockDuProduit(composant);
-      if (nat !== "matiere_premiere" && nat !== "semi_fini") {
-        ligne.erreurs.push("Le composant doit être matière première ou semi-fini.");
+      if (!produitPeutEntrerDansNomenclature(composant)) {
+        ligne.erreurs.push(
+          nat === "fini"
+            ? "Un produit fini n'entre dans une nomenclature qu'en fabrication sur commande."
+            : "Le composant doit être matière première ou semi-fini.",
+        );
       }
     }
     if (produit && composant && produit.id === composant.id) {

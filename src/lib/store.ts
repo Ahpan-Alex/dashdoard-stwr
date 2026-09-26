@@ -123,6 +123,7 @@ import {
 } from "./repartition-achat-of";
 import { ctxReservationDepuisEtat } from "./reservation-commande";
 import {
+  cascadeDemandeAchatSuppressionCommande,
   motifBesoinAchatInvalide,
   nextNumeroBesoinAchat,
   prorataRepartitionsOf,
@@ -251,6 +252,7 @@ import {
   cycleNomenclature,
   normaliserNomenclatures,
 } from "./nomenclature";
+import { motifLienOfEnfant } from "./of-chaine";
 import {
   dimensionDepuisCommande,
   motifDimensionNomenclatureManquante,
@@ -656,6 +658,8 @@ type Store = {
     pointDeVenteId: string;
     repartitionsOf?: Achat["lignes"][number]["repartitionsOf"];
     note?: string;
+    commandeId?: string;
+    origine?: BesoinAchat["origine"];
   }) => { ok: true; id: string } | { ok: false; reason: string };
   modifierBesoinAchat: (
     id: string,
@@ -683,7 +687,12 @@ type Store = {
     note?: string;
     dimensionLargeur?: number;
     dimensionHauteur?: number;
+    ofParentId?: string;
   }) => { ok: true; id: string } | { ok: false; reason: string };
+  lierOfEnfant: (
+    parentId: string,
+    enfantId: string,
+  ) => { ok: boolean; reason?: string };
   modifierOrdreFabrication: (
     id: string,
     data: Partial<
@@ -4106,6 +4115,8 @@ export const useStore = create<Store>()((set, get) => ({
             id: r.id || uid("bao"),
           })),
           note: data.note?.trim() || undefined,
+          commandeId: data.commandeId,
+          origine: data.origine,
         };
         set((s) => ({
           besoinsAchat: [nouveau, ...(s.besoinsAchat ?? [])],
@@ -4194,6 +4205,8 @@ export const useStore = create<Store>()((set, get) => ({
               ? state.ordresFabrication.find((o) => o.id === ofsUniques[0] && o.commandeId)
               : undefined;
         const destOf = destinationDepuisOf(ofPrincipal);
+        const depuisAlerte =
+          besoin.origine === "alerte_matiere_commande" ? besoin.commandeId : undefined;
         const achatId = uid("ach");
         const numero = nextNumeroAchat(state.achats, optsNum(state));
         const actor = getActiviteActor();
@@ -4229,8 +4242,13 @@ export const useStore = create<Store>()((set, get) => ({
           modePaiement: data.modePaiement,
           ofId: ofsUniques.length === 1 ? ofsUniques[0] : undefined,
           ofComposantId: ofsUniques.length === 1 ? besoin.produitId : undefined,
-          destinationAchat: destOf.destinationAchat,
-          commandeId: destOf.commandeId,
+          destinationAchat: destOf.commandeId
+            ? destOf.destinationAchat
+            : depuisAlerte
+              ? "projet_client"
+              : destOf.destinationAchat,
+          commandeId: destOf.commandeId ?? depuisAlerte,
+          alerteMatiereCommandeId: depuisAlerte,
         };
         set((s) => ({
           achats: [achat, ...s.achats],
@@ -4294,6 +4312,17 @@ export const useStore = create<Store>()((set, get) => ({
           dimensionHauteur,
         );
         if (motifDim) return { ok: false, reason: motifDim };
+        const parent = data.ofParentId
+          ? state.ordresFabrication.find((o) => o.id === data.ofParentId)
+          : undefined;
+        if (data.ofParentId) {
+          const motifLien = motifLienOfEnfant({
+            parent,
+            produit: produit!,
+            ofs: state.ordresFabrication,
+          });
+          if (motifLien) return { ok: false, reason: motifLien };
+        }
         const nouveau: OrdreFabrication = {
           id: uid("of"),
           numero: nextNumeroOf(state.ordresFabrication),
@@ -4305,6 +4334,7 @@ export const useStore = create<Store>()((set, get) => ({
           nomenclatureLignes: copie.lignes,
           commandeId: data.commandeId,
           ligneCommandeId: data.ligneCommandeId,
+          ofParentId: data.ofParentId,
           dimensionLargeur,
           dimensionHauteur,
           statut: "brouillon",
@@ -4324,11 +4354,42 @@ export const useStore = create<Store>()((set, get) => ({
             entreeActivite("creation", "ordre_fabrication", {
               entiteId: nouveau.id,
               libelle: nouveau.numero,
+              detail: parent ? `OF enfant de ${parent.numero}` : undefined,
             }),
             ...s.journalActivites,
           ],
         }));
         return { ok: true, id: nouveau.id };
+      },
+
+      lierOfEnfant: (parentId, enfantId) => {
+        const state = get();
+        const parent = state.ordresFabrication.find((o) => o.id === parentId);
+        const enfant = state.ordresFabrication.find((o) => o.id === enfantId);
+        if (!enfant) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const produit = state.produits.find((p) => p.id === enfant.produitId);
+        const motif = motifLienOfEnfant({
+          parent,
+          enfant,
+          produit,
+          ofs: state.ordresFabrication,
+        });
+        if (motif) return { ok: false, reason: motif };
+        if (enfant.ofParentId === parentId) return { ok: true };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) =>
+            o.id === enfantId ? { ...o, ofParentId: parentId } : o,
+          ),
+          journalActivites: [
+            entreeActivite("modification", "ordre_fabrication", {
+              entiteId: enfantId,
+              libelle: enfant.numero,
+              detail: parent ? `Lié à l'OF ${parent.numero}` : undefined,
+            }),
+            ...s.journalActivites,
+          ],
+        }));
+        return { ok: true };
       },
 
       modifierOrdreFabrication: (id, data) => {
@@ -8794,10 +8855,34 @@ export const useStore = create<Store>()((set, get) => ({
       deleteCommande: (id) => {
         const state = get();
         const prev = state.commandes.find((c) => c.id === id);
+        const cascade = cascadeDemandeAchatSuppressionCommande({
+          commandeId: id,
+          besoins: state.besoinsAchat ?? [],
+          achats: state.achats ?? [],
+        });
+        const journalCascade = [
+          ...cascade.besoinsSupprimes.map((b) =>
+            entreeActivite("suppression", "besoin_achat", {
+              entiteId: b.id,
+              libelle: b.numero,
+              detail: prev ? `Commande ${prev.numero} supprimée` : undefined,
+            }),
+          ),
+          ...cascade.achatsOrphelins.map((a) =>
+            entreeActivite("modification", "achat", {
+              entiteId: a.id,
+              libelle: a.numero,
+              detail: "Commande client d'origine supprimée",
+            }),
+          ),
+        ];
         set((s) => ({
           commandes: s.commandes.filter((c) => c.id !== id),
           bonsATirer: (s.bonsATirer ?? []).filter((b) => b.commandeId !== id),
+          besoinsAchat: cascade.besoins,
+          achats: cascade.achats,
           journalActivites: [
+            ...journalCascade,
             entreeActivite("suppression", "commande", {
               entiteId: id,
               libelle: prev?.numero,

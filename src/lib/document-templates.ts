@@ -741,6 +741,7 @@ export function hasRubrique(
 export function zonesDuModele(modele: ModeleDocument | undefined): ModeleZones {
   if (!modele) return zonesParDefaut("facture");
   if (modele.zones) return ensureZones(modele);
+  if (!Array.isArray(modele.rubriques)) return zonesParDefaut(modele.type);
 
   const base = zonesParDefaut(modele.type);
   const has = (id: DocumentRubriqueId) => modele.rubriques.includes(id);

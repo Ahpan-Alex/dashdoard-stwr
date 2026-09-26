@@ -579,6 +579,7 @@ export function DocumentSaisieWizard({
           <AlerteMatieresCommande
             lignes={draftToLignes(lignes)}
             pointDeVenteId={pointDeVenteId}
+            commandeId={horsCommandeId}
           />
         </div>
       )}

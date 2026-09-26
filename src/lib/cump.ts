@@ -135,12 +135,12 @@ export function evenementsCumpProduit(opts: {
   const {
     produitId,
     pointDeVenteId,
-    entrees,
-    ventes,
     inventaires,
     exclureInventaireId,
     jusquA,
   } = opts;
+  const entrees = Array.isArray(opts.entrees) ? opts.entrees : [];
+  const ventes = Array.isArray(opts.ventes) ? opts.ventes : [];
   const limite = jusquA ? endOfDay(jusquA) : undefined;
   const inclus = (iso: string) =>
     !limite || parseISO(iso).getTime() <= limite.getTime();
@@ -185,7 +185,7 @@ export function evenementsCumpProduit(opts: {
     exclureInventaireId,
   )) {
     if (!inclus(inv.date)) continue;
-    const ligne = inv.lignes.find((l) => l.produitId === produitId);
+    const ligne = (inv.lignes ?? []).find((l) => l.produitId === produitId);
     if (!ligne) continue;
     events.push({
       date: inv.date,

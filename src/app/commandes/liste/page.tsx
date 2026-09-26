@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,7 +14,7 @@ import {
   type DraftLigne,
 } from "@/components/document-saisie-wizard";
 import { DocumentPreview } from "@/components/document-preview";
-import { DocumentPrintActions } from "@/components/document-print-actions";
+import { ApercuCommandeListe } from "@/components/apercu-commande-liste";
 import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import {
   ExportDocumentPdfButton,
@@ -25,9 +25,7 @@ import {
   DocumentFiliation,
   OfLiesCommande,
 } from "@/components/document-filiation";
-import { BatCommandePanel } from "@/components/bat-commande";
 import {
-  PanneauApprovisionnementCommande,
   ResumeLignesFabrication,
 } from "@/components/commande-lignes-approvisionnement";
 import {
@@ -149,7 +147,6 @@ export default function ListeCommandesPage() {
     setFiltre(filtreDepuisQuery(searchParams.get("statut")));
   }, [searchParams]);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const previewSheetRef = useRef<HTMLDivElement>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [wizardKey, setWizardKey] = useState(0);
   const [seed, setSeed] = useState<{
@@ -1027,77 +1024,11 @@ export default function ListeCommandesPage() {
       </div>
 
       {preview && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 no-print">
-          <div className="my-6 w-full max-w-[220mm]">
-            <div className="mb-3 flex justify-end gap-2">
-              <DocumentPrintActions
-                sheetRef={previewSheetRef}
-                filename={`Commande ${preview.numero}`}
-              />
-              <EnvoiDocumentBouton
-                filename={preview.numero}
-                typeDocument="commande"
-                numero={preview.numero}
-                entiteId={preview.id}
-                client={clients.find((c) => c.id === preview.clientId)}
-              >
-                <DocumentPreview
-                  type="commande"
-                  numero={preview.numero}
-                  date={preview.date}
-                  client={clients.find((c) => c.id === preview.clientId)}
-                  pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
-                  parametres={parametres}
-                  modele={modele}
-                  lignes={preview.lignes}
-                  totaux={totauxCommande(preview, parametres, acomptes)}
-                  conditionsPaiement={preview.conditionsPaiement}
-                  note={preview.note}
-                  validiteJours={preview.validiteJours}
-                  referenceDevis={
-                    devis.find((d) => d.id === preview.devisId)?.numero
-                  }
-                  acomptesDetail={lignesAcomptesPourDocument(acomptes, {
-                    commandeId: preview.id,
-                    devisId: preview.devisId,
-                  })}
-                />
-              </EnvoiDocumentBouton>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setPreviewId(null)}
-              >
-                Fermer
-              </button>
-            </div>
-            <DocumentPreview
-              ref={previewSheetRef}
-              type="commande"
-              numero={preview.numero}
-              date={preview.date}
-              client={clients.find((c) => c.id === preview.clientId)}
-              pdv={pointsDeVente.find((p) => p.id === preview.pointDeVenteId)}
-              parametres={parametres}
-              modele={modele}
-              lignes={preview.lignes}
-              totaux={totauxCommande(preview, parametres, acomptes)}
-              conditionsPaiement={preview.conditionsPaiement}
-              note={preview.note}
-              validiteJours={preview.validiteJours}
-              referenceDevis={
-                devis.find((d) => d.id === preview.devisId)?.numero
-              }
-              acomptesDetail={lignesAcomptesPourDocument(acomptes, {
-                commandeId: preview.id,
-                devisId: preview.devisId,
-              })}
-            />
-            <DocumentFiliation documentId={preview.id} />
-            <PanneauApprovisionnementCommande commande={preview} />
-            <OfLiesCommande commandeId={preview.id} />
-            <BatCommandePanel commandeId={preview.id} />
-          </div>
-        </div>
+        <ApercuCommandeListe
+          commande={preview}
+          onFermer={() => setPreviewId(null)}
+          onOuvrir={() => ouvrirEdition(preview.id)}
+        />
       )}
 
       {pending && pendingCmd && (

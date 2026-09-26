@@ -67,10 +67,9 @@ export function DocumentFiliation({ documentId }: { documentId: string }) {
 }
 
 export function OfLiesCommande({ commandeId }: { commandeId: string }) {
-  const ofs = useStore((s) =>
-    (s.ordresFabrication ?? []).filter(
-      (o) => o.commandeId === commandeId && o.statut !== "annule",
-    ),
+  const ordresFabrication = useStore((s) => s.ordresFabrication);
+  const ofs = (ordresFabrication ?? []).filter(
+    (o) => o.commandeId === commandeId && o.statut !== "annule",
   );
   if (ofs.length === 0) return null;
   return (

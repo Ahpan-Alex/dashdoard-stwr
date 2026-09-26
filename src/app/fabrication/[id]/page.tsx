@@ -25,7 +25,7 @@ import {
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
-import { natureStockDuProduit, produitEstAchetable } from "@/lib/nature-stock";
+import { natureStockDuProduit } from "@/lib/nature-stock";
 import {
   dimensionDepuisCommande,
   TYPE_CALCUL_NOMENCLATURE_LABELS,
@@ -38,6 +38,17 @@ import { siteEstAtelier, sitesMagasin } from "@/lib/sites";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
 import { resoudreDemarrageOf } from "@/lib/of-derogation-bat";
+import {
+  actionRuptureComposant,
+  lignesOfsEnfants,
+  messageAlerteOfsEnfants,
+  ofsLiablesPourComposant,
+  produitPeutEntrerDansNomenclature,
+} from "@/lib/of-chaine";
+import {
+  AlerteOfEnfantsOuverts,
+  OfEnfantsLies,
+} from "@/components/of-enfants-lies";
 import {
   BAT_STATUTS,
   batCourant,
@@ -115,6 +126,8 @@ export default function OrdreFabricationDetailPage() {
     annulerOrdreFabrication,
     creerDemandeAchatDepuisOf,
     creerBesoinAchat,
+    creerOrdreFabrication,
+    lierOfEnfant,
   } = useStore();
   const { visibles, rattache } = useSitesVisibles();
   const tousSites = useStore((s) => s.pointsDeVente);
@@ -124,6 +137,10 @@ export default function OrdreFabricationDetailPage() {
 
   const [clotureOpen, setClotureOpen] = useState(false);
   const [da, setDa] = useState<{ composantId: string; manquant: number } | null>(null);
+  const [ofEnfant, setOfEnfant] = useState<{
+    composantId: string;
+    manquant: number;
+  } | null>(null);
 
   const nomSite = (sid: string) =>
     tousSites.find((s) => s.id === sid)?.nom ?? visibles.find((s) => s.id === sid)?.nom ?? "Site";
@@ -184,6 +201,11 @@ export default function OrdreFabricationDetailPage() {
         {commande && (
           <Link href="/commandes/liste" className="badge badge-sea">
             Commande {commande.numero}
+          </Link>
+        )}
+        {of.ofParentId && ofs.some((o) => o.id === of.ofParentId) && (
+          <Link href={`/fabrication/${of.ofParentId}`} className="badge badge-sea">
+            Alimente {ofs.find((o) => o.id === of.ofParentId)?.numero}
           </Link>
         )}
         {commande && (
@@ -321,6 +343,9 @@ export default function OrdreFabricationDetailPage() {
             </Link>
           </p>
         )}
+        <AlerteOfEnfantsOuverts
+          message={messageAlerteOfsEnfants(of.id, ofs, produits)}
+        />
         <div className="mt-4 flex flex-wrap gap-2">
           {brouillon && (
             <button type="button" className="btn btn-primary" onClick={lancer}>
@@ -344,6 +369,8 @@ export default function OrdreFabricationDetailPage() {
           )}
         </div>
       </section>
+
+      <OfEnfantsLies lignes={lignesOfsEnfants(of.id, ofs, produits)} />
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">Nomenclature de cet OF</h2>
@@ -401,7 +428,8 @@ export default function OrdreFabricationDetailPage() {
               (p) =>
                 p.actif &&
                 p.id !== of.produitId &&
-                natureStockDuProduit(p) !== "fini",
+                (natureStockDuProduit(p) !== "fini" ||
+                  p.modeApprovisionnement === "fabrication_commande"),
             )}
             sites={tousSites.filter((s) => s.actif && rattache(s.id))}
             ateliers={ateliers}
@@ -488,6 +516,8 @@ export default function OrdreFabricationDetailPage() {
                 },
               );
               if (dispo + 1e-9 >= manquant || manquant <= 0) return null;
+              const action = actionRuptureComposant(c);
+              const liables = ofsLiablesPourComposant(of.id, c.id, ofs);
               return (
                 <div
                   key={l.id}
@@ -497,7 +527,28 @@ export default function OrdreFabricationDetailPage() {
                     Stock insuffisant pour {c.code} (besoin restant {formatNumber(manquant)},
                     dispo atelier {formatNumber(dispo)}).
                   </span>
-                      {produitEstAchetable(c) ? (
+                  {action === "of_enfant" ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      {liables
+                        .filter((o) => o.ofParentId === of.id)
+                        .map((o) => (
+                          <Link
+                            key={o.id}
+                            href={`/fabrication/${o.id}`}
+                            className="font-semibold text-sea-800"
+                          >
+                            {o.numero}
+                          </Link>
+                        ))}
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setOfEnfant({ composantId: c.id, manquant })}
+                      >
+                        Créer un OF enfant
+                      </button>
+                    </span>
+                  ) : action === "demande_achat" ? (
                     <>
                     <button
                       type="button"
@@ -835,6 +886,41 @@ export default function OrdreFabricationDetailPage() {
           }}
         />
       )}
+
+      {ofEnfant && (
+        <OfEnfantModal
+          composant={produits.find((p) => p.id === ofEnfant.composantId)}
+          manquant={ofEnfant.manquant}
+          ateliers={ateliers}
+          liables={ofsLiablesPourComposant(of.id, ofEnfant.composantId, ofs).filter(
+            (o) => !o.ofParentId,
+          )}
+          onClose={() => setOfEnfant(null)}
+          onCreer={(atelierId, quantite) => {
+            const res = creerOrdreFabrication({
+              atelierId,
+              produitId: ofEnfant.composantId,
+              quantitePrevue: quantite,
+              ofParentId: of.id,
+              commandeId: of.commandeId,
+            });
+            if (!res.ok) {
+              alert(res.reason);
+              return;
+            }
+            setOfEnfant(null);
+            router.push(`/fabrication/${res.id}`);
+          }}
+          onLier={(enfantId) => {
+            const res = lierOfEnfant(of.id, enfantId);
+            if (!res.ok) {
+              alert(res.reason);
+              return;
+            }
+            setOfEnfant(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -855,13 +941,11 @@ function NomenclatureOf({
     libelleCourt: string;
     libelleLong: string;
     natureStock?: NatureStock;
+    modeApprovisionnement?: "sur_stock" | "fabrication_commande";
   }[];
   onChange: (lignes: OfNomenclatureLigne[]) => void;
 }) {
-  const composants = produits.filter((p) => {
-    const n = natureStockDuProduit(p);
-    return n === "matiere_premiere" || n === "semi_fini";
-  });
+  const composants = produits.filter((p) => produitPeutEntrerDansNomenclature(p));
   return (
     <div>
       <table className="data">
@@ -1499,6 +1583,105 @@ function ClotureModal({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function OfEnfantModal({
+  composant,
+  manquant,
+  ateliers,
+  liables,
+  onClose,
+  onCreer,
+  onLier,
+}: {
+  composant?: { code: string; libelleCourt: string; libelleLong: string };
+  manquant: number;
+  ateliers: PointDeVente[];
+  liables: { id: string; numero: string }[];
+  onClose: () => void;
+  onCreer: (atelierId: string, quantite: number) => void;
+  onLier: (enfantId: string) => void;
+}) {
+  const [atelierId, setAtelierId] = useState(ateliers[0]?.id ?? "");
+  const [quantite, setQuantite] = useState(String(manquant));
+  const [existantId, setExistantId] = useState(liables[0]?.id ?? "");
+  const nom = composant ? `${composant.code} — ${libelleProduit(composant)}` : "Composant";
+
+  function creer(e: FormEvent) {
+    e.preventDefault();
+    const q = Number(quantite);
+    if (!atelierId || !(q > 0)) return;
+    onCreer(atelierId, q);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <form onSubmit={creer} className="w-full max-w-md rounded-[var(--radius)] bg-card p-5 shadow-lg">
+        <h2 className="font-display text-lg font-semibold">OF enfant</h2>
+        <p className="mt-1 text-sm text-muted">
+          {nom} se fabrique. La création reste manuelle.
+        </p>
+        <label className="mt-4 block text-xs font-semibold text-muted">
+          Atelier
+          <select
+            className="select mt-1"
+            value={atelierId}
+            onChange={(e) => setAtelierId(e.target.value)}
+          >
+            {ateliers.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-3 block text-xs font-semibold text-muted">
+          Quantité prévue
+          <input
+            type="number"
+            min={0}
+            step="any"
+            className="input mt-1"
+            value={quantite}
+            onChange={(e) => setQuantite(e.target.value)}
+          />
+        </label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="submit" className="btn btn-primary" disabled={!atelierId}>
+            Créer un OF enfant
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Fermer
+          </button>
+        </div>
+        {liables.length > 0 && (
+          <div className="mt-4 border-t border-line pt-4">
+            <label className="block text-xs font-semibold text-muted">
+              OF déjà créé
+              <select
+                className="select mt-1"
+                value={existantId}
+                onChange={(e) => setExistantId(e.target.value)}
+              >
+                {liables.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.numero}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary mt-3"
+              onClick={() => existantId && onLier(existantId)}
+            >
+              Lier un OF existant
+            </button>
+          </div>
+        )}
+      </form>
     </div>
   );
 }

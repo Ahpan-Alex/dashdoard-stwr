@@ -50,9 +50,11 @@ function useContexteAppro() {
 export function AlerteMatieresCommande({
   lignes,
   pointDeVenteId,
+  commandeId,
 }: {
   lignes: LigneDocument[];
   pointDeVenteId: string;
+  commandeId?: string;
 }) {
   const router = useRouter();
   const ctx = useContexteAppro();
@@ -120,6 +122,8 @@ export function AlerteMatieresCommande({
                       quantiteNecessaire: m.manque,
                       pointDeVenteId,
                       note: "Matières manquantes — fabrication sur commande",
+                      commandeId,
+                      origine: commandeId ? "alerte_matiere_commande" : undefined,
                     });
                     if (!res.ok) {
                       setErreur(res.reason);
@@ -303,6 +307,7 @@ export function PanneauApprovisionnementCommande({
         <AlerteMatieresCommande
           lignes={commande.lignes}
           pointDeVenteId={commande.pointDeVenteId}
+          commandeId={commande.id}
         />
       </div>
     </div>

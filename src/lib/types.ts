@@ -966,6 +966,13 @@ export type Achat = {
   destinationAchat?: DestinationAchat;
   /** Commande client si destination = projet_client. */
   commandeId?: string;
+  /**
+   * Commande client dont l'alerte matière a généré la DA à l'origine de cet achat.
+   * Distinct d'un projet client choisi à la main.
+   */
+  alerteMatiereCommandeId?: string;
+  /** La commande client d'origine a été supprimée ; l'engagement d'achat reste. */
+  commandeClientOrigineSupprimee?: boolean;
 };
 
 export type BesoinAchatStatut = "ouvert" | "partiel" | "couvert" | "annule";
@@ -986,6 +993,14 @@ export type BesoinAchat = {
   repartitionsOf?: AchatRepartitionOf[];
   note?: string;
   annule?: boolean;
+  /**
+   * Commande client à l'origine de la DA, lorsque celle-ci vient de l'alerte
+   * matières d'une ligne fabrication sur commande.
+   */
+  commandeId?: string;
+  origine?: "alerte_matiere_commande";
+  /** La commande client d'origine a été supprimée ; une commande fournisseur liée reste. */
+  commandeClientOrigineSupprimee?: boolean;
 };
 
 export type DemandePrixStatut =
@@ -1882,6 +1897,11 @@ export type OrdreFabrication = {
   commandeId?: string;
   /** Ligne de commande à l'origine de cet OF, quand il est créé depuis elle. */
   ligneCommandeId?: string;
+  /**
+   * OF dont la nomenclature consomme la sortie de celui-ci
+   * (chaînage atelier, ex. métallurgie → assemblage).
+   */
+  ofParentId?: string;
   /** Largeur (m) de l'unité fabriquée — reprise commande MTO ou saisie MTS. */
   dimensionLargeur?: number;
   /** Hauteur (m) de l'unité fabriquée. */

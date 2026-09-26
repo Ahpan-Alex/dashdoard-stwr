@@ -20,6 +20,7 @@ import {
   fondsRemisMission,
 } from "./missions";
 import { natureStockDuProduit } from "./nature-stock";
+import { messageRuptureComposantOf } from "./of-chaine";
 import { libelleProduit, prixAchatCatalogue } from "./produits";
 import { siteEstAtelier } from "./sites";
 import {
@@ -1027,7 +1028,12 @@ export function evaluerAlertes(ctx: ContexteAlertes): AlerteInstance[] {
           type: "of_rupture_composant",
           categorie: "production",
           titre: `${of_.numero} — composant manquant`,
-          message: `${p ? libelleProduit(p) : ligne.composantId} : encore ${restant} à sortir, stock atelier ${stock}. Une demande d'achat peut déjà avoir été créée.`,
+          message: messageRuptureComposantOf({
+            produit: p,
+            libelle: p ? libelleProduit(p) : ligne.composantId,
+            restant,
+            stock,
+          }),
           date: today,
           href: `/fabrication/${of_.id}`,
           gravite: stock <= 0 ? "danger" : "warning",

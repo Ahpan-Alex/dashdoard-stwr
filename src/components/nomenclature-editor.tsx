@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { createId } from "@/lib/id";
 import { cycleNomenclature, motifComposantBomInvalide, NOM_NOMENCLATURE_STANDARD } from "@/lib/nomenclature";
+import { produitPeutEntrerDansNomenclature } from "@/lib/of-chaine";
 import {
   NATURES_STOCK,
   NATURE_STOCK_LABELS,
@@ -51,7 +52,7 @@ export function NomenclatureEditor({
     };
   const alt = nomenclatures.find((n) => n.type === "alternative");
   const composants = produits.filter(
-    (p) => p.actif && p.id !== parentId && (p.natureStock ?? "matiere_premiere") !== "fini",
+    (p) => p.actif && p.id !== parentId && produitPeutEntrerDansNomenclature(p),
   );
 
   function setAuto(next: NomenclatureProduit) {

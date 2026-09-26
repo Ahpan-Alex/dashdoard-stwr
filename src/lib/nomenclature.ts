@@ -19,7 +19,7 @@ export function nomenclaturesDuProduit(
   produit: Pick<Produit, "nomenclatures" | "natureStock"> | undefined,
 ): NomenclatureProduit[] {
   if (!produit || !produitEstFabrique(produit)) return [];
-  const list = produit.nomenclatures ?? [];
+  const list = Array.isArray(produit.nomenclatures) ? produit.nomenclatures : [];
   const auto = list.find((n) => n.type === "automatique");
   const alt = list.find((n) => n.type === "alternative");
   const out: NomenclatureProduit[] = [
@@ -190,6 +190,7 @@ export function motifComposantBomInvalide(
     return "Un produit ne peut pas être composant de sa propre nomenclature.";
   }
   if (natureStockDuProduit(composant) === "fini") {
+    if (composant.modeApprovisionnement === "fabrication_commande") return null;
     return "Un produit fini ne peut pas servir de composant. Utilisez un semi-fini ou une matière première.";
   }
   return null;

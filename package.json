@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:apercu-commande": "tsx scripts/apercu-commande-liste.test.mts",
+    "test:cascade-da": "tsx scripts/cascade-da-commande.test.mts",
+    "test:of-chaine": "tsx scripts/of-chaine.test.mts"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
@@ -26,7 +29,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "happy-dom": "^20.14.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

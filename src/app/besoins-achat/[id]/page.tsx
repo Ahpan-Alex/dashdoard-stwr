@@ -11,6 +11,7 @@ import {
   BESOIN_ACHAT_STATUT_LABELS,
   couvertureBesoin,
   lignesDuBesoin,
+  MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE,
   modePaiementAchatVisible,
   statutBesoinAchat,
 } from "@/lib/besoins-achat";
@@ -102,6 +103,11 @@ export default function BesoinAchatDetailPage() {
             <span className={`badge ${badgeClasseBesoin(st)}`}>
               {BESOIN_ACHAT_STATUT_LABELS[st]}
             </span>
+            {besoin.commandeClientOrigineSupprimee && (
+              <span className="badge badge-sand">
+                {MENTION_COMMANDE_CLIENT_ORIGINE_SUPPRIMEE}
+              </span>
+            )}
             {st !== "annule" && (
               <button
                 type="button"
