@@ -296,11 +296,6 @@ export const SIDEBAR_PARAMETRES: ParametreItem[] = [
     permission: "parametres.lire",
   },
   {
-    href: "/parametres/manuel",
-    label: "Manuel",
-    permission: "parametres.lire",
-  },
-  {
     href: "/parametres/produits",
     label: "Catalogue",
     permission: "produits.lire",
