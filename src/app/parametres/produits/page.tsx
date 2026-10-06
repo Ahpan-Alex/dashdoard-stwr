@@ -9,16 +9,12 @@ import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
-  categoriesEnArbre,
   categoriesFeuilles,
   cheminCategorie,
   codeDejaUtilise,
   isCodeProduitValide,
-  libelleNiveauCategorie,
   libelleProduit,
-  MAX_PROFONDEUR_CATEGORIE,
   normalizeCodeProduit,
-  profondeurCategorie,
   produitEstReference,
   trouverDoublonsPotentiels,
 } from "@/lib/produits";
@@ -179,9 +175,6 @@ function ParametresProduitsContent() {
     updateProduit,
     desactiverProduit,
     deleteProduit,
-    addCategorieProduit,
-    updateCategorieProduit,
-    deleteCategorieProduit,
     addTarifClient,
     deleteTarifClient,
     comptesComptables,
@@ -198,10 +191,6 @@ function ParametresProduitsContent() {
   const avecTVA = appliqueTVA(parametres);
 
   const feuilles = categoriesFeuilles(categoriesProduits);
-  const arbreCategories = useMemo(
-    () => categoriesEnArbre(categoriesProduits),
-    [categoriesProduits],
-  );
 
   const [filtreActif, setFiltreActif] = useState<"actifs" | "tous" | "inactifs">(
     "actifs",
@@ -213,14 +202,7 @@ function ParametresProduitsContent() {
     "tarifs" | "historique" | "fournisseurs" | "cout"
   >("tarifs");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [alertDoublons, setAlertDoublons] = useState<string | null>(null);
-  const [catForm, setCatForm] = useState({
-    code: "",
-    libelle: "",
-    parentId: "",
-    usageCommercial: "achat_vente" as UsageCommercialProduit,
-  });
 
   function formVide(): ProduitFormState {
     const categorieId = feuilles[0]?.id ?? "";
@@ -262,36 +244,6 @@ function ParametresProduitsContent() {
     prixHT: "",
   });
 
-  /** Parents possibles : profondeur < max ; exclut soi-même et descendants en édition. */
-  const parentsPossibles = useMemo(() => {
-    const descendants = new Set<string>();
-    if (editingCatId) {
-      const stack = [editingCatId];
-      while (stack.length) {
-        const id = stack.pop()!;
-        for (const c of categoriesProduits) {
-          if (c.parentId === id && !descendants.has(c.id)) {
-            descendants.add(c.id);
-            stack.push(c.id);
-          }
-        }
-      }
-      descendants.add(editingCatId);
-    }
-    return categoriesProduits.filter((c) => {
-      if (!c.actif) return false;
-      if (descendants.has(c.id)) return false;
-      return (
-        profondeurCategorie(c.id, categoriesProduits) < MAX_PROFONDEUR_CATEGORIE
-      );
-    });
-  }, [categoriesProduits, editingCatId]);
-
-  const niveauNouveau =
-    catForm.parentId === ""
-      ? 0
-      : profondeurCategorie(catForm.parentId, categoriesProduits) + 1;
-
   const liste = useMemo(() => {
     return [...produits]
       .filter((p) => {
@@ -306,19 +258,12 @@ function ParametresProduitsContent() {
   const produitEnEdition = editingId
     ? produits.find((p) => p.id === editingId)
     : undefined;
-  const categorieEnEdition = editingCatId
-    ? categoriesProduits.find((c) => c.id === editingCatId)
-    : undefined;
   const histSelected = historiquesPrix
     .filter((h) => h.produitId === selectedId)
     .slice(0, 20);
   const tarifsSelected = tarifsClients.filter(
     (t) => t.produitId === selectedId && t.actif,
   );
-
-  function familleLieeAProduit(categorieId: string) {
-    return produits.some((p) => p.categorieId === categorieId);
-  }
 
   function usageFamilleForm(categorieId: string) {
     return usageCommercialDeLaFamille(categorieId, categoriesProduits);
@@ -340,85 +285,6 @@ function ParametresProduitsContent() {
       compteChargeId: attendu ? next.compteChargeId : "",
       compteVenteId: usage === "achat" ? "" : next.compteVenteId,
     };
-  }
-
-  function annulerEditionFamille() {
-    setEditingCatId(null);
-    setCatForm({
-      code: "",
-      libelle: "",
-      parentId: "",
-      usageCommercial: "achat_vente",
-    });
-  }
-
-  function demarrerEditionFamille(cat: CategorieProduit) {
-    setEditingCatId(cat.id);
-    setCatForm({
-      code: cat.code,
-      libelle: cat.libelle,
-      parentId: cat.parentId ?? "",
-      usageCommercial: usageFamilleForm(cat.id),
-    });
-    document
-      .getElementById("fiche-famille")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function onSubmitCategorie(e: FormEvent) {
-    e.preventDefault();
-    const code = normalizeCodeProduit(catForm.code);
-    const libelle = catForm.libelle.trim();
-    if (!code || !libelle) return;
-    if (niveauNouveau > MAX_PROFONDEUR_CATEGORIE) {
-      alert(
-        "Maximum 3 niveaux : famille › sous-famille › sous-sous-famille.",
-      );
-      return;
-    }
-    if (
-      categoriesProduits.some(
-        (c) =>
-          c.id !== editingCatId && normalizeCodeProduit(c.code) === code,
-      )
-    ) {
-      alert("Ce code de famille existe déjà.");
-      return;
-    }
-
-    if (editingCatId) {
-      const liee = familleLieeAProduit(editingCatId);
-      if (liee) {
-        updateCategorieProduit(editingCatId, {
-          libelle,
-          usageCommercial: catForm.usageCommercial,
-        });
-      } else {
-        updateCategorieProduit(editingCatId, {
-          code,
-          libelle,
-          parentId: catForm.parentId || undefined,
-          usageCommercial: catForm.usageCommercial,
-        });
-      }
-      annulerEditionFamille();
-      return;
-    }
-
-    addCategorieProduit({
-      code,
-      libelle,
-      parentId: catForm.parentId || undefined,
-      ordre: categoriesProduits.length + 1,
-      actif: true,
-      usageCommercial: catForm.usageCommercial,
-    });
-    setCatForm({
-      code: "",
-      libelle: "",
-      parentId: "",
-      usageCommercial: "achat_vente",
-    });
   }
 
   function annulerEdition() {
@@ -621,9 +487,6 @@ function ParametresProduitsContent() {
   const ventesReelles = comptesParClasse(comptesComptables, "7").filter(
     (c) => !estCompteGeneriqueProduit(c) || c.id === form.compteVenteId,
   );
-  const structureFamilleVerrouillee = Boolean(
-    editingCatId && familleLieeAProduit(editingCatId),
-  );
   const circuitProduitVerrouille =
     usageFamilleForm(form.categorieId) !== "achat_vente";
 
@@ -631,12 +494,17 @@ function ParametresProduitsContent() {
     <div>
       <PageHeader
         title="Catalogue de produits et articles"
-        description="Articles pour l'achat, produits pour la vente. Familles, code unique, tarifs — désactivation pour préserver l'historique."
+        description="Articles pour l'achat, produits pour la vente. Code unique, tarifs — désactivation pour préserver l'historique."
         showPosSelector={false}
         actions={
-          <Link href="/parametres/produits/import" className="btn btn-secondary">
-            Import CSV / Excel
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/parametres/familles" className="btn btn-secondary">
+              Familles
+            </Link>
+            <Link href="/parametres/produits/import" className="btn btn-secondary">
+              Import CSV / Excel
+            </Link>
+          </div>
         }
       />
 
@@ -653,286 +521,6 @@ function ParametresProduitsContent() {
         </p>
       )}
       <ParametresSubnav />
-
-      <div
-        className="mb-6 rounded-[var(--radius)] border border-line bg-card p-4"
-        id="fiche-famille"
-      >
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-sea-700">
-            {editingCatId
-              ? `Modifier la famille${categorieEnEdition ? ` · ${categorieEnEdition.code}` : ""}`
-              : "Familles"}
-          </p>
-          {editingCatId && (
-            <IconButton
-              label="Annuler la modification"
-              onClick={annulerEditionFamille}
-            >
-              <X className="h-4 w-4" />
-            </IconButton>
-          )}
-        </div>
-        <p className="mb-4 text-xs text-muted">
-          Jusqu&apos;à 3 niveaux : famille › sous-famille › sous-sous-famille.
-          Le circuit commercial (acheté / vendu / les deux) s&apos;applique aux
-          produits de la famille et de ses descendants. Code et parent ne sont
-          plus modifiables une fois un produit rattaché.
-        </p>
-
-        <form
-          onSubmit={onSubmitCategorie}
-          className="mb-4 grid gap-3 sm:grid-cols-4"
-        >
-          <label className="block text-xs font-semibold text-muted">
-            Code *
-            <input
-              className="input mt-1 font-mono uppercase"
-              placeholder="ex. VIN"
-              value={catForm.code}
-              onChange={(e) => setCatForm({ ...catForm, code: e.target.value })}
-              disabled={structureFamilleVerrouillee}
-              required
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted sm:col-span-2">
-            Libellé *
-            <input
-              className="input mt-1"
-              placeholder="ex. Vinyle adhésif"
-              value={catForm.libelle}
-              onChange={(e) =>
-                setCatForm({ ...catForm, libelle: e.target.value })
-              }
-              required
-            />
-          </label>
-          <label className="block text-xs font-semibold text-muted">
-            Parent (niveau supérieur)
-            <select
-              className="select mt-1"
-              value={catForm.parentId}
-              disabled={structureFamilleVerrouillee}
-              onChange={(e) => {
-                const parentId = e.target.value;
-                setCatForm({
-                  ...catForm,
-                  parentId,
-                  usageCommercial: usageCommercialDeLaFamille(
-                    parentId || undefined,
-                    categoriesProduits,
-                  ),
-                });
-              }}
-            >
-              <option value="">— Aucun = famille racine —</option>
-              {parentsPossibles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {cheminCategorie(c.id, categoriesProduits)} →{" "}
-                  {libelleNiveauCategorie(
-                    profondeurCategorie(c.id, categoriesProduits) + 1,
-                  )}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs font-semibold text-muted sm:col-span-2">
-            Articles de la famille *
-            <select
-              className="select mt-1"
-              value={catForm.usageCommercial}
-              required
-              onChange={(e) =>
-                setCatForm({
-                  ...catForm,
-                  usageCommercial: e.target.value as UsageCommercialProduit,
-                })
-              }
-            >
-              {USAGES_COMMERCIAUX.map((u) => (
-                <option key={u} value={u}>
-                  {USAGE_COMMERCIAL_FAMILLE_LABELS[u]}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1 block text-[11px] font-normal">
-              Indique si la famille contient des articles achetés, vendus, ou
-              les deux. Les produits rattachés suivent ce choix.
-            </span>
-          </label>
-          <div className="flex flex-wrap items-end gap-2 sm:col-span-4">
-            <button type="submit" className="btn btn-secondary">
-              {editingCatId ? (
-                <>
-                  <Pencil className="h-4 w-4" />
-                  Enregistrer la famille
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4" />
-                  Ajouter une{" "}
-                  {libelleNiveauCategorie(niveauNouveau).toLowerCase()}
-                </>
-              )}
-            </button>
-            {editingCatId && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={annulerEditionFamille}
-              >
-                Annuler
-              </button>
-            )}
-          </div>
-        </form>
-
-        <div className="table-shell">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Niveau</th>
-                <th>Code</th>
-                <th>Libellé / chemin</th>
-                <th>Articles</th>
-                <th>Produits</th>
-                <th>Statut</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {arbreCategories.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-sm text-muted">
-                    Aucune famille. Créez d&apos;abord une famille racine.
-                  </td>
-                </tr>
-              ) : (
-                arbreCategories.map(({ cat, depth }) => {
-                  const nbProduits = produits.filter(
-                    (p) => p.categorieId === cat.id,
-                  ).length;
-                  const nbEnfants = categoriesProduits.filter(
-                    (c) => c.parentId === cat.id,
-                  ).length;
-                  return (
-                    <tr
-                      key={cat.id}
-                      className={
-                        editingCatId === cat.id
-                          ? "bg-sea-100/80"
-                          : !cat.actif
-                            ? "opacity-60"
-                            : undefined
-                      }
-                    >
-                      <td>
-                        <span className="badge badge-sand">
-                          {libelleNiveauCategorie(depth)}
-                        </span>
-                      </td>
-                      <td className="font-mono text-xs font-semibold">
-                        {cat.code}
-                      </td>
-                      <td>
-                        <span
-                          className="font-medium"
-                          style={{ paddingLeft: `${depth * 1.25}rem` }}
-                        >
-                          {depth > 0 ? "└ " : ""}
-                          {cat.libelle}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-muted">
-                          {cheminCategorie(cat.id, categoriesProduits)}
-                        </span>
-                      </td>
-                      <td className="text-xs">
-                        {USAGE_COMMERCIAL_FAMILLE_LABELS[usageFamilleForm(cat.id)]}
-                        {!estUsageCommercial(cat.usageCommercial) &&
-                        cat.parentId ? (
-                          <span className="mt-0.5 block text-[11px] text-muted">
-                            Hérité
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="text-xs text-muted">
-                        {nbProduits > 0
-                          ? `${nbProduits} prod.`
-                          : nbEnfants > 0
-                            ? `${nbEnfants} sous-fam.`
-                            : "—"}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${cat.actif ? "badge-sea" : "badge-sand"}`}
-                        >
-                          {cat.actif ? "Actif" : "Inactif"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="flex gap-1">
-                          <IconButton
-                            label={
-                              nbProduits > 0
-                                ? "Modifier le circuit (code et parent verrouillés)"
-                                : "Modifier cette famille"
-                            }
-                            onClick={() => demarrerEditionFamille(cat)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </IconButton>
-                          {cat.actif ? (
-                            <IconButton
-                              label="Désactiver cette famille"
-                              onClick={() =>
-                                updateCategorieProduit(cat.id, {
-                                  actif: false,
-                                })
-                              }
-                            >
-                              <Ban className="h-4 w-4" />
-                            </IconButton>
-                          ) : (
-                            <IconButton
-                              label="Réactiver cette famille"
-                              onClick={() =>
-                                updateCategorieProduit(cat.id, {
-                                  actif: true,
-                                })
-                              }
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </IconButton>
-                          )}
-                          <IconButton
-                            label="Supprimer cette famille"
-                            onClick={() => {
-                              if (
-                                !confirm(
-                                  `Supprimer la ${libelleNiveauCategorie(depth).toLowerCase()} « ${cat.libelle} » ?`,
-                                )
-                              ) {
-                                return;
-                              }
-                              const res = deleteCategorieProduit(cat.id);
-                              if (!res.ok) alert(res.reason);
-                              if (editingCatId === cat.id) {
-                                annulerEditionFamille();
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-danger" />
-                          </IconButton>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <div className="mb-6" id="fiche-produit">
         <form
@@ -983,6 +571,12 @@ function ParametresProduitsContent() {
                   </option>
                 ))}
               </select>
+              <Link
+                href="/parametres/familles"
+                className="mt-1 inline-block text-[11px] font-semibold text-sea-800"
+              >
+                Créer une famille ou une sous-famille
+              </Link>
             </label>
             <label className="block text-xs font-semibold text-muted sm:col-span-2">
               Libellé court *
@@ -1029,7 +623,7 @@ function ParametresProduitsContent() {
               </div>
               <p className="mt-1 text-[11px] font-normal text-muted">
                 {circuitProduitVerrouille
-                  ? "Circuit imposé par la famille. Modifiez-le sur la famille pour le changer."
+                  ? "Circuit imposé par la famille. Modifiez-le dans Paramètres → Familles."
                   : produitEstFabrique(form)
                     ? "La vente reste gérée ici. L’achat d’un semi-fini ou fini dépend de la case sous-traitance."
                     : "Détermine les listes d’achat / vente et les comptes comptables affichés."}

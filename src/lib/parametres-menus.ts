@@ -140,10 +140,20 @@ export const REGLAGES_SECTIONS: ParametreSection[] = [
  */
 export const REFERENTIEL_SECTIONS: ParametreSection[] = [
   {
+    id: "familles",
+    href: "/parametres/familles",
+    label: "Familles",
+    description:
+      "Création des familles, sous-familles et sous-sous-familles.",
+    permission: "produits.lire",
+    groupe: "referentiel",
+    items: [],
+  },
+  {
     id: "catalogue",
     href: "/parametres/produits",
     label: "Catalogue",
-    description: "Familles, fiches articles, import, circuit achat / vente.",
+    description: "Fiches articles, import, circuit achat / vente.",
     permission: "produits.lire",
     groupe: "referentiel",
     items: [
@@ -294,6 +304,11 @@ export const SIDEBAR_PARAMETRES: ParametreItem[] = [
     href: "/parametres/recuperation",
     label: "Récupération des données",
     permission: "parametres.lire",
+  },
+  {
+    href: "/parametres/familles",
+    label: "Familles",
+    permission: "produits.lire",
   },
   {
     href: "/parametres/produits",
