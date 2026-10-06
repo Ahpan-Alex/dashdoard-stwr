@@ -583,6 +583,11 @@ export type Parametres = {
    */
   moduleComptabilite?: boolean;
   /**
+   * Taille maximale d'un fichier du stockage tiers, en mégaoctets.
+   * Absent = 5 Mo.
+   */
+  tailleMaxFichierTiersMo?: number;
+  /**
    * Bon de préparation (picking entre commande et BL).
    * Absent = désactivé (étape optionnelle).
    */
@@ -702,7 +707,7 @@ export type ReseauxSociaux = {
   autre?: string;
 };
 
-/** Contact rattaché à un client (interlocuteur). */
+/** Contact rattaché à un tiers (interlocuteur). */
 export type ClientContact = {
   id: string;
   nom: string;
@@ -710,6 +715,12 @@ export type ClientContact = {
   telephone?: string;
   email?: string;
   adresse?: string;
+  /** Commentaire interne, facultatif. */
+  commentaire?: string;
+  /** Un seul contact principal par fiche. */
+  principal?: boolean;
+  /** Absent = actif. Inactif = conservé dans l'historique. */
+  actif?: boolean;
   reseaux?: ReseauxSociaux;
 };
 
@@ -763,6 +774,10 @@ export type AdresseTiers = {
   id?: string;
   /** Libellé d'un site / dépôt de livraison. */
   libelle?: string;
+  /** Service ou destinataire sur cette adresse. */
+  service?: string;
+  telephone?: string;
+  email?: string;
   ligne1?: string;
   ligne2?: string;
   quartier?: string;
@@ -770,6 +785,57 @@ export type AdresseTiers = {
   region?: string;
   codePostal?: string;
   pays?: string;
+};
+
+/** Compte bancaire du tiers. RIB et IBAN facultatifs. */
+export type CompteBancaireTiers = {
+  id: string;
+  banque: string;
+  rib?: string;
+  iban?: string;
+  parDefaut?: boolean;
+};
+
+/** Exonération de TVA sur les nouveaux documents du tiers. */
+export type ExonerationTvaTiers = {
+  actif: boolean;
+  motif?: string;
+  reference?: string;
+  /** Fin de validité (AAAA-MM-JJ). Absente = sans échéance. */
+  dateFin?: string;
+};
+
+export type TypeNoteTiers = "appel" | "relance" | "visite" | "mail" | "autre";
+
+/** Note interne, jamais imprimée sur un document commercial. */
+export type NoteEchangeTiers = {
+  id: string;
+  date: string;
+  type: TypeNoteTiers;
+  commentaire: string;
+  userId?: string;
+  userNom?: string;
+  modifieLe?: string;
+  modifieParId?: string;
+  modifieParNom?: string;
+};
+
+export type DossierStockageTiers = {
+  id: string;
+  nom: string;
+};
+
+export type FichierStockageTiers = {
+  id: string;
+  dossierId: string;
+  nom: string;
+  mime: string;
+  dataUrl: string;
+  taille: number;
+  dateAjout: string;
+  userId?: string;
+  userNom?: string;
+  commentaire?: string;
 };
 
 export type Tiers = {
@@ -816,6 +882,23 @@ export type Tiers = {
   compteClientId?: string;
   /** Compte 401 (ou sous-compte) si rôle Fournisseur. Unique parmi les tiers. */
   compteFournisseurId?: string;
+  /**
+   * Assujetti à la TVA. Absent = oui (fiches déjà existantes).
+   * Ne modifie pas les documents déjà enregistrés.
+   */
+  assujettiTVA?: boolean;
+  exonerationTVA?: ExonerationTvaTiers;
+  /** Mode de paiement par défaut (id du catalogue Paramètres). */
+  modePaiementDefautId?: string;
+  comptesBancaires?: CompteBancaireTiers[];
+  /** Informatif, n'alimente pas la priorité fournisseur des articles. */
+  delaiLivraisonHabituelJours?: number;
+  /** Informatif. Défaut affiché : Ariary. Aucune conversion. */
+  deviseInformative?: string;
+  notesEchanges?: NoteEchangeTiers[];
+  /** Dossiers créés par l'utilisateur (les dossiers par défaut sont implicites). */
+  dossiersStockage?: DossierStockageTiers[];
+  fichiersStockage?: FichierStockageTiers[];
   /** Tiers technique (ex. Divers / Fournitures) : non supprimable. */
   systeme?: boolean;
   /** Date de création de la fiche (filtre liste). */
@@ -2101,6 +2184,8 @@ export type AppState = {
   preferencesModeles: PreferencesModeles;
   /** Types d'affichage de colonnes par utilisateur et par tableau. */
   preferencesAffichage: PreferencesAffichage;
+  /** Combinaisons de filtres de la liste articles, par utilisateur. */
+  filtresArticles: import("./articles-filtres").FiltresArticlesParUtilisateur;
   /** Configuration des alertes (globale entreprise / tenant). */
   parametresAlertes: ParametresAlertes;
   /** Suivi lu / traité des alertes, par utilisateur. */

@@ -52,6 +52,11 @@ import {
   repartirModesSurVentilations,
 } from "./lots-paiement";
 import {
+  controlerPatchTiersFiche,
+  tauxTvaAchatPropose,
+  tauxTvaPourNouveauDocument,
+} from "./tiers-fiche";
+import {
   appliqueTVA,
   ensureCodesClients,
   factureImpacteExploitation,
@@ -289,6 +294,13 @@ import {
 } from "./exercices";
 import type { OptsNumeroDocument } from "./exercices";
 import { createId } from "./id";
+import {
+  ajouterFiltreEnregistre,
+  renommerFiltreEnregistre,
+  supprimerFiltreEnregistre,
+  type FiltresArticles,
+  type FiltresArticlesParUtilisateur,
+} from "./articles-filtres";
 import { parserReleveBancaireCsv } from "./rapprochement-bancaire";
 import { getActiviteActor } from "./activity-actor";
 import { useAuthStore } from "./auth-store";
@@ -446,6 +458,7 @@ type Store = {
   transfertsComptables: TransfertComptable[];
   identiteNavigation: IdentiteNavigation;
   preferencesAffichage: PreferencesAffichage;
+  filtresArticles: FiltresArticlesParUtilisateur;
   parametresAlertes: ParametresAlertes;
   alertesSuivi: AlertesSuivi;
   pointDeVenteActifId: string | "tous";
@@ -505,6 +518,15 @@ type Store = {
     prefs: PrefsTableAffichage,
   ) => void;
   setTypeAffichageActif: (tableId: TableAffichageId, typeId: string) => void;
+  enregistrerFiltreArticles: (
+    nom: string,
+    filtres: FiltresArticles,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  renommerFiltreArticles: (
+    id: string,
+    nom: string,
+  ) => { ok: true } | { ok: false; reason: string };
+  supprimerFiltreArticles: (id: string) => void;
   updateParametresAlertes: (data: Partial<ParametresAlertes>) => void;
   marquerAlerte: (
     alerteId: string,
@@ -1881,6 +1903,14 @@ function etatAvecComptes467Missions(state: {
   return { comptesComptables: comptes, comptesMissionAcheteur: liens };
 }
 
+function listeFiltresUtilisateur(
+  tous: FiltresArticlesParUtilisateur | undefined,
+  userId: string,
+) {
+  const v = tous?.[userId];
+  return Array.isArray(v) ? v : [];
+}
+
 function utilisateurCourantPeutAgirSurSite(siteId: string) {
   const auth = useAuthStore.getState();
   const user = auth.currentUser();
@@ -2600,6 +2630,53 @@ export const useStore = create<Store>()((set, get) => ({
           };
         });
         persisterPrefsAffichage(get().preferencesAffichage[userId] ?? {});
+      },
+
+      enregistrerFiltreArticles: (nom, filtres) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return { ok: false, reason: "Connectez-vous pour enregistrer un filtre." };
+        const id = createId("flt");
+        const actuel = listeFiltresUtilisateur(get().filtresArticles, userId);
+        const res = ajouterFiltreEnregistre(actuel, {
+          id,
+          nom,
+          filtres,
+        });
+        if (!res.ok) return res;
+        set((s) => ({
+          filtresArticles: {
+            ...(s.filtresArticles ?? {}),
+            [userId]: res.liste,
+          },
+        }));
+        return { ok: true, id };
+      },
+      renommerFiltreArticles: (id, nom) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return { ok: false, reason: "Connectez-vous pour renommer un filtre." };
+        const actuel = listeFiltresUtilisateur(get().filtresArticles, userId);
+        const res = renommerFiltreEnregistre(actuel, id, nom);
+        if (!res.ok) return res;
+        set((s) => ({
+          filtresArticles: {
+            ...(s.filtresArticles ?? {}),
+            [userId]: res.liste,
+          },
+        }));
+        return { ok: true };
+      },
+      supprimerFiltreArticles: (id) => {
+        const userId = getActiviteActor().id;
+        if (!userId) return;
+        set((s) => ({
+          filtresArticles: {
+            ...(s.filtresArticles ?? {}),
+            [userId]: supprimerFiltreEnregistre(
+              listeFiltresUtilisateur(s.filtresArticles, userId),
+              id,
+            ),
+          },
+        }));
       },
 
       updateParametresAlertes: (data) => {
@@ -4217,7 +4294,10 @@ export const useStore = create<Store>()((set, get) => ({
           pointDeVenteId: siteId,
           date: new Date().toISOString(),
           statut: "brouillon",
-          tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
+          tauxTVA: tauxTvaAchatPropose(
+            state.parametres,
+            (state.tiers ?? []).find((t) => t.id === data.fournisseurId),
+          ),
           lignes: [
             {
               id: uid("al"),
@@ -5291,7 +5371,10 @@ export const useStore = create<Store>()((set, get) => ({
               pointDeVenteId: data.pointDeVenteId,
               date: new Date().toISOString(),
               statut: "brouillon" as const,
-              tauxTVA: s.parametres.assujettiTVA ? s.parametres.tauxTVA : 0,
+              tauxTVA: tauxTvaAchatPropose(
+                s.parametres,
+                (s.tiers ?? []).find((t) => t.id === data.fournisseurId),
+              ),
               lignes: [
                 {
                   id: uid("al"),
@@ -6807,7 +6890,10 @@ export const useStore = create<Store>()((set, get) => ({
             date: data.date ?? prev.date,
             statut: "valide",
             dateValidation: new Date().toISOString(),
-            tauxTVA: state.parametres.assujettiTVA ? state.parametres.tauxTVA : 0,
+            tauxTVA: tauxTvaAchatPropose(
+              state.parametres,
+              (state.tiers ?? []).find((t) => t.id === cmd.fournisseurId),
+            ),
             lignes: lignesAchat,
             livraisons: [],
             paiements: [],
@@ -8547,6 +8633,17 @@ export const useStore = create<Store>()((set, get) => ({
         );
         if (motifComptes) return { ok: false, reason: motifComptes };
 
+        const auth = useAuthStore.getState();
+        const controle = controlerPatchTiersFiche({
+          prev,
+          data,
+          actor: getActiviteActor(),
+          peutModifierNotesAutrui: auth.hasPermission("clients.gerer"),
+          peutModifierBanques: auth.hasPermission("comptabilite.gerer"),
+        });
+        if (!controle.ok) return controle;
+        data = controle.data;
+
         const next: Tiers = {
           ...prev,
           ...data,
@@ -8569,6 +8666,7 @@ export const useStore = create<Store>()((set, get) => ({
               entreeActivite("modification", "tiers", {
                 entiteId: id,
                 libelle: next.nom,
+                detail: controle.detail,
               }),
               ...s.journalActivites,
             ],
@@ -9562,12 +9660,17 @@ export const useStore = create<Store>()((set, get) => ({
           state.comptesTresorerie ?? [],
         );
         if (motifCompte) return { ok: false, reason: motifCompte };
-        const assujetti = appliqueTVA(state.parametres);
-        const { ht } = splitTTC(
-          montantTTC,
-          state.parametres.tauxTVA,
-          assujetti,
-        );
+        const tauxLie =
+          state.factures.find((f) => f.id === data.factureId)?.tauxTVA ??
+          state.devis.find((d) => d.id === data.devisId)?.tauxTVA ??
+          state.commandes.find((c) => c.id === data.commandeId)?.tauxTVA;
+        const tauxAcompte = tauxTvaPourNouveauDocument({
+          parametres: state.parametres,
+          tiers: (state.tiers ?? []).find((t) => t.id === data.clientId),
+          tauxSource: tauxLie,
+        });
+        const assujetti = appliqueTVA(state.parametres) && tauxAcompte > 0;
+        const { ht } = splitTTC(montantTTC, tauxAcompte, assujetti);
         const numeroAco = nextNumero(
           "ACO",
           state.acomptes.map((a) => a.numero),
@@ -9598,7 +9701,7 @@ export const useStore = create<Store>()((set, get) => ({
             devisId: data.devisId,
             commandeId: data.commandeId,
             factureParenteId: data.factureId,
-            tauxTVA: state.parametres.tauxTVA,
+            tauxTVA: tauxAcompte,
             dateValidation: new Date().toISOString(),
             note: `Facture d'acompte — ${numeroAco}`,
             acomptesDocument: [],
@@ -9619,7 +9722,7 @@ export const useStore = create<Store>()((set, get) => ({
           date: data.date,
           clientId: data.clientId,
           montantTTC,
-          tauxTVA: state.parametres.tauxTVA,
+          tauxTVA: tauxAcompte,
           modePaiement: data.modePaiement,
           compteTresorerieId: data.compteTresorerieId,
           reference: data.reference,

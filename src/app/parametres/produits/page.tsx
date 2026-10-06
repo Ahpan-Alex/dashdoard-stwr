@@ -4,9 +4,22 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Ban, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { FiltresListeArticles } from "@/components/filtres-liste-articles";
 import { IconButton } from "@/components/icon-button";
 import { PageHeader } from "@/components/page-header";
 import { ParametresSubnav } from "@/components/parametres-subnav";
+import {
+  FILTRES_ARTICLES_VIDE,
+  filtrerArticles,
+  lignesExportArticles,
+  paginerArticles,
+  type FiltresArticles,
+} from "@/lib/articles-filtres";
+import { downloadCsv } from "@/lib/csv";
+import {
+  imprimerTableauPdf,
+} from "@/lib/export-tableau";
+import type { TableAffichageDef, TypeAffichage } from "@/lib/affichage-tableaux";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   categoriesFeuilles,
@@ -20,7 +33,9 @@ import {
 } from "@/lib/produits";
 import { useAuthStore } from "@/lib/auth-store";
 import { useStore } from "@/lib/store";
+import { ChampsPrixHtTtc } from "@/components/champs-prix-ht-ttc";
 import { appliqueTVA, libelleClient } from "@/lib/commercial";
+import { parserMontantPrix } from "@/lib/prix-ttc";
 import {
   compteChargeProduit,
   compteChargeDefautPourType,
@@ -72,6 +87,7 @@ import {
   USAGES_COMMERCIAUX,
 } from "@/lib/nature-stock";
 import { nomenclaturesDuProduit } from "@/lib/nomenclature";
+import { sitesVisiblesPourUtilisateur } from "@/lib/sites";
 import {
   libelleUniteMesure,
   symboleUniteDefaut,
@@ -146,6 +162,61 @@ function formDepuisProduit(
   };
 }
 
+const TABLE_EXPORT_ARTICLES = {
+  id: "stocks",
+  label: "Articles",
+  colonnes: [
+    { id: "code", label: "Code", largeurMm: 22, obligatoire: true },
+    { id: "libelle", label: "Libellé", largeurMm: 36, obligatoire: true },
+    { id: "famille", label: "Famille", largeurMm: 32 },
+    { id: "unite", label: "Unité", largeurMm: 14 },
+    { id: "nature", label: "Nature", largeurMm: 24 },
+    { id: "appro", label: "Approvisionnement", largeurMm: 28 },
+    { id: "circuit", label: "Circuit", largeurMm: 22 },
+    { id: "vente", label: "Vente HT", largeurMm: 18 },
+    { id: "statut", label: "Statut", largeurMm: 16 },
+  ],
+} as TableAffichageDef;
+
+const TYPE_EXPORT_ARTICLES: TypeAffichage = {
+  id: "standard",
+  nom: "Standard",
+  colonnes: TABLE_EXPORT_ARTICLES.colonnes.map((c) => c.id),
+  contraintePdf: false,
+};
+
+function versLignesPdf(
+  liste: Produit[],
+  categories: CategorieProduit[],
+) {
+  return lignesExportArticles(liste, categories)
+    .slice(1)
+    .map((row) => ({
+      code: String(row[0]),
+      libelle: String(row[1]),
+      famille: String(row[2]),
+      unite: String(row[3]),
+      nature: String(row[4]),
+      appro: String(row[5]),
+      circuit: String(row[6]),
+      vente: String(row[7]),
+      statut: String(row[8]),
+    }));
+}
+
+function exporterCsvArticles(liste: Produit[], categories: CategorieProduit[]) {
+  downloadCsv("articles.csv", lignesExportArticles(liste, categories));
+}
+
+function exporterPdfArticles(liste: Produit[], categories: CategorieProduit[]) {
+  return imprimerTableauPdf(
+    TABLE_EXPORT_ARTICLES,
+    TYPE_EXPORT_ARTICLES,
+    versLignesPdf(liste, categories),
+    { filename: "articles", titre: "Liste des articles" },
+  );
+}
+
 export default function ParametresProduitsPage() {
   return (
     <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
@@ -170,6 +241,12 @@ function ParametresProduitsContent() {
     factures,
     achats,
     missionsAchat,
+    demandesPrix,
+    fournisseurs,
+    pointsDeVente,
+    inventaires,
+    journalActivites,
+    filtresArticles,
     parametres,
     addProduit,
     updateProduit,
@@ -180,8 +257,14 @@ function ParametresProduitsContent() {
     comptesComptables,
     ecrituresComptables,
     assurerComptesComptablesDefaut,
+    enregistrerFiltreArticles,
+    renommerFiltreArticles,
+    supprimerFiltreArticles,
   } = useStore();
   const peutComptaProduit = useAuthStore((s) => s.hasPermission("parametres.gerer"));
+  const userId = useAuthStore((s) => s.user?.id);
+  const vueGlobale = useAuthStore((s) => s.hasPermission("sites.vue_globale"));
+  const sitesUtilisateur = useAuthStore((s) => s.user?.pointDeVenteIds);
   const moduleCompta = moduleComptabiliteActif(parametres);
 
   useEffect(() => {
@@ -192,9 +275,8 @@ function ParametresProduitsContent() {
 
   const feuilles = categoriesFeuilles(categoriesProduits);
 
-  const [filtreActif, setFiltreActif] = useState<"actifs" | "tous" | "inactifs">(
-    "actifs",
-  );
+  const [filtres, setFiltres] = useState<FiltresArticles>(FILTRES_ARTICLES_VIDE);
+  const [pageArticles, setPageArticles] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const produitQueryTraite = useRef<string | null>(null);
@@ -244,15 +326,55 @@ function ParametresProduitsContent() {
     prixHT: "",
   });
 
+  const sitesVisibles = useMemo(
+    () =>
+      sitesVisiblesPourUtilisateur(
+        pointsDeVente.filter((s) => s.actif && s.id !== "tous"),
+        sitesUtilisateur,
+        vueGlobale,
+      ),
+    [pointsDeVente, sitesUtilisateur, vueGlobale],
+  );
+  const ctxFiltres = useMemo(
+    () => ({
+      categories: categoriesProduits,
+      comptes: comptesComptables,
+      entrees,
+      ventes,
+      inventaires: inventaires ?? [],
+      siteIds: sitesVisibles.map((s) => s.id),
+      achats,
+      demandesPrix: demandesPrix ?? [],
+      journal: journalActivites ?? [],
+      nomSite: (id: string) => pointsDeVente.find((s) => s.id === id)?.nom ?? id,
+      nomFournisseur: (id: string) =>
+        fournisseurs.find((f) => f.id === id)?.nom ?? id,
+      nomCategorie: (id: string) =>
+        categoriesProduits.find((c) => c.id === id)?.libelle ?? id,
+    }),
+    [
+      categoriesProduits,
+      comptesComptables,
+      entrees,
+      ventes,
+      inventaires,
+      sitesVisibles,
+      achats,
+      demandesPrix,
+      journalActivites,
+      pointsDeVente,
+      fournisseurs,
+    ],
+  );
   const liste = useMemo(() => {
-    return [...produits]
-      .filter((p) => {
-        if (filtreActif === "actifs") return p.actif;
-        if (filtreActif === "inactifs") return !p.actif;
-        return true;
-      })
-      .sort((a, b) => a.code.localeCompare(b.code));
-  }, [produits, filtreActif]);
+    return filtrerArticles(produits, filtres, ctxFiltres).sort((a, b) =>
+      a.code.localeCompare(b.code, "fr"),
+    );
+  }, [produits, filtres, ctxFiltres]);
+  const pageCourante = useMemo(
+    () => paginerArticles(liste, pageArticles),
+    [liste, pageArticles],
+  );
 
   const selected = produits.find((p) => p.id === selectedId);
   const produitEnEdition = editingId
@@ -318,7 +440,7 @@ function ParametresProduitsContent() {
     const p = produits.find((x) => x.id === id);
     if (!p) return;
     produitQueryTraite.current = id;
-    if (!p.actif) setFiltreActif("tous");
+    if (!p.actif) setFiltres((f) => ({ ...f, statut: "" }));
     demarrerEdition(p);
   }, [searchParams, produits]);
 
@@ -342,12 +464,26 @@ function ParametresProduitsContent() {
     }
     const achatSaisi = form.prixAchat.trim();
     const venteSaisie = form.prixVenteHT.trim();
-    const achat = achatSaisi === "" ? 0 : Number(achatSaisi);
-    const vente = venteSaisie === "" ? 0 : Number(venteSaisie);
-    if (!Number.isFinite(achat) || achat < 0 || !Number.isFinite(vente) || vente < 0) {
-      alert("Les prix doivent être des montants positifs ou nuls.");
+    const achatLu = parserMontantPrix(achatSaisi);
+    const venteLue = parserMontantPrix(venteSaisie);
+    if (achatLu.etat === "invalide" || achatLu.etat === "negatif") {
+      alert(
+        achatLu.etat === "negatif"
+          ? "Le prix d'achat ne peut pas être négatif."
+          : "Prix d'achat invalide.",
+      );
       return;
     }
+    if (venteLue.etat === "invalide" || venteLue.etat === "negatif") {
+      alert(
+        venteLue.etat === "negatif"
+          ? "Le prix de vente ne peut pas être négatif."
+          : "Prix de vente invalide.",
+      );
+      return;
+    }
+    const achat = achatLu.etat === "ok" ? achatLu.valeur : 0;
+    const vente = venteLue.etat === "ok" ? venteLue.valeur : 0;
     if (prixAchatEstObligatoire(form, categoriesProduits) && achatSaisi === "") {
       alert("Le prix d'achat est obligatoire pour un article achetable.");
       return;
@@ -828,49 +964,39 @@ function ParametresProduitsContent() {
               </label>
             )}
             {produitEstAchetable(form, categoriesProduits) && (
-            <label className="block text-xs font-semibold text-muted">
-              Prix d&apos;achat HT
-              {!prixAchatEstObligatoire(form, categoriesProduits) && (
-                <span className="font-normal"> (facultatif)</span>
-              )}
-              <input
-                type="number"
-                className="input mt-1"
-                value={form.prixAchat}
-                onChange={(e) =>
-                  setForm({ ...form, prixAchat: e.target.value })
-                }
+              <ChampsPrixHtTtc
+                labelHt="Prix d'achat HT"
+                labelTtc="Prix d'achat TTC"
+                ht={form.prixAchat}
+                tauxPourcent={parametres.tauxTVA}
+                afficherTtc={avecTVA}
                 required={prixAchatEstObligatoire(form, categoriesProduits)}
+                facultatif={!prixAchatEstObligatoire(form, categoriesProduits)}
                 placeholder={
                   prixAchatEstObligatoire(form, categoriesProduits)
                     ? undefined
                     : "Issu de la fabrication"
                 }
+                onHtChange={(prixAchat) => setForm({ ...form, prixAchat })}
               />
-            </label>
             )}
             {produitEstVendable(form, categoriesProduits) && (
             <>
-            <label className="block text-xs font-semibold text-muted">
-              Prix vente détail HT
-              {!prixVenteEstObligatoire(form, categoriesProduits) && (
-                <span className="font-normal"> (facultatif)</span>
-              )}
-              <input
-                type="number"
-                className="input mt-1"
-                value={form.prixVenteHT}
-                onChange={(e) =>
-                  setForm({ ...form, prixVenteHT: e.target.value })
-                }
-                required={prixVenteEstObligatoire(form, categoriesProduits)}
-                placeholder={
-                  prixVenteEstObligatoire(form, categoriesProduits)
-                    ? undefined
-                    : "Non vendu tel quel"
-                }
-              />
-            </label>
+            <ChampsPrixHtTtc
+              labelHt="Prix vente détail HT"
+              labelTtc="Prix vente détail TTC"
+              ht={form.prixVenteHT}
+              tauxPourcent={parametres.tauxTVA}
+              afficherTtc={avecTVA}
+              required={prixVenteEstObligatoire(form, categoriesProduits)}
+              facultatif={!prixVenteEstObligatoire(form, categoriesProduits)}
+              placeholder={
+                prixVenteEstObligatoire(form, categoriesProduits)
+                  ? undefined
+                  : "Non vendu tel quel"
+              }
+              onHtChange={(prixVenteHT) => setForm({ ...form, prixVenteHT })}
+            />
             <label className="block text-xs font-semibold text-muted sm:col-span-2">
               <span className="flex items-center gap-1">
                 <input
@@ -1009,24 +1135,32 @@ function ParametresProduitsContent() {
         </form>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {(
-          [
-            ["actifs", "Actifs"],
-            ["inactifs", "Inactifs"],
-            ["tous", "Tous"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`btn ${filtreActif === id ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => setFiltreActif(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <FiltresListeArticles
+        filtres={filtres}
+        onChange={(next) => {
+          setFiltres(next);
+          setPageArticles(1);
+        }}
+        categories={categoriesProduits}
+        sites={sitesVisibles}
+        fournisseurs={fournisseurs}
+        enregistres={
+          userId && Array.isArray(filtresArticles?.[userId])
+            ? filtresArticles[userId]
+            : []
+        }
+        onEnregistrer={(nomFiltre, combinaison) =>
+          enregistrerFiltreArticles(nomFiltre, combinaison)
+        }
+        onRenommer={(id, nomFiltre) => renommerFiltreArticles(id, nomFiltre)}
+        onSupprimer={(id) => supprimerFiltreArticles(id)}
+        total={pageCourante.total}
+        page={pageCourante.page}
+        pages={pageCourante.pages}
+        onPage={setPageArticles}
+        onExportCsv={() => exporterCsvArticles(liste, categoriesProduits)}
+        onExportPdf={() => void exporterPdfArticles(liste, categoriesProduits)}
+      />
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="table-shell lg:col-span-3">
@@ -1046,7 +1180,14 @@ function ParametresProduitsContent() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((p) => (
+              {pageCourante.lignes.length === 0 ? (
+                <tr>
+                  <td colSpan={avecTVA ? 10 : 9} className="text-sm text-muted">
+                    Aucun article pour ces filtres.
+                  </td>
+                </tr>
+              ) : (
+                pageCourante.lignes.map((p) => (
                 <tr
                   key={p.id}
                   className={
@@ -1165,7 +1306,8 @@ function ParametresProduitsContent() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

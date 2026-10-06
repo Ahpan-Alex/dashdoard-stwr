@@ -56,6 +56,7 @@ export function emptyAppState(): AppState {
     modelesDocuments: createDefaultModeles(),
     preferencesModeles: {},
     preferencesAffichage: {},
+    filtresArticles: {},
     parametresAlertes: { ...PARAMETRES_ALERTES_DEFAUT },
     alertesSuivi: {},
     bilanInitial: {
@@ -130,6 +131,7 @@ export function pickAppState(state: AppState): AppState {
     modelesDocuments: assurerModelesDocuments(state.modelesDocuments),
     preferencesModeles: state.preferencesModeles ?? {},
     preferencesAffichage: state.preferencesAffichage ?? {},
+    filtresArticles: state.filtresArticles ?? {},
     parametresAlertes: normaliserParametresAlertes(state.parametresAlertes),
     alertesSuivi: state.alertesSuivi ?? {},
     bilanInitial: state.bilanInitial,

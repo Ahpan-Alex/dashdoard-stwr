@@ -9,7 +9,10 @@
     "lint": "eslint",
     "test:apercu-commande": "tsx scripts/apercu-commande-liste.test.mts",
     "test:cascade-da": "tsx scripts/cascade-da-commande.test.mts",
-    "test:of-chaine": "tsx scripts/of-chaine.test.mts"
+    "test:of-chaine": "tsx scripts/of-chaine.test.mts",
+    "test:articles-filtres": "tsx scripts/articles-filtres.test.mts",
+    "test:tiers-fiche": "tsx scripts/tiers-fiche.test.mts",
+    "test:prix-ttc": "tsx scripts/prix-ttc.test.mts"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
