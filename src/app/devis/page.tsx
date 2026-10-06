@@ -12,7 +12,11 @@ import {
 } from "@/components/document-saisie-wizard";
 import { DevisSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import { libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import {
+  assujettiPourNouveauDocument,
+  tauxTvaPourNouveauDocument,
+} from "@/lib/tiers-fiche";
 import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
@@ -22,6 +26,7 @@ export default function DevisPage() {
   const {
     devis,
     clients,
+    tiers,
     produits,
     categoriesProduits,
     pointsDeVente,
@@ -84,7 +89,15 @@ export default function DevisPage() {
     setOpen(true);
   }
 
-  const assujettiTVA = appliqueTVA(parametres);
+  const tiersClient = (tiers ?? []).find((t) => t.id === meta.clientId);
+  const tauxNouveau = tauxTvaPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+  });
+  const assujettiTVA = assujettiPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+  });
 
   return (
     <div>
@@ -113,7 +126,7 @@ export default function DevisPage() {
             pointDeVenteId={meta.pointDeVenteId}
             entrees={entrees}
             ventes={ventes}
-            tauxTVA={parametres.tauxTVA}
+            tauxTVA={tauxNouveau}
             assujettiTVA={assujettiTVA}
             showAcomptes={acompteMontant > 0}
             acomptesTTC={acompteMontant}
@@ -148,7 +161,7 @@ export default function DevisPage() {
                 date: dateIso,
                 validiteJours: Number(meta.validiteJours) || 15,
                 statut: "brouillon",
-                tauxTVA: parametres.tauxTVA,
+                tauxTVA: tauxNouveau,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
                 ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),

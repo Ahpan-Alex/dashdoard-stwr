@@ -69,6 +69,7 @@ import {
   ligneAchatStockee,
 } from "@/lib/comptabilite";
 import { useStore } from "@/lib/store";
+import { tauxTvaAchatPropose } from "@/lib/tiers-fiche";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useAffichageTable } from "@/lib/use-affichage-table";
 import { validiteJoursDefautAchats } from "@/lib/validite-document";
@@ -120,6 +121,7 @@ function AchatsListe() {
   const {
     achats,
     fournisseurs,
+    tiers,
     produits,
     categoriesProduits,
     demandesPrix,
@@ -242,7 +244,10 @@ function AchatsListe() {
         ? isoMidiDepuisJour(form.echeance)
         : undefined,
       statut: "brouillon",
-      tauxTVA: parametres.assujettiTVA ? parametres.tauxTVA : 0,
+      tauxTVA: tauxTvaAchatPropose(
+        parametres,
+        (tiers ?? []).find((t) => t.id === form.fournisseurId),
+      ),
       lignes: [],
       note: undefined,
       validiteJours: Number(form.validiteJours) || 15,

@@ -16,7 +16,6 @@ import {
 import { CommandesSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
 import {
-  appliqueTVA,
   acomptesPourDocument,
   libelleClient,
   lignesAcomptesPourDocument,
@@ -26,6 +25,10 @@ import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 import { devisPeutEtreTransforme } from "@/lib/transformation-document";
+import {
+  assujettiPourNouveauDocument,
+  tauxTvaPourNouveauDocument,
+} from "@/lib/tiers-fiche";
 import { useModelePourType } from "@/lib/use-modele";
 
 export default function CommandesPage() {
@@ -45,6 +48,7 @@ function CommandesContent() {
     commandes,
     devis,
     clients = [],
+    tiers,
     produits,
     pointsDeVente,
     parametres,
@@ -84,7 +88,18 @@ function CommandesContent() {
   const [acompte, setAcompte] = useState(SAISIE_ACOMPTE_VIDE);
 
   const modele = useModelePourType("commande");
-  const assujettiTVA = appliqueTVA(parametres);
+  const devisSource = devis.find((d) => d.id === meta.devisId);
+  const tiersClient = (tiers ?? []).find((t) => t.id === meta.clientId);
+  const tauxNouveau = tauxTvaPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource: devisSource?.tauxTVA,
+  });
+  const assujettiTVA = assujettiPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource: devisSource?.tauxTVA,
+  });
 
   useEffect(() => {
     if (!clientQuery) return;
@@ -207,7 +222,7 @@ function CommandesContent() {
             pointDeVenteId={meta.pointDeVenteId}
             entrees={entrees}
             ventes={ventes}
-            tauxTVA={parametres.tauxTVA}
+            tauxTVA={tauxNouveau}
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
@@ -269,7 +284,7 @@ function CommandesContent() {
                 validiteJours: Number(meta.validiteJours) || 15,
                 statut: "confirmee",
                 devisId: meta.devisId || undefined,
-                tauxTVA: parametres.tauxTVA,
+                tauxTVA: tauxNouveau,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
                 ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),

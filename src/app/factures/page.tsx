@@ -16,7 +16,6 @@ import { DocumentPreview } from "@/components/document-preview";
 import { DocumentPrintActions } from "@/components/document-print-actions";
 import { FacturesSubnav } from "@/components/factures-subnav";
 import {
-  appliqueTVA,
   acomptesPourDocument,
   calculerTotaux,
   creerSnapshotAcomptesDocument,
@@ -48,6 +47,10 @@ import {
 } from "@/lib/calculations";
 import { quantiteReserveeProduitSite } from "@/lib/repartition-achat-of";
 import { useStore } from "@/lib/store";
+import {
+  assujettiPourNouveauDocument,
+  tauxTvaPourNouveauDocument,
+} from "@/lib/tiers-fiche";
 import { resoudreCreationFacture } from "@/lib/vente-credit";
 import { useAvertissementCompteProduit } from "@/components/avertissement-compte-produit";
 import { useModelePourType } from "@/lib/use-modele";
@@ -92,6 +95,7 @@ export default function FacturesPage() {
   const {
     factures,
     clients,
+    tiers,
     produits,
     categoriesProduits,
     pointsDeVente,
@@ -116,7 +120,6 @@ export default function FacturesPage() {
   const { confirmerSiBesoin, modal: modalCompteProduit } =
     useAvertissementCompteProduit("vente");
 
-  const avecTVA = appliqueTVA(parametres);
   const produitsDispo = produitsVendablesActifs(produits, categoriesProduits);
   const categoriesActives = useMemo(
     () =>
@@ -149,6 +152,20 @@ export default function FacturesPage() {
     compteTresorerieId: "",
     referencePaiement: "",
     genererFactureAcompte: true,
+  });
+  const commandeSource = commandes.find((c) => c.id === form.commandeId);
+  const devisSource = devis.find((d) => d.id === (form.devisId || commandeSource?.devisId));
+  const tauxSource = commandeSource?.tauxTVA ?? devisSource?.tauxTVA;
+  const tiersClient = (tiers ?? []).find((t) => t.id === form.clientId);
+  const tauxNouveau = tauxTvaPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource,
+  });
+  const avecTVA = assujettiPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource,
   });
   const [lignes, setLignes] = useState<DraftLigne[]>([]);
   const [dragKey, setDragKey] = useState<string | null>(null);
@@ -214,13 +231,13 @@ export default function FacturesPage() {
     const lignesDoc = lignes.map((l) => ({ ...l, id: l.key }));
     return calculerTotaux(
       lignesDoc,
-      parametres.tauxTVA,
+      tauxNouveau,
       0,
       avecTVA,
       Number(form.remiseGlobale) || 0,
       form.remiseGlobaleMode,
     );
-  }, [lignes, parametres.tauxTVA, avecTVA, form.remiseGlobale, form.remiseGlobaleMode]);
+  }, [lignes, tauxNouveau, avecTVA, form.remiseGlobale, form.remiseGlobaleMode]);
 
   const acomptePayeNum = Math.max(0, Number(form.acomptePaye) || 0);
   const resteAPayerDraft = Math.max(0, totauxDraft.totalTTC - acomptePayeNum);
@@ -595,7 +612,7 @@ export default function FacturesPage() {
         echeance: new Date(`${form.echeance}T12:00:00`).toISOString(),
         statut,
         montantPaye: paye,
-        tauxTVA: parametres.tauxTVA,
+        tauxTVA: tauxNouveau,
         conditionsPaiement: parametres.conditionsPaiementDefaut,
         note: form.note.trim() || undefined,
         ...champsRemise,

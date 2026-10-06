@@ -10,7 +10,11 @@ import {
 } from "@/components/document-saisie-wizard";
 import { BonsDeLivraisonSubnav } from "@/components/commercial-doc-subnav";
 import { PageHeader } from "@/components/page-header";
-import { appliqueTVA, libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import { libelleClient, persisterRemiseGlobale } from "@/lib/commercial";
+import {
+  assujettiPourNouveauDocument,
+  tauxTvaPourNouveauDocument,
+} from "@/lib/tiers-fiche";
 import { numeroPieceSuivant } from "@/lib/numerotation-pieces";
 import { pointDeVenteSaisieDefaut, filterByPos } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
@@ -26,6 +30,7 @@ export default function BonsDeLivraisonPage() {
     commandes,
     devis,
     clients,
+    tiers,
     produits,
     pointsDeVente,
     parametres,
@@ -57,7 +62,18 @@ export default function BonsDeLivraisonPage() {
   });
 
   const modele = useModelePourType("bon_de_livraison");
-  const assujettiTVA = appliqueTVA(parametres);
+  const commandeSource = commandes.find((c) => c.id === meta.commandeId);
+  const tiersClient = (tiers ?? []).find((t) => t.id === meta.clientId);
+  const tauxNouveau = tauxTvaPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource: commandeSource?.tauxTVA,
+  });
+  const assujettiTVA = assujettiPourNouveauDocument({
+    parametres,
+    tiers: tiersClient,
+    tauxSource: commandeSource?.tauxTVA,
+  });
 
   function ouvrirFormulaire() {
     if (meta.commandeId) annulerTransformation("commande", meta.commandeId);
@@ -139,7 +155,7 @@ export default function BonsDeLivraisonPage() {
             pointDeVenteId={meta.pointDeVenteId}
             entrees={entrees}
             ventes={ventes}
-            tauxTVA={parametres.tauxTVA}
+            tauxTVA={tauxNouveau}
             assujettiTVA={assujettiTVA}
             initialLignes={seed.lignes}
             initialRemiseGlobale={seed.remiseGlobale}
@@ -197,7 +213,7 @@ export default function BonsDeLivraisonPage() {
                 statut: "prepare",
                 commandeId: meta.commandeId || undefined,
                 devisId: cmd?.devisId,
-                tauxTVA: parametres.tauxTVA,
+                tauxTVA: tauxNouveau,
                 conditionsPaiement: parametres.conditionsPaiementDefaut,
                 lignes,
                 ...persisterRemiseGlobale(remiseGlobale, remiseGlobaleMode),

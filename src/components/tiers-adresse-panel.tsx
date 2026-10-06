@@ -72,6 +72,40 @@ export function TiersAdressePanel({ tiers, onSave }: Props) {
         <AdresseTiersFields value={principale} onChange={setPrincipale} />
       </section>
 
+      <section className="rounded-[var(--radius)] border border-line bg-card p-5">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={memeFacturation && memeLivraison}
+            onChange={(e) => {
+              const v = e.target.checked;
+              if (v) {
+                setMemeFacturation(true);
+                setMemeLivraison(true);
+                return;
+              }
+              setMemeLivraison(false);
+              if (livraisons.length === 0) {
+                setLivraisons([
+                  adresseTiersVide(
+                    adressePrincipaleEffective({
+                      ...tiers,
+                      adressePrincipale: principale,
+                    }),
+                  ),
+                ]);
+              }
+            }}
+          />
+          Même adresse pour la facturation et la livraison
+        </label>
+        <p className="mt-2 text-xs text-muted">
+          Décochez pour saisir une adresse de livraison (service, téléphone, mail
+          et adresse). Les cases Courrier, Facturation et Livraison restent
+          disponibles.
+        </p>
+      </section>
+
       <UsageAdresse
         titre="Courrier"
         meme={memeCourrier}

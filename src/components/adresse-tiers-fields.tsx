@@ -16,6 +16,32 @@ export function AdresseTiersFields({ value, onChange, showLibelle }: Props) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <label className="block text-xs font-semibold text-muted">
+        Service
+        <input
+          className="input mt-1"
+          value={value.service ?? ""}
+          onChange={(e) => set("service", e.target.value)}
+          placeholder="Ex. Comptabilité"
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Téléphone
+        <input
+          className="input mt-1"
+          value={value.telephone ?? ""}
+          onChange={(e) => set("telephone", e.target.value)}
+        />
+      </label>
+      <label className="block text-xs font-semibold text-muted">
+        Mail
+        <input
+          type="email"
+          className="input mt-1"
+          value={value.email ?? ""}
+          onChange={(e) => set("email", e.target.value)}
+        />
+      </label>
       {showLibelle && (
         <label className="block text-xs font-semibold text-muted sm:col-span-2 lg:col-span-3">
           Libellé du site / dépôt

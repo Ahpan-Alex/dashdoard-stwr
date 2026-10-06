@@ -8,11 +8,11 @@ import {
   BarChart3,
   Contact,
   FileText,
-  MapPin,
-  Scale,
+  FolderOpen,
+  IdCard,
   ScrollText,
-  SlidersHorizontal,
   Stamp,
+  StickyNote,
 } from "lucide-react";
 import { ClientContactsPanel } from "@/components/client-contacts-panel";
 import { EmptyState } from "@/components/empty-state";
@@ -24,10 +24,17 @@ import { TiersAdressePanel } from "@/components/tiers-adresse-panel";
 import { TiersBatPanel } from "@/components/tiers-bat-panel";
 import { TiersDashboardPanel } from "@/components/tiers-dashboard-panel";
 import { TiersFacturesPanel } from "@/components/tiers-factures-panel";
+import {
+  TiersFiscalitePanel,
+  TiersImmatriculationPanel,
+  TiersPaiementsPanel,
+} from "@/components/tiers-infos-panels";
+import { TiersNotesPanel } from "@/components/tiers-notes-panel";
+import { TiersStockagePanel } from "@/components/tiers-stockage-panel";
 import { HistoriquePrixFournisseur } from "@/components/historique-prix-fournisseur";
 import { couleurStatutDocument } from "@/lib/commercial";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { FORMES_JURIDIQUES_MG } from "@/lib/madagascar";
+import { compteUtiliseEnEcriture } from "@/lib/comptabilite";
 import { useStore } from "@/lib/store";
 import {
   assurerTiers,
@@ -47,14 +54,15 @@ import {
 import type { ClientContact } from "@/lib/types";
 
 type Onglet =
-  | "dashboard"
-  | "adresse"
-  | "factures"
-  | "solde"
-  | "historique"
-  | "conditions"
+  | "infos"
   | "contacts"
-  | "bat";
+  | "factures"
+  | "dashboard"
+  | "bat"
+  | "notes"
+  | "stockage";
+
+type SousInfos = "adresse" | "immatriculation" | "fiscalite" | "paiements";
 
 export default function TiersDetailPage() {
   const params = useParams();
@@ -77,8 +85,9 @@ export default function TiersDetailPage() {
     categoriesProduits,
     pointsDeVente,
     updateTiers,
-    updatePlafondCredit,
     comptesComptables,
+    ecrituresComptables,
+    modesPaiement,
   } = useStore();
 
   const liste = useMemo(
@@ -86,13 +95,13 @@ export default function TiersDetailPage() {
     [clients, fournisseurs, tiers],
   );
   const tiersActif = liste.find((t) => t.id === id);
-  const [onglet, setOnglet] = useState<Onglet>("dashboard");
+  const [onglet, setOnglet] = useState<Onglet>("infos");
+  const [sousInfos, setSousInfos] = useState<SousInfos>("adresse");
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<StatutMouvementTiers | "tous">(
     "tous",
   );
-  const [plafondSaisi, setPlafondSaisi] = useState<string | null>(null);
 
   const ctxDocs = {
     devis,
@@ -139,22 +148,20 @@ export default function TiersDetailPage() {
     );
   }
 
-  const onglets: { id: Onglet; label: string; icon: typeof Scale }[] = [
-    ...(estClient(tiersActif)
-      ? [{ id: "dashboard" as const, label: "Dashboard", icon: BarChart3 }]
-      : []),
-    { id: "adresse", label: "Adresse", icon: MapPin },
-    { id: "factures", label: "Factures", icon: FileText },
-    { id: "solde", label: "Soldes", icon: Scale },
-    { id: "historique", label: "Historique", icon: ScrollText },
-    { id: "conditions", label: "Conditions", icon: SlidersHorizontal },
+  const onglets: { id: Onglet; label: string; icon: typeof FileText }[] = [
+    { id: "infos", label: "Infos tiers", icon: IdCard },
     { id: "contacts", label: "Contacts", icon: Contact },
+    { id: "factures", label: "Factures", icon: FileText },
+    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
     ...(estClient(tiersActif)
       ? [{ id: "bat" as const, label: "BAT", icon: Stamp }]
       : []),
+    { id: "notes", label: "Notes & échanges", icon: StickyNote },
+    { id: "stockage", label: "Stockage", icon: FolderOpen },
   ];
-  const ongletAffiche: Onglet =
-    onglet === "dashboard" && !estClient(tiersActif) ? "adresse" : onglet;
+  const ongletAffiche: Onglet = onglets.some((o) => o.id === onglet)
+    ? onglet
+    : "infos";
 
   const soldeC = estClient(tiersActif)
     ? soldeClientTiers(tiersActif.id, { factures, acomptes, parametres })
@@ -180,16 +187,8 @@ export default function TiersDetailPage() {
       )
     : "ok";
   const depasse = nivPlafond === "depasse";
-  const forme = FORMES_JURIDIQUES_MG.find(
-    (f) => f.id === tiersActif.formeJuridique,
-  )?.label;
-
-  function enregistrerPlafond() {
-    const v = Math.max(0, Number(plafondSaisi ?? plafond) || 0);
-    const res = updatePlafondCredit(tiersActif!.id, v);
-    if (!res.ok) alert(res.reason);
-    setPlafondSaisi(null);
-  }
+  const sauvegarder = (patch: Partial<typeof tiersActif>) =>
+    updateTiers(tiersActif.id, patch);
 
   return (
     <RequirePermission permission="clients.lire">
@@ -209,6 +208,12 @@ export default function TiersDetailPage() {
         showPosSelector={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {estClient(tiersActif) && (
+              <span className="badge badge-sea">Client</span>
+            )}
+            {estFournisseur(tiersActif) && (
+              <span className="badge badge-sea">Fournisseur</span>
+            )}
             {tiersActif.code && (
               <span className="badge badge-sand font-mono">{tiersActif.code}</span>
             )}
@@ -227,40 +232,6 @@ export default function TiersDetailPage() {
         }
       />
 
-      <dl className="mb-6 grid gap-3 rounded-[var(--radius)] border border-line bg-card p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
-        <div>
-          <dt className="text-xs text-muted">Forme juridique</dt>
-          <dd className="font-medium">{forme || tiersActif.formeJuridique || "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Capital social</dt>
-          <dd className="font-medium">
-            {tiersActif.capitalSocial
-              ? formatCurrency(tiersActif.capitalSocial)
-              : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">NIF</dt>
-          <dd className="font-medium">{tiersActif.nif || "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">STAT</dt>
-          <dd className="font-medium">{tiersActif.stat || "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">RCS</dt>
-          <dd className="font-medium">{tiersActif.rcs || "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Site de rattachement</dt>
-          <dd className="font-medium">
-            {pointsDeVente.find((p) => p.id === tiersActif.siteRattachementId)
-              ?.nom || "—"}
-          </dd>
-        </div>
-      </dl>
-
       <nav className="mb-6 flex flex-wrap gap-2">
         {onglets.map(({ id: ongletId, label, icon: Icon }) => (
           <button
@@ -275,38 +246,91 @@ export default function TiersDetailPage() {
         ))}
       </nav>
 
-      {ongletAffiche === "dashboard" && estClient(tiersActif) && (
-        <>
-          <KpiBatCards
-            bats={bonsATirer ?? []}
-            commandes={commandes}
-            delaiRelanceJours={parametresAlertes.batRelance?.delaiJours ?? 7}
-            clientId={tiersActif.id}
-          />
-          <TiersDashboardPanel
-            clientId={tiersActif.id}
-            factures={factures}
-            parametres={parametres}
-            ventes={ventes}
-            produits={produits}
-            categories={categoriesProduits}
-            pointsDeVente={pointsDeVente}
-          />
-        </>
+      {ongletAffiche === "infos" && (
+        <div className="space-y-4">
+          <nav className="flex flex-wrap gap-2">
+            {(
+              [
+                ["adresse", "Adresse"],
+                ["immatriculation", "Immatriculation"],
+                ["fiscalite", "Fiscalité"],
+                ["paiements", "Paiements"],
+              ] as const
+            ).map(([idSous, label]) => (
+              <button
+                key={idSous}
+                type="button"
+                className={`btn ${sousInfos === idSous ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setSousInfos(idSous)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          {sousInfos === "adresse" && (
+            <TiersAdressePanel
+              key={tiersActif.id}
+              tiers={tiersActif}
+              onSave={sauvegarder}
+            />
+          )}
+          {sousInfos === "immatriculation" && (
+            <TiersImmatriculationPanel
+              key={tiersActif.id}
+              tiers={tiersActif}
+              comptes={comptesComptables}
+              tous={liste}
+              pointsDeVente={pointsDeVente}
+              compteClientVerrouille={compteUtiliseEnEcriture(
+                tiersActif.compteClientId,
+                ecrituresComptables,
+              )}
+              compteFournisseurVerrouille={compteUtiliseEnEcriture(
+                tiersActif.compteFournisseurId,
+                ecrituresComptables,
+              )}
+              onSave={sauvegarder}
+            />
+          )}
+          {sousInfos === "fiscalite" && (
+            <TiersFiscalitePanel
+              key={`${tiersActif.id}-${String(tiersActif.assujettiTVA)}`}
+              tiers={tiersActif}
+              onSave={sauvegarder}
+            />
+          )}
+          {sousInfos === "paiements" && (
+            <TiersPaiementsPanel
+              key={tiersActif.id}
+              tiers={tiersActif}
+              modes={modesPaiement ?? []}
+              onSave={sauvegarder}
+            />
+          )}
+        </div>
       )}
 
-      {ongletAffiche === "adresse" && (
-        <TiersAdressePanel
-          key={tiersActif.id}
-          tiers={tiersActif}
-          onSave={(patch) => updateTiers(tiersActif.id, patch)}
-        />
-      )}
-
-      {ongletAffiche === "factures" && <TiersFacturesPanel tiers={tiersActif} />}
-
-      {ongletAffiche === "solde" && (
+      {ongletAffiche === "dashboard" && (
         <div className="space-y-6">
+          {estClient(tiersActif) && (
+            <>
+              <KpiBatCards
+                bats={bonsATirer ?? []}
+                commandes={commandes}
+                delaiRelanceJours={parametresAlertes.batRelance?.delaiJours ?? 7}
+                clientId={tiersActif.id}
+              />
+              <TiersDashboardPanel
+                clientId={tiersActif.id}
+                factures={factures}
+                parametres={parametres}
+                ventes={ventes}
+                produits={produits}
+                categories={categoriesProduits}
+                pointsDeVente={pointsDeVente}
+              />
+            </>
+          )}
           {soldeC && (
             <section className="rounded-[var(--radius)] border border-line bg-card p-5">
               <h2 className="mb-3 font-display text-lg font-semibold">
@@ -361,8 +385,11 @@ export default function TiersDetailPage() {
         </div>
       )}
 
-      {ongletAffiche === "historique" && (
-        <div>
+      {ongletAffiche === "factures" && (
+        <div className="space-y-8">
+          <TiersFacturesPanel tiers={tiersActif} />
+
+          <div>
           {estFournisseur(tiersActif) && (
             <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
               <h2 className="mb-2 font-display text-lg font-semibold">
@@ -451,111 +478,6 @@ export default function TiersDetailPage() {
             </div>
           )}
         </div>
-      )}
-
-      {ongletAffiche === "conditions" && (
-        <div className="space-y-6">
-          {estClient(tiersActif) && (
-            <section className="rounded-[var(--radius)] border border-line bg-card p-5">
-              <h2 className="mb-3 font-display text-lg font-semibold">
-                Conditions de vente
-              </h2>
-              <dl className="grid gap-3 sm:grid-cols-3 text-sm">
-                <div>
-                  <dt className="text-xs text-muted">Délai de paiement</dt>
-                  <dd className="font-medium">
-                    {tiersActif.delaiPaiementClientJours ?? 0} jours
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted">Remise habituelle</dt>
-                  <dd className="font-medium">
-                    {tiersActif.remiseHabituelleClientPercent ?? 0} %
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted">Plafond de crédit</dt>
-                  <dd className="flex flex-wrap items-end gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      className="input w-40"
-                      value={plafondSaisi ?? String(plafond || "")}
-                      onChange={(e) => setPlafondSaisi(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={enregistrerPlafond}
-                    >
-                      Enregistrer
-                    </button>
-                  </dd>
-                  <p className="mt-1 text-[11px] text-muted">
-                    Modifiable par tout utilisateur. Une vente est bloquée si
-                    l&apos;encours dépasse ce plafond, sauf dérogation (admin /
-                    comptable).
-                  </p>
-                </div>
-              </dl>
-            </section>
-          )}
-          {estFournisseur(tiersActif) && (
-            <section className="rounded-[var(--radius)] border border-line bg-card p-5">
-              <h2 className="mb-3 font-display text-lg font-semibold">
-                Conditions d&apos;achat
-              </h2>
-              <dl className="grid gap-3 sm:grid-cols-2 text-sm">
-                <div>
-                  <dt className="text-xs text-muted">Délai de paiement</dt>
-                  <dd className="font-medium">
-                    {tiersActif.delaiPaiementFournisseurJours ?? 0} jours
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted">Remise habituelle</dt>
-                  <dd className="font-medium">
-                    {tiersActif.remiseHabituelleFournisseurPercent ?? 0} %
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          )}
-          <section className="rounded-[var(--radius)] border border-line bg-card p-5">
-            <h2 className="mb-3 font-display text-lg font-semibold">
-              Comptes comptables
-            </h2>
-            <dl className="grid gap-3 sm:grid-cols-2 text-sm">
-              {estClient(tiersActif) && (
-                <div>
-                  <dt className="text-xs text-muted">Compte client (411)</dt>
-                  <dd className="font-medium font-mono">
-                    {(() => {
-                      const c = comptesComptables.find(
-                        (x) => x.id === tiersActif.compteClientId,
-                      );
-                      return c ? `${c.numero} — ${c.libelle}` : "Non renseigné";
-                    })()}
-                  </dd>
-                </div>
-              )}
-              {estFournisseur(tiersActif) && (
-                <div>
-                  <dt className="text-xs text-muted">
-                    Compte fournisseur (401)
-                  </dt>
-                  <dd className="font-medium font-mono">
-                    {(() => {
-                      const c = comptesComptables.find(
-                        (x) => x.id === tiersActif.compteFournisseurId,
-                      );
-                      return c ? `${c.numero} — ${c.libelle}` : "Non renseigné";
-                    })()}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </section>
         </div>
       )}
 
@@ -565,6 +487,21 @@ export default function TiersDetailPage() {
           onChange={(contacts: ClientContact[]) =>
             updateTiers(tiersActif.id, { contacts })
           }
+        />
+      )}
+
+      {ongletAffiche === "notes" && (
+        <TiersNotesPanel
+          notes={tiersActif.notesEchanges ?? []}
+          onSave={(notesEchanges) => sauvegarder({ notesEchanges })}
+        />
+      )}
+
+      {ongletAffiche === "stockage" && (
+        <TiersStockagePanel
+          tiers={tiersActif}
+          parametres={parametres}
+          onSave={sauvegarder}
         />
       )}
 

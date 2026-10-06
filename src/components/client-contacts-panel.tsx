@@ -26,6 +26,9 @@ type ContactFormState = {
   telephone: string;
   email: string;
   adresse: string;
+  commentaire: string;
+  principal: boolean;
+  actif: boolean;
   facebook: string;
   instagram: string;
   linkedin: string;
@@ -40,6 +43,9 @@ const FORM_VIDE: ContactFormState = {
   telephone: "",
   email: "",
   adresse: "",
+  commentaire: "",
+  principal: false,
+  actif: true,
   facebook: "",
   instagram: "",
   linkedin: "",
@@ -55,6 +61,9 @@ function contactVersForm(c: ClientContact): ContactFormState {
     telephone: c.telephone ?? "",
     email: c.email ?? "",
     adresse: c.adresse ?? "",
+    commentaire: c.commentaire ?? "",
+    principal: Boolean(c.principal),
+    actif: c.actif !== false,
     facebook: c.reseaux?.facebook ?? "",
     instagram: c.reseaux?.instagram ?? "",
     linkedin: c.reseaux?.linkedin ?? "",
@@ -98,6 +107,7 @@ export function ClientContactsPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [recherche, setRecherche] = useState("");
   const [form, setForm] = useState<ContactFormState>(FORM_VIDE);
 
   function fermer() {
@@ -128,14 +138,37 @@ export function ClientContactsPanel({
       telephone: form.telephone.trim() || undefined,
       email: form.email.trim() || undefined,
       adresse: form.adresse.trim() || undefined,
+      commentaire: form.commentaire.trim() || undefined,
+      principal: form.principal,
+      actif: form.actif,
       reseaux: formVersReseaux(form),
     };
+    const avecPrincipal = form.principal
+      ? contacts.map((c) => ({ ...c, principal: false }))
+      : contacts;
     if (editingId) {
-      onChange(contacts.map((c) => (c.id === editingId ? contact : c)));
+      onChange(avecPrincipal.map((c) => (c.id === editingId ? contact : c)));
     } else {
-      onChange([...contacts, contact]);
+      onChange([...avecPrincipal, contact]);
     }
     fermer();
+  }
+
+  const q = recherche.trim().toLowerCase();
+  const visibles = contacts.filter((c) => {
+    if (!q) return true;
+    return (
+      c.nom.toLowerCase().includes(q) ||
+      (c.fonction ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  function basculerActif(c: ClientContact) {
+    onChange(
+      contacts.map((x) =>
+        x.id === c.id ? { ...x, actif: x.actif === false } : x,
+      ),
+    );
   }
 
   function supprimer(c: ClientContact) {
@@ -148,8 +181,8 @@ export function ClientContactsPanel({
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          Répertoriez les interlocuteurs du client : identité, coordonnées et
-          réseaux sociaux.
+          Interlocuteurs du tiers. Un contact peut être principal. Un contact
+          inactif reste dans l&apos;historique.
         </p>
         <button className="btn btn-primary shrink-0" onClick={ouvrirCreation}>
           <Plus className="h-4 w-4" />
@@ -210,6 +243,34 @@ export function ClientContactsPanel({
                 value={form.adresse}
                 onChange={(e) => setForm({ ...form, adresse: e.target.value })}
               />
+            </label>
+            <label className="block text-xs font-semibold text-muted sm:col-span-2 lg:col-span-3">
+              Commentaire
+              <input
+                className="input mt-1"
+                value={form.commentaire}
+                onChange={(e) =>
+                  setForm({ ...form, commentaire: e.target.value })
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.principal}
+                onChange={(e) =>
+                  setForm({ ...form, principal: e.target.checked })
+                }
+              />
+              Contact principal
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.actif}
+                onChange={(e) => setForm({ ...form, actif: e.target.checked })}
+              />
+              Actif
             </label>
           </div>
 
@@ -280,15 +341,31 @@ export function ClientContactsPanel({
         </form>
       )}
 
+      <label className="mb-4 block text-xs font-semibold text-muted">
+        Recherche
+        <input
+          className="input mt-1 max-w-sm"
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Nom ou fonction"
+        />
+      </label>
+
       {contacts.length === 0 ? (
         <EmptyState
           icon={<Contact className="h-5 w-5" />}
           title="Aucun contact"
-          description="Ajoutez les interlocuteurs de ce client pour centraliser leurs coordonnées."
+          description="Ajoutez les interlocuteurs de ce tiers pour centraliser leurs coordonnées."
+        />
+      ) : visibles.length === 0 ? (
+        <EmptyState
+          icon={<Contact className="h-5 w-5" />}
+          title="Aucun contact"
+          description="Aucun nom ou fonction ne correspond à la recherche."
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {contacts.map((c) => (
+          {visibles.map((c) => (
             <div
               key={c.id}
               className="rounded-[var(--radius)] border border-line bg-card p-5"
@@ -301,6 +378,14 @@ export function ClientContactsPanel({
                   {c.fonction && (
                     <p className="text-xs text-muted">{c.fonction}</p>
                   )}
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {c.principal && (
+                      <span className="badge badge-sea">Principal</span>
+                    )}
+                    {c.actif === false && (
+                      <span className="badge badge-sand">Inactif</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -341,7 +426,17 @@ export function ClientContactsPanel({
                     {c.adresse}
                   </p>
                 )}
+                {c.commentaire && (
+                  <p className="text-xs text-muted">{c.commentaire}</p>
+                )}
               </div>
+              <button
+                type="button"
+                className="btn btn-secondary mt-3"
+                onClick={() => basculerActif(c)}
+              >
+                {c.actif === false ? "Réactiver" : "Désactiver"}
+              </button>
 
               {c.reseaux &&
                 RESEAUX_META.some((m) => c.reseaux?.[m.cle]) && (
