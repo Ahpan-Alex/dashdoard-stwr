@@ -24,7 +24,8 @@ export type TableAffichageId =
   | "missions_suivi"
   | "missions_synthese"
   | "bats"
-  | "relances";
+  | "relances"
+  | "ordres_fabrication";
 
 export type ColonneAffichage = {
   id: string;
@@ -354,6 +355,20 @@ export const TABLES_AFFICHAGE: TableAffichageDef[] = [
       col("tranche", "Tranche", 22),
       col("derniere", "Dernière relance", 28),
       col("prochaine", "Prochaine", 22),
+    ],
+  },
+  {
+    id: "ordres_fabrication",
+    label: "Ordres de fabrication",
+    colonnes: [
+      col("numero", "N° OF", 26, true),
+      col("produit", "Produit fini", 40),
+      col("commande", "Commande client", 28),
+      col("atelier", "Atelier en cours", 28),
+      col("avancement", "Avancement", 32),
+      col("echeance", "Date d'échéance", 24),
+      col("site", "Site", 26),
+      col("statut", "Statut", 22),
     ],
   },
 ];

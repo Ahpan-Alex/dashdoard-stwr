@@ -244,11 +244,18 @@ export function PanneauApprovisionnementCommande({
                 <span className="ml-2 text-xs text-muted">
                   {MODE_APPROVISIONNEMENT_LABELS[mode]}
                 </span>
-                {statutFab && (
+                {statutFab && ofs[0] && statutFab === "en_fabrication" ? (
+                  <Link
+                    href={`/fabrication/${(ofs.find((o) => o.statut === "en_cours") ?? ofs[0]).id}?mode=voir`}
+                    className="badge badge-sand ml-2"
+                  >
+                    {STATUT_LIGNE_FABRICATION[statutFab]}
+                  </Link>
+                ) : statutFab ? (
                   <span className="badge badge-sand ml-2">
                     {STATUT_LIGNE_FABRICATION[statutFab]}
                   </span>
-                )}
+                ) : null}
                 {statutStock && (
                   <span
                     className={`badge ml-2 ${
@@ -268,7 +275,7 @@ export function PanneauApprovisionnementCommande({
                   {ofs.map((o) => (
                     <Link
                       key={o.id}
-                      href={`/fabrication/${o.id}`}
+                      href={`/fabrication/${o.id}?mode=voir`}
                       className="font-semibold text-sea-800"
                     >
                       {o.numero}
@@ -283,16 +290,24 @@ export function PanneauApprovisionnementCommande({
                   disabled={!atelierChoisi || !l.produitId}
                   onClick={() => {
                     if (!atelierChoisi || !l.produitId) return;
-                    const res = ctx.creerOrdreFabrication({
-                      atelierId: atelierChoisi,
-                      produitId: l.produitId,
-                      quantitePrevue: l.quantite,
-                      commandeId: commande.id,
-                      ligneCommandeId: l.id,
-                      dimensionLargeur: l.largeurM,
-                      dimensionHauteur: l.hauteurM,
-                    });
-                    if (!res.ok) setErreur(res.reason);
+                    try {
+                      const res = ctx.creerOrdreFabrication({
+                        atelierId: atelierChoisi,
+                        produitId: l.produitId,
+                        quantitePrevue: l.quantite,
+                        commandeId: commande.id,
+                        ligneCommandeId: l.id,
+                        dimensionLargeur: l.largeurM,
+                        dimensionHauteur: l.hauteurM,
+                      });
+                      if (!res.ok) setErreur(res.reason);
+                    } catch (err) {
+                      setErreur(
+                        err instanceof Error
+                          ? err.message
+                          : "L'ordre de fabrication n'a pas pu être enregistré.",
+                      );
+                    }
                   }}
                 >
                   Créer l&apos;ordre de fabrication

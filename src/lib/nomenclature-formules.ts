@@ -207,10 +207,11 @@ export function dimensionDepuisCommande(
   produitId: string,
 ): { largeur: number; hauteur: number } | null {
   if (!commande) return null;
-  const candidates = commande.lignes.filter(
-    (l) => (l.type ?? "produit") === "produit" && l.produitId === produitId,
+  const lignes = Array.isArray(commande.lignes) ? commande.lignes : [];
+  const candidates = lignes.filter(
+    (l) => l && (l.type ?? "produit") === "produit" && l.produitId === produitId,
   );
-  const pool = candidates.length > 0 ? candidates : commande.lignes;
+  const pool = candidates.length > 0 ? candidates : lignes;
   for (const l of pool) {
     const largeur = Number(l.largeurM);
     const hauteur = Number(l.hauteurM);

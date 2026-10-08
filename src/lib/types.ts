@@ -2011,6 +2011,15 @@ export type OrdreFabrication = {
   derogationBatDate?: string;
   derogationBatUserId?: string;
   derogationBatUserNom?: string;
+  /**
+   * Verrou d'édition (10 min), même principe que le verrou de transformation.
+   * Empêche un second utilisateur de modifier l'OF tant qu'il est tenu.
+   */
+  verrouEdition?: {
+    jusquA: string;
+    userId?: string;
+    userNom?: string;
+  } | null;
 };
 
 export type MissionAchatStatut =

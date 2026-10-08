@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
+  putBusinessState,
   setBusinessConflictHandler,
   setBusinessSyncEnabled,
 } from "@/lib/business-api";
+import { fusionnerOrdresFabricationLocaux } from "@/lib/conflit-saisie";
 import { useStore } from "@/lib/store";
 
 /** Prévient l'opérateur si deux personnes ont enregistré en même temps. */
@@ -14,10 +16,25 @@ export function ConflitSaisieBanner() {
 
   useEffect(() => {
     setBusinessConflictHandler(({ data }) => {
+      const local = useStore.getState();
+      const merged = fusionnerOrdresFabricationLocaux(data, local);
       setBusinessSyncEnabled(false);
-      applyBusinessData(data);
-      setBusinessSyncEnabled(true);
-      setVisible(true);
+      void (async () => {
+        try {
+          if (merged) {
+            const res = await putBusinessState(merged);
+            applyBusinessData(res.data);
+            return;
+          }
+          applyBusinessData(data);
+          setVisible(true);
+        } catch {
+          applyBusinessData(data);
+          setVisible(true);
+        } finally {
+          setBusinessSyncEnabled(true);
+        }
+      })();
     });
     return () => setBusinessConflictHandler(null);
   }, [applyBusinessData]);

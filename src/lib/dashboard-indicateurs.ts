@@ -56,7 +56,7 @@ import type {
 function ofDuSite(of: OrdreFabrication, siteId: string | "tous") {
   if (siteId === "tous") return true;
   if (of.atelierId === siteId) return true;
-  if (of.sorties.some((s) => s.siteSourceId === siteId)) return true;
+  if ((of.sorties ?? []).some((s) => s.siteSourceId === siteId)) return true;
   if (lignesMainOeuvre(of).some((m) => m.atelierId === siteId)) return true;
   return false;
 }
@@ -570,7 +570,7 @@ export function margeParOfCommande(
         const t = totauxFacture(f, parametres);
         ca += f.type === "avoir" ? -t.totalHT : t.totalHT;
       }
-      const cout = o.entreesProduction.reduce((s, e) => s + e.coutTotal, 0);
+      const cout = (o.entreesProduction ?? []).reduce((s, e) => s + e.coutTotal, 0);
       return {
         ofId: o.id,
         numero: o.numero,

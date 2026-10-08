@@ -80,7 +80,7 @@ export function OfLiesCommande({ commandeId }: { commandeId: string }) {
       <ul className="space-y-1">
         {ofs.map((o) => (
           <li key={o.id}>
-            <Link href={`/fabrication/${o.id}`} className="font-semibold text-sea-800">
+            <Link href={`/fabrication/${o.id}?mode=voir`} className="font-semibold text-sea-800">
               {o.numero}
             </Link>{" "}
             — {OF_STATUT_LABELS[o.statut]}

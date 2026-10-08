@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useAuthStore } from "@/lib/auth-store";
 import { PastilleCompteManquant } from "@/components/avertissement-compte-produit";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -14,6 +15,7 @@ import {
   lignesMainOeuvre,
   motifLancementOfDimension,
   OF_STATUT_LABELS,
+  ofAvecTableaux,
   ofEstVerrouille,
   ofPeutMouvementer,
   quantiteProduite,
@@ -25,7 +27,8 @@ import {
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { createId } from "@/lib/id";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
-import { natureStockDuProduit } from "@/lib/nature-stock";
+import { natureStockDuProduit, produitEstFabrique } from "@/lib/nature-stock";
+import { nomenclatureParType } from "@/lib/nomenclature";
 import {
   dimensionDepuisCommande,
   TYPE_CALCUL_NOMENCLATURE_LABELS,
@@ -37,6 +40,11 @@ import { libelleProduit } from "@/lib/produits";
 import { siteEstAtelier, sitesMagasin } from "@/lib/sites";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
+import {
+  manquesMatiereOf,
+  messageVerrouEdition,
+  ofAUneSortie,
+} from "@/lib/of-liste";
 import { resoudreDemarrageOf } from "@/lib/of-derogation-bat";
 import {
   actionRuptureComposant,
@@ -95,11 +103,20 @@ const VALIDATION_LABELS: Record<string, string> = {
   annuler_document: "Annulation",
 };
 
-export default function OrdreFabricationDetailPage() {
+export default function PageOrdreFabrication() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
+      <OrdreFabricationDetailPage />
+    </Suspense>
+  );
+}
+
+function OrdreFabricationDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
-  const of = useStore((s) => s.ordresFabrication.find((o) => o.id === id));
+  const ofTrouve = useStore((s) => s.ordresFabrication.find((o) => o.id === id));
+  const of = ofTrouve ? ofAvecTableaux(ofTrouve) : undefined;
   const produits = useStore((s) => s.produits);
   const commandes = useStore((s) => s.commandes);
   const bats = useStore((s) => s.bonsATirer ?? []);
@@ -144,6 +161,56 @@ export default function OrdreFabricationDetailPage() {
 
   const nomSite = (sid: string) =>
     tousSites.find((s) => s.id === sid)?.nom ?? visibles.find((s) => s.id === sid)?.nom ?? "Site";
+  const recherche = useSearchParams();
+  const peutModifier = useAuthStore((s) => s.hasPermission("fabrication.modifier"));
+  const userId = useAuthStore((s) => s.user?.id);
+  const prendreVerrouEditionOf = useStore((s) => s.prendreVerrouEditionOf);
+  const journalActivites = useStore((s) => s.journalActivites ?? []);
+  const modeEdition = recherche.get("mode") === "modifier";
+  const actionUrl = recherche.get("action");
+  const verrouMsg = of ? messageVerrouEdition(of.verrouEdition, userId) : null;
+  const edition = Boolean(
+    of && modeEdition && peutModifier && !ofEstVerrouille(of) && !verrouMsg,
+  );
+  const ofId = of?.id;
+
+  useEffect(() => {
+    if (!edition || !ofId) return;
+    prendreVerrouEditionOf(ofId);
+  }, [edition, ofId, prendreVerrouEditionOf]);
+
+  useEffect(() => {
+    if (!edition || !of) return;
+    if (actionUrl === "cloturer" && ofPeutMouvementer(of)) setClotureOpen(true);
+    if (actionUrl === "demande-achat") {
+      const manques = manquesMatiereOf(of, (composantId) =>
+        stockDisponiblePourOf(
+          composantId,
+          of.atelierId,
+          of.id,
+          entrees,
+          ventes,
+          inventaires,
+          {
+            achats: tousAchats,
+            ordresFabrication: ofs,
+            transfertsMatiereOf,
+          },
+        ),
+      );
+      const premier = manques.find((m) => {
+        const p = produits.find((x) => x.id === m.composantId);
+        return actionRuptureComposant(p) === "demande_achat";
+      });
+      if (premier) setDa(premier);
+    }
+    const hash = window.location.hash.replace("#", "");
+    if (hash) {
+      window.setTimeout(() => {
+        document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    }
+  }, [edition, actionUrl, ofId]);
 
   if (!of) {
     return (
@@ -164,6 +231,11 @@ export default function OrdreFabricationDetailPage() {
   const enCours = ofPeutMouvementer(of);
   const brouillon = of.statut === "brouillon";
   const depassements = depassementNomenclature(of);
+  const aSorti = ofAUneSortie(of);
+  const saisie = enCours && edition;
+  const journalOf = journalActivites.filter(
+    (j) => j.entite === "ordre_fabrication" && j.entiteId === of.id && j.action === "modification",
+  );
 
   function lancer() {
     const premier = demarrerOrdreFabrication(of!.id);
@@ -204,7 +276,7 @@ export default function OrdreFabricationDetailPage() {
           </Link>
         )}
         {of.ofParentId && ofs.some((o) => o.id === of.ofParentId) && (
-          <Link href={`/fabrication/${of.ofParentId}`} className="badge badge-sea">
+          <Link href={`/fabrication/${of.ofParentId}?mode=voir`} className="badge badge-sea">
             Alimente {ofs.find((o) => o.id === of.ofParentId)?.numero}
           </Link>
         )}
@@ -237,11 +309,36 @@ export default function OrdreFabricationDetailPage() {
             <br />
             {nomSite(of.atelierId)}
           </p>
-          <p>
-            <span className="text-xs font-semibold uppercase text-muted">Produit</span>
-            <br />
-            {produit ? `${produit.code} — ${libelleProduit(produit)}` : "—"}
-          </p>
+          {edition && !aSorti ? (
+            <label className="block text-xs font-semibold text-muted">
+              Produit fini
+              <select
+                className="select mt-1"
+                value={of.produitId}
+                onChange={(e) => {
+                  const res = modifierOrdreFabrication(of.id, {
+                    produitId: e.target.value,
+                    nomenclatureSource: "automatique",
+                  });
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                {produits
+                  .filter((p) => p.actif && produitEstFabrique(p))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} — {libelleProduit(p)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : (
+            <p>
+              <span className="text-xs font-semibold uppercase text-muted">Produit</span>
+              <br />
+              {produit ? `${produit.code} — ${libelleProduit(produit)}` : "—"}
+            </p>
+          )}
           <label className="block text-xs font-semibold text-muted">
             Quantité prévue
             <input
@@ -249,18 +346,77 @@ export default function OrdreFabricationDetailPage() {
               min={0}
               step="any"
               className="input mt-1"
-              disabled={!brouillon && !enCours}
-              value={of.quantitePrevue}
-              onChange={(e) =>
-                modifierOrdreFabrication(of.id, { quantitePrevue: Number(e.target.value) || 0 })
-              }
+              disabled={!edition || (!brouillon && !enCours)}
+              defaultValue={of.quantitePrevue}
+              key={`${of.id}-${of.quantitePrevue}`}
+              onBlur={(e) => {
+                const q = Number(e.target.value) || 0;
+                if (q === of.quantitePrevue) return;
+                const res = modifierOrdreFabrication(of.id, { quantitePrevue: q });
+                if (!res.ok) alert(res.reason);
+              }}
             />
+            {edition && aSorti && (
+              <span className="mt-1 block font-normal text-amber-900">
+                Des matières sont déjà sorties. Changer la quantité prévue ne recalcule pas les sorties déjà faites.
+              </span>
+            )}
           </label>
-          <p>
-            <span className="text-xs font-semibold uppercase text-muted">Nomenclature</span>
-            <br />
-            {of.nomenclatureNom} ({of.nomenclatureSource === "alternative" ? "alternative" : "standard"})
-          </p>
+          {edition && !aSorti ? (
+            <label className="block text-xs font-semibold text-muted">
+              Nomenclature
+              <select
+                className="select mt-1"
+                value={of.nomenclatureSource}
+                onChange={(e) => {
+                  const source = e.target.value === "alternative" ? "alternative" : "automatique";
+                  const res = modifierOrdreFabrication(of.id, { nomenclatureSource: source });
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                <option value="automatique">Nomenclature standard</option>
+                {produit && nomenclatureParType(produit, "alternative") && (
+                  <option value="alternative">
+                    {nomenclatureParType(produit, "alternative")?.nom ?? "Alternative"}
+                  </option>
+                )}
+              </select>
+            </label>
+          ) : (
+            <p>
+              <span className="text-xs font-semibold uppercase text-muted">Nomenclature</span>
+              <br />
+              {of.nomenclatureNom} ({of.nomenclatureSource === "alternative" ? "alternative" : "standard"})
+            </p>
+          )}
+          {edition && !aSorti ? (
+            <label className="block text-xs font-semibold text-muted">
+              Commande client
+              <select
+                className="select mt-1"
+                value={of.commandeId ?? ""}
+                onChange={(e) => {
+                  const res = modifierOrdreFabrication(of.id, {
+                    commandeId: e.target.value || undefined,
+                  });
+                  if (!res.ok) alert(res.reason);
+                }}
+              >
+                <option value="">Stock (sans commande)</option>
+                {commandes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.numero}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p>
+              <span className="text-xs font-semibold uppercase text-muted">Commande client</span>
+              <br />
+              {commande?.numero ?? "Stock"}
+            </p>
+          )}
           <p>
             <span className="text-xs font-semibold uppercase text-muted">Créé</span>
             <br />
@@ -277,7 +433,7 @@ export default function OrdreFabricationDetailPage() {
             const dimCmd = of.commandeId
               ? dimensionDepuisCommande(commande, of.produitId)
               : null;
-            const dimEditable = brouillon && !dimCmd;
+            const dimEditable = edition && brouillon && !dimCmd;
             const L = of.dimensionLargeur;
             const H = of.dimensionHauteur;
             return (
@@ -343,26 +499,88 @@ export default function OrdreFabricationDetailPage() {
             </Link>
           </p>
         )}
+        {!edition && of.note && (
+          <p className="mt-3 text-sm">
+            <span className="text-xs font-semibold uppercase text-muted">Note</span>
+            <br />
+            {of.note}
+          </p>
+        )}
+        {edition && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-semibold text-muted">
+              Date d&apos;échéance
+              <input
+                type="date"
+                className="input mt-1"
+                defaultValue={(of.dateCloturePrevue ?? "").slice(0, 10)}
+                key={`${of.id}-ech-${of.dateCloturePrevue ?? ""}`}
+                onBlur={(e) => {
+                  const valeur = e.target.value
+                    ? isoMidiDepuisJour(e.target.value)
+                    : undefined;
+                  if ((valeur ?? "") === (of.dateCloturePrevue ?? "")) return;
+                  const res = modifierOrdreFabrication(of.id, { dateCloturePrevue: valeur });
+                  if (!res.ok) alert(res.reason);
+                }}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-muted">
+              Note
+              <textarea
+                className="input mt-1 min-h-20"
+                defaultValue={of.note ?? ""}
+                key={`${of.id}-note`}
+                onBlur={(e) => {
+                  const note = e.target.value;
+                  if (note === (of.note ?? "")) return;
+                  const res = modifierOrdreFabrication(of.id, { note });
+                  if (!res.ok) alert(res.reason);
+                }}
+              />
+            </label>
+          </div>
+        )}
+        {verrouMsg && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {verrouMsg}
+          </p>
+        )}
+        {edition && aSorti && (
+          <p className="mt-3 text-sm text-muted">
+            Produit fini, nomenclature et lien commande sont verrouillés depuis la première sortie de matière.
+          </p>
+        )}
         <AlerteOfEnfantsOuverts
           message={messageAlerteOfsEnfants(of.id, ofs, produits)}
         />
         <div className="mt-4 flex flex-wrap gap-2">
-          {brouillon && (
+          {peutModifier && !verrouille && !edition && !verrouMsg && (
+            <Link href={`/fabrication/${of.id}?mode=modifier`} className="btn btn-primary">
+              Modifier
+            </Link>
+          )}
+          {edition && (
+            <Link href={`/fabrication/${of.id}?mode=voir`} className="btn btn-secondary">
+              Visualiser
+            </Link>
+          )}
+          {brouillon && edition && (
             <button type="button" className="btn btn-primary" onClick={lancer}>
               Démarrer l&apos;OF
             </button>
           )}
-          {enCours && (
-            <button type="button" className="btn btn-primary" onClick={() => setClotureOpen(true)}>
+          {saisie && (
+            <button type="button" className="btn btn-primary" id="cloture" onClick={() => setClotureOpen(true)}>
               Clôturer
             </button>
           )}
-          {!verrouille && (
+          {!verrouille && peutModifier && !verrouMsg && (
             <button type="button" className="btn btn-secondary" onClick={annuler}>
               Annuler l&apos;OF
             </button>
           )}
-          {of.statut === "cloture" && (
+          {of.statut === "cloture" && peutModifier && (
             <button type="button" className="btn btn-secondary" onClick={annuler}>
               Annuler par contre-mouvement
             </button>
@@ -383,7 +601,7 @@ export default function OrdreFabricationDetailPage() {
         <NomenclatureOf
           lignes={of.nomenclatureLignes}
           quantitePrevue={of.quantitePrevue}
-          disabled={verrouille}
+          disabled={verrouille || !edition || aSorti}
           produits={produits.filter((p) => p.id !== of.produitId && p.actif)}
           onChange={(nomenclatureLignes) =>
             modifierOrdreFabrication(of.id, { nomenclatureLignes })
@@ -419,9 +637,9 @@ export default function OrdreFabricationDetailPage() {
         </p>
       )}
 
-      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+      <section id="sorties" className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">Sorties de matières</h2>
-        {enCours && (
+        {saisie && (
           <FormSortie
             ofId={of.id}
             composants={produits.filter(
@@ -473,7 +691,7 @@ export default function OrdreFabricationDetailPage() {
                       <td>{formatCurrency(s.cumpSortie)}</td>
                       <td>{formatCurrency(s.valeur)}</td>
                       <td>
-                        {enCours && !s.affecteEntreeId && (
+                        {saisie && !s.affecteEntreeId && (
                           <button
                             type="button"
                             className="btn btn-ghost"
@@ -534,21 +752,23 @@ export default function OrdreFabricationDetailPage() {
                         .map((o) => (
                           <Link
                             key={o.id}
-                            href={`/fabrication/${o.id}`}
+                            href={`/fabrication/${o.id}?mode=voir`}
                             className="font-semibold text-sea-800"
                           >
                             {o.numero}
                           </Link>
                         ))}
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setOfEnfant({ composantId: c.id, manquant })}
-                      >
-                        Créer un OF enfant
-                      </button>
+                      {edition && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setOfEnfant({ composantId: c.id, manquant })}
+                        >
+                          Créer un OF enfant
+                        </button>
+                      )}
                     </span>
-                  ) : action === "demande_achat" ? (
+                  ) : action === "demande_achat" && edition ? (
                     <>
                     <button
                       type="button"
@@ -598,7 +818,7 @@ export default function OrdreFabricationDetailPage() {
 
       <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">Frais additionnels</h2>
-        {enCours && (
+        {saisie && (
           <FormFrais
             onAjouter={(data) => {
               const res = ajouterFraisOf(of.id, data);
@@ -614,7 +834,7 @@ export default function OrdreFabricationDetailPage() {
                 {formatDate(f.date)} — {f.libelle} — {formatCurrency(f.montant)}
                 {f.affecteEntreeId ? " · affecté" : ""}
               </span>
-              {enCours && !f.affecteEntreeId && (
+              {saisie && !f.affecteEntreeId && (
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -631,7 +851,7 @@ export default function OrdreFabricationDetailPage() {
         </ul>
       </section>
 
-      <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+      <section id="mod" className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
         <h2 className="mb-3 font-display text-lg font-semibold">
           Main d&apos;œuvre directe (MOD)
         </h2>
@@ -639,7 +859,7 @@ export default function OrdreFabricationDetailPage() {
           Coût = temps passé × taux horaire de l&apos;atelier, figé à la saisie.
           Un OF multi-ateliers additionne les lignes.
         </p>
-        {enCours && (
+        {saisie && (
           <FormMainOeuvre
             ateliers={ateliers}
             defaultAtelier={of.atelierId}
@@ -669,7 +889,7 @@ export default function OrdreFabricationDetailPage() {
                 ) : null}
                 {m.affecteEntreeId ? " · affecté" : ""}
               </span>
-              {enCours && !m.affecteEntreeId && (
+              {saisie && !m.affecteEntreeId && (
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -693,7 +913,7 @@ export default function OrdreFabricationDetailPage() {
           entrées, sans configuration. Une fois validée, l&apos;entrée est figée et le CUMP de
           l&apos;atelier est recalculé.
         </p>
-        {enCours && (
+        {saisie && (
           <FormProduction
             pot={pot.total}
             onAjouter={(data) => {
@@ -823,6 +1043,20 @@ export default function OrdreFabricationDetailPage() {
         sites={tousSites}
       />
 
+      {journalOf.length > 0 && (
+        <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
+          <h2 className="mb-3 font-display text-lg font-semibold">Modifications</h2>
+          <ul className="space-y-1 text-sm">
+            {journalOf.map((j) => (
+              <li key={j.id}>
+                {j.userNom || "utilisateur"} — {formatDateTime(j.date)}
+                {j.detail ? ` · ${j.detail}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {of.validations.length > 0 && (
         <section className="mb-6 rounded-[var(--radius)] border border-line bg-card p-5">
           <h2 className="mb-3 font-display text-lg font-semibold">Historique de validation</h2>
@@ -897,19 +1131,27 @@ export default function OrdreFabricationDetailPage() {
           )}
           onClose={() => setOfEnfant(null)}
           onCreer={(atelierId, quantite) => {
-            const res = creerOrdreFabrication({
-              atelierId,
-              produitId: ofEnfant.composantId,
-              quantitePrevue: quantite,
-              ofParentId: of.id,
-              commandeId: of.commandeId,
-            });
-            if (!res.ok) {
-              alert(res.reason);
-              return;
+            try {
+              const res = creerOrdreFabrication({
+                atelierId,
+                produitId: ofEnfant.composantId,
+                quantitePrevue: quantite,
+                ofParentId: of.id,
+                commandeId: of.commandeId,
+              });
+              if (!res.ok) {
+                alert(res.reason);
+                return;
+              }
+              setOfEnfant(null);
+              router.push(`/fabrication/${res.id}`);
+            } catch (err) {
+              alert(
+                err instanceof Error
+                  ? err.message
+                  : "L'ordre de fabrication n'a pas pu être enregistré.",
+              );
             }
-            setOfEnfant(null);
-            router.push(`/fabrication/${res.id}`);
           }}
           onLier={(enfantId) => {
             const res = lierOfEnfant(of.id, enfantId);

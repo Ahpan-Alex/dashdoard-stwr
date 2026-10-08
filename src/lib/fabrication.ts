@@ -59,6 +59,20 @@ export function ofPeutMouvementer(of: Pick<OrdreFabrication, "statut">) {
   return of.statut === "en_cours";
 }
 
+/** OF anciens ou incomplets : les tableaux absents ne doivent pas faire planter la fiche. */
+export function ofAvecTableaux(of: OrdreFabrication): OrdreFabrication {
+  return {
+    ...of,
+    sorties: Array.isArray(of.sorties) ? of.sorties : [],
+    frais: Array.isArray(of.frais) ? of.frais : [],
+    mainOeuvre: Array.isArray(of.mainOeuvre) ? of.mainOeuvre : [],
+    entreesProduction: Array.isArray(of.entreesProduction) ? of.entreesProduction : [],
+    retoursMatieres: Array.isArray(of.retoursMatieres) ? of.retoursMatieres : [],
+    validations: Array.isArray(of.validations) ? of.validations : [],
+    nomenclatureLignes: Array.isArray(of.nomenclatureLignes) ? of.nomenclatureLignes : [],
+  };
+}
+
 export function ateliersVisibles(
   sites: PointDeVente[],
   rattache: (id: string) => boolean,
@@ -72,11 +86,13 @@ export function copierNomenclatureVersOf(
   dims: DimensionOf = {},
   nomComposant?: (id: string) => string,
 ): { nom: string; lignes: OfNomenclatureLigne[] } {
-  const nomenc = (produit.nomenclatures ?? []).find((n) => n.type === source);
-  const fallback = (produit.nomenclatures ?? []).find((n) => n.type === "automatique");
+  const nomenclatures = Array.isArray(produit?.nomenclatures) ? produit.nomenclatures : [];
+  const nomenc = nomenclatures.find((n) => n.type === source);
+  const fallback = nomenclatures.find((n) => n.type === "automatique");
   const used = nomenc ?? fallback;
   const idMap = new Map<string, string>();
-  const brutes: OfNomenclatureLigne[] = (used?.lignes ?? []).map((l) => {
+  const lignesSource = Array.isArray(used?.lignes) ? used.lignes : [];
+  const brutes: OfNomenclatureLigne[] = lignesSource.filter((l) => l?.composantId).map((l) => {
     const id = createId("ofnl");
     idMap.set(l.id, id);
     return {
@@ -135,8 +151,8 @@ export function coutMod(heures: number, taux: number) {
 }
 
 export function coutsNonAffectes(of: OrdreFabrication) {
-  const sorties = of.sorties.filter((s) => !s.affecteEntreeId);
-  const frais = of.frais.filter((f) => !f.affecteEntreeId);
+  const sorties = (of.sorties ?? []).filter((s) => !s.affecteEntreeId);
+  const frais = (of.frais ?? []).filter((f) => !f.affecteEntreeId);
   const mainOeuvre = lignesMainOeuvre(of).filter((m) => !m.affecteEntreeId);
   const totalSorties = sorties.reduce((s, x) => s + x.valeur, 0);
   const totalFrais = frais.reduce((s, x) => s + x.montant, 0);
@@ -256,10 +272,13 @@ export function entreesDepuisOf(
   produits: Produit[],
 ): EntreeStock[] {
   if (of.statut === "brouillon") return [];
+  const sorties = of.sorties ?? [];
+  const entreesProduction = of.entreesProduction ?? [];
+  const retoursMatieres = of.retoursMatieres ?? [];
   const contreMouvement =
     of.statut === "cloture_annule" ||
     (of.statut === "annule" &&
-      (of.sorties.length > 0 || of.entreesProduction.length > 0));
+      (sorties.length > 0 || entreesProduction.length > 0));
   if (of.statut === "annule" && !contreMouvement) return [];
   const fabrique = produits.find((p) => p.id === of.produitId);
   const out: EntreeStock[] = [];
@@ -269,7 +288,7 @@ export function entreesDepuisOf(
     out.push(e);
   };
 
-  for (const s of of.sorties) {
+  for (const s of sorties) {
     const c = produits.find((p) => p.id === s.composantId);
     push({
       id: `ent-of-out-${of.id}-${s.id}`,
@@ -286,7 +305,7 @@ export function entreesDepuisOf(
     });
   }
 
-  for (const e of of.entreesProduction) {
+  for (const e of entreesProduction) {
     push({
       id: `ent-of-in-${of.id}-${e.id}`,
       pointDeVenteId: of.atelierId,
@@ -302,7 +321,7 @@ export function entreesDepuisOf(
     });
   }
 
-  for (const r of of.retoursMatieres) {
+  for (const r of retoursMatieres) {
     const c = produits.find((p) => p.id === r.composantId);
     push({
       id: `ent-of-ret-${of.id}-${r.id}`,
@@ -320,7 +339,7 @@ export function entreesDepuisOf(
   }
 
   if (contreMouvement) {
-    for (const s of of.sorties) {
+    for (const s of sorties) {
       const c = produits.find((p) => p.id === s.composantId);
       push({
         id: `ent-of-ann-out-${of.id}-${s.id}`,
@@ -336,7 +355,7 @@ export function entreesDepuisOf(
         note: `${of.numero} — contre-mouvement matières`,
       });
     }
-    for (const e of of.entreesProduction) {
+    for (const e of entreesProduction) {
       push({
         id: `ent-of-ann-in-${of.id}-${e.id}`,
         pointDeVenteId: of.atelierId,
@@ -351,7 +370,7 @@ export function entreesDepuisOf(
         note: `${of.numero} — contre-mouvement production`,
       });
     }
-    for (const r of of.retoursMatieres) {
+    for (const r of retoursMatieres) {
       const c = produits.find((p) => p.id === r.composantId);
       push({
         id: `ent-of-ann-ret-${of.id}-${r.id}`,
@@ -610,10 +629,10 @@ export function affecterPotAEntree(
   mainOeuvre: OfMainOeuvre[];
 } {
   return {
-    sorties: of.sorties.map((s) =>
+    sorties: (of.sorties ?? []).map((s) =>
       s.affecteEntreeId ? s : { ...s, affecteEntreeId: entree.id },
     ),
-    frais: of.frais.map((f) =>
+    frais: (of.frais ?? []).map((f) =>
       f.affecteEntreeId ? f : { ...f, affecteEntreeId: entree.id },
     ),
     mainOeuvre: lignesMainOeuvre(of).map((m) =>

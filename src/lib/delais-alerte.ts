@@ -85,7 +85,7 @@ export function evaluerDelai(
 ): EtatDelai | null {
   if (!dateDerniereAction) return null;
   const cle = OBJET_DELAI_VERS_REGLE[type];
-  const regle = cfg[cle];
+  const regle = cfg?.[cle];
   const fallback = type === "of" ? 7 : 7;
   const delaiJours = delaiRegle(regle, fallback);
   const today = jourISO(aujourdHui);

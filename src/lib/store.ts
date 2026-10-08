@@ -196,6 +196,11 @@ import {
   stockSuffisantPourTransfert,
 } from "./transferts";
 import {
+  detailModificationOf,
+  messageVerrouEdition,
+  motifModificationVerrouilleeApresSortie,
+} from "./of-liste";
+import {
   affecterPotAEntree,
   allouerReliquatSurSorties,
   copierNomenclatureVersOf,
@@ -211,6 +216,7 @@ import {
   motifAchatNatureInterdite,
   motifProduitOfInvalide,
   nextNumeroOf,
+  ofAvecTableaux,
   ofEstVerrouille,
   ofPeutMouvementer,
   regenererEntreesOf,
@@ -307,6 +313,7 @@ import { useAuthStore } from "./auth-store";
 import { estAdministrateur } from "./auth/rbac";
 import {
   creerVerrouTransformation,
+  DUREE_VERROU_TRANSFORMATION_MS,
   verrouTransformationActif,
 } from "./transformation-document";
 import {
@@ -710,7 +717,13 @@ type Store = {
     dimensionLargeur?: number;
     dimensionHauteur?: number;
     ofParentId?: string;
-  }) => { ok: true; id: string } | { ok: false; reason: string };
+  }  ) => { ok: true; id: string } | { ok: false; reason: string };
+  dupliquerOrdreFabrication: (
+    id: string,
+  ) => { ok: true; id: string } | { ok: false; reason: string };
+  prendreVerrouEditionOf: (
+    id: string,
+  ) => { ok: true } | { ok: false; reason: string };
   lierOfEnfant: (
     parentId: string,
     enfantId: string,
@@ -1909,6 +1922,27 @@ function listeFiltresUtilisateur(
 ) {
   const v = tous?.[userId];
   return Array.isArray(v) ? v : [];
+}
+
+function lireOrdreFabrication(liste: OrdreFabrication[] | undefined, id: string) {
+  const prev = (liste ?? []).find((o) => o.id === id);
+  return prev ? ofAvecTableaux(prev) : undefined;
+}
+
+function acteurPeutModifierOf() {
+  const auth = useAuthStore.getState();
+  if (!auth.currentUser()) return true;
+  return auth.hasPermission("fabrication.modifier");
+}
+
+function motifEditionOfBloquee(of: OrdreFabrication) {
+  if (!acteurPeutModifierOf()) {
+    return "Vous n'êtes pas habilité à modifier un ordre de fabrication.";
+  }
+  return messageVerrouEdition(
+    of.verrouEdition,
+    useAuthStore.getState().currentUser()?.id,
+  );
 }
 
 function utilisateurCourantPeutAgirSurSite(siteId: string) {
@@ -4380,12 +4414,20 @@ export const useStore = create<Store>()((set, get) => ({
             : dimCmd?.hauteur;
         const nomC = (cid: string) =>
           state.produits.find((p) => p.id === cid)?.code ?? cid;
-        const copie = copierNomenclatureVersOf(
-          produit!,
-          source,
-          { largeur: dimensionLargeur, hauteur: dimensionHauteur },
-          nomC,
-        );
+        let copie: ReturnType<typeof copierNomenclatureVersOf>;
+        try {
+          copie = copierNomenclatureVersOf(
+            produit!,
+            source,
+            { largeur: dimensionLargeur, hauteur: dimensionHauteur },
+            nomC,
+          );
+        } catch {
+          return {
+            ok: false,
+            reason: "La nomenclature de ce produit n'a pas pu être recopiée sur l'ordre de fabrication.",
+          };
+        }
         const motifDim = motifDimensionNomenclatureManquante(
           copie.lignes,
           dimensionLargeur,
@@ -4429,17 +4471,96 @@ export const useStore = create<Store>()((set, get) => ({
           note: data.note,
         };
         set((s) => ({
-          ordresFabrication: [nouveau, ...s.ordresFabrication],
+          ordresFabrication: [nouveau, ...(s.ordresFabrication ?? [])],
           journalActivites: [
             entreeActivite("creation", "ordre_fabrication", {
               entiteId: nouveau.id,
               libelle: nouveau.numero,
               detail: parent ? `OF enfant de ${parent.numero}` : undefined,
             }),
-            ...s.journalActivites,
+            ...(s.journalActivites ?? []),
           ],
         }));
         return { ok: true, id: nouveau.id };
+      },
+
+      dupliquerOrdreFabrication: (id) => {
+        const state = get();
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (!acteurPeutModifierOf()) {
+          return { ok: false, reason: "Vous n'êtes pas habilité à modifier un ordre de fabrication." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à cet atelier." };
+        }
+        const copieId = uid("of");
+        const nouveau: OrdreFabrication = {
+          ...prev,
+          id: copieId,
+          numero: nextNumeroOf(state.ordresFabrication),
+          statut: "brouillon",
+          dateCreation: new Date().toISOString(),
+          dateClotureReelle: undefined,
+          dateAnnulation: undefined,
+          sorties: [],
+          frais: [],
+          mainOeuvre: [],
+          entreesProduction: [],
+          retoursMatieres: [],
+          validations: [],
+          ecart: undefined,
+          derogationBat: undefined,
+          derogationBatDate: undefined,
+          derogationBatUserId: undefined,
+          derogationBatUserNom: undefined,
+          verrouEdition: null,
+          ofParentId: undefined,
+        };
+        set((s) => ({
+          ordresFabrication: [nouveau, ...(s.ordresFabrication ?? [])],
+          journalActivites: [
+            entreeActivite("creation", "ordre_fabrication", {
+              entiteId: copieId,
+              libelle: nouveau.numero,
+              detail: `Dupliqué depuis ${prev.numero}`,
+            }),
+            ...(s.journalActivites ?? []),
+          ],
+        }));
+        return { ok: true, id: copieId };
+      },
+
+      prendreVerrouEditionOf: (id) => {
+        const state = get();
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
+        if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        if (ofEstVerrouille(prev)) {
+          return { ok: false, reason: "Cet OF est clôturé ou annulé." };
+        }
+        if (!acteurPeutModifierOf()) {
+          return { ok: false, reason: "Vous n'êtes pas habilité à modifier un ordre de fabrication." };
+        }
+        if (!utilisateurCourantPeutAgirSurSite(prev.atelierId)) {
+          return { ok: false, reason: "Vous devez être rattaché à cet atelier." };
+        }
+        const bloque = messageVerrouEdition(
+          prev.verrouEdition,
+          useAuthStore.getState().currentUser()?.id,
+        );
+        if (bloque) return { ok: false, reason: bloque };
+        const actor = getActiviteActor();
+        const verrouEdition = {
+          jusquA: new Date(Date.now() + DUREE_VERROU_TRANSFORMATION_MS).toISOString(),
+          userId: actor.id,
+          userNom: actor.nom,
+        };
+        set((s) => ({
+          ordresFabrication: s.ordresFabrication.map((o) =>
+            o.id === id ? { ...o, verrouEdition } : o,
+          ),
+        }));
+        return { ok: true as const };
       },
 
       lierOfEnfant: (parentId, enfantId) => {
@@ -4474,22 +4595,18 @@ export const useStore = create<Store>()((set, get) => ({
 
       modifierOrdreFabrication: (id, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === id);
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (ofEstVerrouille(prev)) {
           return { ok: false, reason: "Cet OF est clôturé ou annulé : aucune modification possible." };
         }
-        if (prev.statut === "en_cours") {
-          const interdit = ["atelierId", "produitId", "nomenclatureSource"] as const;
-          for (const k of interdit) {
-            if (data[k] != null && data[k] !== prev[k]) {
-              return {
-                ok: false,
-                reason: "Atelier, produit et nomenclature de référence sont figés une fois l'OF démarré. Les lignes restent éditables pour cet OF uniquement.",
-              };
-            }
-          }
+        if (prev.statut === "en_cours" && data.atelierId != null && data.atelierId !== prev.atelierId) {
+          return { ok: false, reason: "L'atelier est figé une fois l'OF démarré." };
         }
+        const motifSortie = motifModificationVerrouilleeApresSortie(prev, data);
+        if (motifSortie) return { ok: false, reason: motifSortie };
         if (data.atelierId && !utilisateurCourantPeutAgirSurSite(data.atelierId)) {
           return { ok: false, reason: "Vous n'êtes pas rattaché à cet atelier." };
         }
@@ -4547,6 +4664,7 @@ export const useStore = create<Store>()((set, get) => ({
             nomC,
           );
         }
+        const actor = getActiviteActor();
         const next: OrdreFabrication = {
           ...prev,
           ...data,
@@ -4556,17 +4674,43 @@ export const useStore = create<Store>()((set, get) => ({
           commandeId,
           dimensionLargeur,
           dimensionHauteur,
+          verrouEdition: {
+            jusquA: new Date(Date.now() + DUREE_VERROU_TRANSFORMATION_MS).toISOString(),
+            userId: actor.id,
+            userNom: actor.nom,
+          },
         };
+        const detail = detailModificationOf(prev, next);
         set((s) => ({
           ordresFabrication: s.ordresFabrication.map((o) => (o.id === id ? next : o)),
+          journalActivites:
+            detail &&
+            !(s.journalActivites ?? []).some(
+              (j) =>
+                j.entite === "ordre_fabrication" &&
+                j.entiteId === id &&
+                j.detail === detail &&
+                Date.now() - Date.parse(j.date) < 15000,
+            )
+              ? [
+                  entreeActivite("modification", "ordre_fabrication", {
+                    entiteId: id,
+                    libelle: prev.numero,
+                    detail,
+                  }),
+                  ...(s.journalActivites ?? []),
+                ]
+              : s.journalActivites,
         }));
         return { ok: true };
       },
 
       demarrerOrdreFabrication: (id, opts) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === id);
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (prev.statut !== "brouillon") {
           return { ok: false, reason: "Seul un brouillon peut être démarré." };
         }
@@ -4624,8 +4768,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       ajouterSortieOf: (ofId, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) {
           return { ok: false, reason: "Les sorties ne sont possibles que sur un OF en cours." };
         }
@@ -4720,8 +4866,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       supprimerSortieOf: (ofId, sortieId) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) {
           return { ok: false, reason: "OF non modifiable." };
         }
@@ -5040,8 +5188,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       ajouterFraisOf: (ofId, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) {
           return { ok: false, reason: "Les frais ne sont possibles que sur un OF en cours." };
         }
@@ -5068,8 +5218,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       supprimerFraisOf: (ofId, fraisId) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) return { ok: false, reason: "OF non modifiable." };
         const ligne = prev.frais.find((f) => f.id === fraisId);
         if (!ligne) return { ok: false, reason: "Frais introuvable." };
@@ -5088,8 +5240,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       ajouterMainOeuvreOf: (ofId, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) {
           return { ok: false, reason: "La MOD n'est possible que sur un OF en cours." };
         }
@@ -5125,8 +5279,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       supprimerMainOeuvreOf: (ofId, ligneId) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) return { ok: false, reason: "OF non modifiable." };
         const ligne = lignesMainOeuvre(prev).find((m) => m.id === ligneId);
         if (!ligne) return { ok: false, reason: "Ligne MOD introuvable." };
@@ -5151,8 +5307,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       enregistrerEntreeProductionOf: (ofId, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (!ofPeutMouvementer(prev)) {
           return { ok: false, reason: "Les entrées de production sont possibles tant que l'OF est en cours." };
         }
@@ -5187,8 +5345,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       cloturerOrdreFabrication: (id, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === id);
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (prev.statut !== "en_cours") {
           return { ok: false, reason: "Seuls les OF en cours peuvent être clôturés." };
         }
@@ -5260,8 +5420,10 @@ export const useStore = create<Store>()((set, get) => ({
 
       annulerOrdreFabrication: (id) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === id);
+        const prev = lireOrdreFabrication(state.ordresFabrication, id);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const bloque = motifEditionOfBloquee(prev);
+        if (bloque) return { ok: false, reason: bloque };
         if (prev.statut === "annule" || prev.statut === "cloture_annule") {
           return { ok: false, reason: "Cet OF est déjà annulé." };
         }
@@ -5341,8 +5503,13 @@ export const useStore = create<Store>()((set, get) => ({
 
       creerDemandeAchatDepuisOf: (ofId, data) => {
         const state = get();
-        const prev = state.ordresFabrication.find((o) => o.id === ofId);
+        const prev = lireOrdreFabrication(state.ordresFabrication, ofId);
         if (!prev) return { ok: false, reason: "Ordre de fabrication introuvable." };
+        const verrou = messageVerrouEdition(
+          prev.verrouEdition,
+          useAuthStore.getState().currentUser()?.id,
+        );
+        if (verrou) return { ok: false, reason: verrou };
         const composant = state.produits.find((p) => p.id === data.composantId);
         if (!composant) return { ok: false, reason: "Composant introuvable." };
         if (!produitEstFabrique(composant) && natureStockDuProduit(composant) !== "matiere_premiere") {

@@ -102,7 +102,7 @@ export function RepartitionOfLigne({
       <ul className="space-y-0.5 text-xs">
         {reps.map((r) => (
           <li key={r.id}>
-            <Link href={`/fabrication/${r.ofId}`} className="text-sea-800 hover:underline">
+            <Link href={`/fabrication/${r.ofId}?mode=voir`} className="text-sea-800 hover:underline">
               {nomOf(r.ofId)}
             </Link>
             {" : "}
@@ -120,7 +120,7 @@ export function RepartitionOfLigne({
     <div className="min-w-[16rem] space-y-1.5">
       {reps.map((r) => (
         <div key={r.id} className="flex items-center gap-1 text-xs">
-          <Link href={`/fabrication/${r.ofId}`} className="flex-1 text-sea-800 hover:underline">
+          <Link href={`/fabrication/${r.ofId}?mode=voir`} className="flex-1 text-sea-800 hover:underline">
             {nomOf(r.ofId)}
           </Link>
           <input

@@ -2,20 +2,15 @@
 
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { Factory, Plus } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
+import { OfListeTableau } from "@/components/of-liste-tableau";
 import { PageHeader } from "@/components/page-header";
 import { SelecteurClient } from "@/components/selecteur-client";
 import { StatCard } from "@/components/stat-card";
 import { DESTINATION_ACHAT_LABELS } from "@/lib/achats";
 import { COMMANDE_STATUTS, libelleClient } from "@/lib/commercial";
-import {
-  ateliersVisibles,
-  OF_STATUT_LABELS,
-  quantiteProduite,
-} from "@/lib/fabrication";
-import { formatDate, formatNumber } from "@/lib/format";
+import { ateliersVisibles } from "@/lib/fabrication";
 import { isoMidiDepuisJour, jourLocalISO } from "@/lib/inventaire";
 import { produitEstFabrique } from "@/lib/nature-stock";
 import { nomenclatureParType } from "@/lib/nomenclature";
@@ -29,14 +24,7 @@ import {
 import { libelleProduit } from "@/lib/produits";
 import { useSitesVisibles } from "@/lib/use-sites-visibles";
 import { useStore } from "@/lib/store";
-import { BAT_STATUTS, badgeBat, batCourant, commandeABatValide } from "@/lib/bat";
-import { BadgeDelai } from "@/components/badge-delai";
-import { etatDelaiOf } from "@/lib/delais-alerte";
-import type {
-  DestinationAchat,
-  OrdreFabricationStatut,
-  TypeNomenclature,
-} from "@/lib/types";
+import type { DestinationAchat, TypeNomenclature } from "@/lib/types";
 
 const OF_BROUILLON_KEY = "negoo.of.creation";
 
@@ -71,13 +59,6 @@ function viderBrouillonOf() {
   sessionStorage.removeItem(OF_BROUILLON_KEY);
 }
 
-function badgeOf(statut: OrdreFabricationStatut) {
-  if (statut === "cloture") return "badge-success";
-  if (statut === "en_cours") return "badge-sand";
-  if (statut === "annule" || statut === "cloture_annule") return "badge-danger";
-  return "badge-sea";
-}
-
 export default function FabricationPage() {
   return (
     <Suspense fallback={<p className="text-sm text-muted">Chargement…</p>}>
@@ -89,7 +70,7 @@ export default function FabricationPage() {
 function FabricationListe() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { ordresFabrication, produits, commandes, creerOrdreFabrication, bonsATirer, parametresAlertes } = useStore();
+  const { ordresFabrication, creerOrdreFabrication } = useStore();
   const { visibles, rattache, actif } = useSitesVisibles();
   const ateliers = ateliersVisibles(visibles, rattache);
   const [creer, setCreer] = useState(
@@ -108,20 +89,15 @@ function FabricationListe() {
 
   const liste = useMemo(
     () =>
-      [...ordresFabrication]
+      [...(ordresFabrication ?? [])]
         .filter(
           (o) =>
             rattache(o.atelierId) &&
             (actif === "tous" || o.atelierId === actif),
         )
-        .sort((a, b) => b.dateCreation.localeCompare(a.dateCreation)),
+        .sort((a, b) => (b.dateCreation ?? "").localeCompare(a.dateCreation ?? "")),
     [ordresFabrication, rattache, actif],
   );
-
-  const nomAtelier = (id: string) =>
-    visibles.find((s) => s.id === id)?.nom ??
-    useStore.getState().pointsDeVente.find((s) => s.id === id)?.nom ??
-    "Atelier";
 
   return (
     <div>
@@ -142,14 +118,22 @@ function FabricationListe() {
           defautAtelier={actif !== "tous" ? actif : ateliers[0]?.id ?? ""}
           onClose={() => setCreer(false)}
           onSubmit={(payload) => {
-            const res = creerOrdreFabrication(payload);
-            if (!res.ok) {
-              alert(res.reason);
-              return;
+            try {
+              const res = creerOrdreFabrication(payload);
+              if (!res.ok) {
+                alert(res.reason);
+                return;
+              }
+              viderBrouillonOf();
+              setCreer(false);
+              router.push(`/fabrication/${res.id}`);
+            } catch (err) {
+              alert(
+                err instanceof Error
+                  ? err.message
+                  : "L'ordre de fabrication n'a pas pu être enregistré.",
+              );
             }
-            viderBrouillonOf();
-            setCreer(false);
-            router.push(`/fabrication/${res.id}`);
           }}
         />
       )}
@@ -171,74 +155,7 @@ function FabricationListe() {
           description="Déclarez d'abord des sites atelier, des nomenclatures sur les semi-finis / finis, puis créez un OF."
         />
       ) : (
-        <div className="table-shell">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>N°</th>
-                <th>Atelier</th>
-                <th>Produit</th>
-                <th>Qté prévue</th>
-                <th>Produite</th>
-                <th>Commande</th>
-                <th>BAT</th>
-                <th>Statut</th>
-                <th>Créé</th>
-              </tr>
-            </thead>
-            <tbody>
-              {liste.map((o) => {
-                const p = produits.find((x) => x.id === o.produitId);
-                const cmd = commandes.find((c) => c.id === o.commandeId);
-                return (
-                  <tr key={o.id}>
-                    <td>
-                      <Link href={`/fabrication/${o.id}`} className="font-semibold text-sea-800">
-                        {o.numero}
-                      </Link>
-                    </td>
-                    <td>{nomAtelier(o.atelierId)}</td>
-                    <td>{p ? `${p.code} — ${libelleProduit(p)}` : "—"}</td>
-                    <td>{formatNumber(o.quantitePrevue)}</td>
-                    <td>{formatNumber(quantiteProduite(o))}</td>
-                    <td>
-                      {cmd?.numero ?? "—"}
-                      {o.derogationBat && (
-                        <span className="badge badge-sand ml-1">Dérog. BAT</span>
-                      )}
-                    </td>
-                    <td>
-                      {cmd ? (
-                        <span
-                          className={`badge ${
-                            commandeABatValide(bonsATirer ?? [], cmd.id)
-                              ? "badge-success"
-                              : badgeBat(batCourant(bonsATirer ?? [], cmd.id)?.statut ?? "en_attente")
-                          }`}
-                        >
-                          {commandeABatValide(bonsATirer ?? [], cmd.id)
-                            ? "Validé"
-                            : batCourant(bonsATirer ?? [], cmd.id)
-                              ? BAT_STATUTS[batCourant(bonsATirer ?? [], cmd.id)!.statut]
-                              : "Aucun"}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge ${badgeOf(o.statut)}`}>
-                        {OF_STATUT_LABELS[o.statut]}
-                      </span>{" "}
-                      <BadgeDelai etat={etatDelaiOf(o, parametresAlertes)} />
-                    </td>
-                    <td>{formatDate(o.dateCreation)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <OfListeTableau ofs={liste} ateliers={ateliers} sites={visibles} />
       )}
     </div>
   );
