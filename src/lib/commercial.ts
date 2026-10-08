@@ -584,19 +584,103 @@ export function creancesClientsFactures(
   );
 }
 
+/**
+ * Facture émise : elle entre dans le CA dès l'émission.
+ * Le statut stocké est « validee » (ou payée / envoyée / en retard) ;
+ * il n'existe pas de statut « éditée ». Hors CA : brouillon, proforma, annulée.
+ * Les factures d'acompte sont incluses.
+ */
+export function factureComptabiliseDansCA(
+  f: Pick<Facture, "type" | "statut">,
+) {
+  if (f.type === "proforma") return false;
+  return (
+    f.statut !== "brouillon" &&
+    f.statut !== "proforma" &&
+    f.statut !== "annulee"
+  );
+}
+
+/**
+ * HT des acomptes déjà facturés et déduits sur une facture finale,
+ * pour ne pas compter deux fois le même chiffre.
+ */
+export function htAcomptesDeduitsSurFacture(
+  facture: Facture,
+  parametres: Parametres,
+  factures: Facture[] = [],
+) {
+  if (facture.type !== "standard" && facture.type !== "solde") return 0;
+  const snapshot = facture.acomptesDocument;
+  if (snapshot && snapshot.length > 0) {
+    const taux = facture.tauxTVA ?? parametres.tauxTVA;
+    const assujetti = appliqueTVA(parametres);
+    const utilises = new Set<string>();
+    let ht = 0;
+    for (const ligne of snapshot) {
+      const fac = factures.find((f) => {
+        if (utilises.has(f.id) || f.type !== "acompte") return false;
+        if (!factureComptabiliseDansCA(f)) return false;
+        if (f.clientId !== facture.clientId) return false;
+        const ttc = totauxFacture(f, parametres).totalTTC;
+        return Math.abs(ttc - ligne.montant) < 1;
+      });
+      if (fac) {
+        utilises.add(fac.id);
+        ht += totauxFacture(fac, parametres).totalHT;
+      } else {
+        ht += htDepuisTTC(ligne.montant, taux, assujetti);
+      }
+    }
+    return ht;
+  }
+  if (snapshot) return 0;
+  return factures
+    .filter(
+      (f) =>
+        f.type === "acompte" &&
+        factureComptabiliseDansCA(f) &&
+        ((facture.commandeId && f.commandeId === facture.commandeId) ||
+          f.factureParenteId === facture.id),
+    )
+    .reduce((s, f) => s + totauxFacture(f, parametres).totalHT, 0);
+}
+
+/** CA HT d'une facture : net des remises, avoir en négatif, finale nette des acomptes déduits. */
+export function montantCaHtFacture(
+  facture: Facture,
+  parametres: Parametres,
+  factures: Facture[] = [],
+) {
+  if (!factureComptabiliseDansCA(facture)) return 0;
+  const t = totauxFacture(facture, parametres);
+  if (facture.type === "avoir") return -t.totalHT;
+  return t.totalHT - htAcomptesDeduitsSurFacture(facture, parametres, factures);
+}
+
 export function caFactures(
   factures: Facture[],
   pointDeVenteId: string | "tous",
   parametres?: Parametres,
 ) {
+  if (!parametres) {
+    return factures
+      .filter((f) => factureComptabiliseDansCA(f))
+      .filter(
+        (f) =>
+          pointDeVenteId === "tous" || f.pointDeVenteId === pointDeVenteId,
+      )
+      .reduce((s, f) => {
+        const ht = totalLignesHT(f.lignes);
+        return s + (f.type === "avoir" ? -ht : ht);
+      }, 0);
+  }
   return factures
-    .filter((f) => f.statut !== "annulee" && f.statut !== "brouillon")
-    .filter((f) => f.type !== "acompte")
     .filter(
       (f) =>
         pointDeVenteId === "tous" || f.pointDeVenteId === pointDeVenteId,
     )
-    .reduce((s, f) => s + totalFacture(f, parametres), 0);
+    .reduce((s, f) => s + montantCaHtFacture(f, parametres, factures), 0);
 }
 
 /** PDV d'un acompte via la facture, commande ou devis lié. */

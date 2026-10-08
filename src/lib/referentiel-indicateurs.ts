@@ -2,22 +2,22 @@ export const REFERENTIEL_INDICATEURS = {
   ca_mois: {
     titre: "CA du mois",
     definition:
-      "Factures fiscales validées (hors brouillon, proforma, acompte), CA HT du mois civil de la date de fin de filtre. N-1 = même mois de l'année précédente.",
+      "CA HT des factures de vente émises (brouillon, proforma et annulées exclus), à la date de facture. Les factures d'acompte comptent pour leur montant. La facture finale est nette des acomptes déjà déduits. Les avoirs sont déduits sur leur date. Remises de ligne et remise globale comprises. Mois civil de la date de fin de filtre. N-1 = même mois de l'année précédente.",
   },
   ca_annuel: {
     titre: "CA annuel",
     definition:
-      "Même base que le CA du mois, cumulé sur l'année civile de la date de fin de filtre, comparé à N-1.",
+      "Même règle que le CA du mois, cumulée sur l'année civile de la date de fin de filtre, comparée à N-1.",
   },
   rentabilite_globale: {
     titre: "Rentabilité globale",
     definition:
-      "Factures validées HT moins achats validés HT (tous types : marchandises, matières, services, immobilisations) sur la période filtrée. Même formule que Rentabilité palier 2.",
+      "CA HT des factures émises (même règle que le CA du mois) moins achats validés HT (tous types : marchandises, matières, services, immobilisations) sur la période filtrée. Même formule que Rentabilité palier 2.",
   },
   marge_brute: {
     titre: "Marge brute",
     definition:
-      "CA HT facturé moins coût des marchandises vendues (CUMP). Palier 1 de rentabilité.",
+      "CA HT des factures émises (même règle que le CA du mois) moins coût des marchandises vendues (CUMP). Palier 1 de rentabilité.",
   },
   delai_moyen_paiement: {
     titre: "Délai moyen de paiement",

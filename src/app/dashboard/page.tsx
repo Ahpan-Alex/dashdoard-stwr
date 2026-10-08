@@ -131,7 +131,7 @@ export default function DashboardGeneralPage() {
               <Link href="/tableau-de-bord/ca-mensuel" className="underline">
                 CA mensuel
               </Link>{" "}
-              (mêmes factures validées).
+              (même règle de CA).
             </IndicateurInfo>
           }
         />

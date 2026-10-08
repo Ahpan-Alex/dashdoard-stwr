@@ -15,6 +15,7 @@ import {
   caHtFacturesPeriode,
   caParProduitFactures,
   caRapportMensuelYoYFactures,
+  LIGNE_ACOMPTE_CA,
 } from "./rentabilite";
 import { BP_STATUTS } from "./bon-de-preparation";
 import type {
@@ -107,6 +108,7 @@ export function caParArticleClient(
   return caParProduitFactures(
     facturesDuClient(factures, clientId),
     produits,
+    parametres,
     "tous",
     range,
   );
@@ -122,7 +124,7 @@ export type CaAnnuelClient = {
 };
 
 /**
- * CA annuel (année civile) net des remises, factures validées du tiers en tant que Client.
+ * CA annuel (année civile) des factures émises du tiers, net des remises et des acomptes déjà déduits.
  */
 export function caAnnuelClient(
   factures: Facture[],
@@ -173,6 +175,15 @@ function montantParFamille(
     clientId,
     annee,
   )) {
+    if (art.id === LIGNE_ACOMPTE_CA) {
+      const cur = map.get(LIGNE_ACOMPTE_CA) ?? {
+        libelle: "Acomptes",
+        montant: 0,
+      };
+      cur.montant += art.montant;
+      map.set(LIGNE_ACOMPTE_CA, cur);
+      continue;
+    }
     const produit = produits.find((p) => p.id === art.id);
     const racine = categorieRacine(produit?.categorieId, categories);
     const id = racine?.id ?? FAMILLE_SANS_ID;

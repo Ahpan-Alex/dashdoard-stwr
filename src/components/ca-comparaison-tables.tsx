@@ -149,8 +149,14 @@ function DetailPeriodePanel({
 
   const parProduit = useMemo(
     () =>
-      caParProduitFactures(factures, produits, pointDeVenteActifId, range),
-    [factures, produits, pointDeVenteActifId, range],
+      caParProduitFactures(
+        factures,
+        produits,
+        parametres,
+        pointDeVenteActifId,
+        range,
+      ),
+    [factures, produits, parametres, pointDeVenteActifId, range],
   );
 
   const facturesDetail = useMemo(

@@ -176,7 +176,7 @@ export default function MargePage() {
     <div>
       <PageHeader
         title="Marge"
-        description="Marge brute palier 1 : CA HT des factures validées moins CMV (date de facture, hors paiement)."
+        description="Marge brute palier 1 : CA HT des factures émises moins CMV (date de facture, hors paiement)."
       />
 
       <div className="mb-6 rounded-[var(--radius)] border border-line bg-card p-4">

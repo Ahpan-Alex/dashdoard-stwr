@@ -24,8 +24,10 @@ import {
   type Periode,
 } from "./calculations";
 import {
+  factureComptabiliseDansCA,
   htNetsLignesProduit,
   isLigneProduit,
+  montantCaHtFacture,
   totauxFacture,
 } from "./commercial";
 import { cmvSortiesPeriode } from "./cump";
@@ -40,19 +42,44 @@ import type {
   Vente,
 } from "./types";
 
+/** Ligne synthétique : acompte sans article, pour que le CA par famille égale le CA total. */
+export const LIGNE_ACOMPTE_CA = "__acompte__";
+
 function factureCompteDansCA(f: Facture) {
-  if (
-    f.statut === "annulee" ||
-    f.statut === "brouillon" ||
-    f.statut === "proforma"
-  ) {
-    return false;
+  return factureComptabiliseDansCA(f);
+}
+
+function contributionsCaLignes(
+  f: Facture,
+  parametres: Parametres,
+  factures: Facture[],
+) {
+  const signe = f.type === "avoir" ? -1 : 1;
+  const brut = totauxFacture(f, parametres).totalHT;
+  const ca = montantCaHtFacture(f, parametres, factures);
+  const scale = brut > 0 ? Math.abs(ca) / brut : 0;
+  const lignes = f.lignes.filter((l) => isLigneProduit(l) && l.produitId);
+  const htsNets = htNetsLignesProduit(
+    lignes,
+    f.remiseGlobale ?? 0,
+    f.remiseGlobaleMode,
+  );
+  const out: { produitId: string; quantite: number; montant: number }[] = [];
+  let alloue = 0;
+  lignes.forEach((l, i) => {
+    const montant = signe * (htsNets[i] ?? 0) * scale;
+    alloue += montant;
+    out.push({
+      produitId: l.produitId!,
+      quantite: signe * l.quantite,
+      montant,
+    });
+  });
+  const reste = ca - alloue;
+  if (Math.abs(reste) >= 0.5) {
+    out.push({ produitId: LIGNE_ACOMPTE_CA, quantite: 0, montant: reste });
   }
-  if (f.type === "proforma") return false;
-  // Acompte : opération partielle — on l'exclut si on compte les factures
-  // standard/solde (lignes marchandises). Les avoirs réduisent le CA.
-  if (f.type === "acompte") return false;
-  return true;
+  return out;
 }
 
 export function caHtFacturesPeriode(
@@ -68,9 +95,7 @@ export function caHtFacturesPeriode(
       continue;
     }
     if (!inDateRange(f.date, range)) continue;
-    const t = totauxFacture(f, parametres);
-    if (f.type === "avoir") ca -= t.totalHT;
-    else ca += t.totalHT;
+    ca += montantCaHtFacture(f, parametres, factures);
   }
   return Math.round(ca);
 }
@@ -211,6 +236,7 @@ export function syntheseRentabiliteDeuxPaliers(opts: {
     factures,
     produits,
     entrees,
+    parametres,
     pointDeVenteId,
     range,
     inventaires,
@@ -235,6 +261,7 @@ export function margeParProduitFactures(
   factures: Facture[],
   produits: Produit[],
   entrees: EntreeStock[],
+  parametres: Parametres,
   pointDeVenteId: string | "tous",
   range: DateRange,
   inventaires: Inventaire[] = [],
@@ -251,19 +278,12 @@ export function margeParProduitFactures(
       continue;
     }
     if (!inDateRange(f.date, range)) continue;
-    const signe = f.type === "avoir" ? -1 : 1;
-    const lignes = f.lignes.filter((l) => isLigneProduit(l) && l.produitId);
-    const htsNets = htNetsLignesProduit(
-      lignes,
-      f.remiseGlobale ?? 0,
-      f.remiseGlobaleMode,
-    );
-    lignes.forEach((l, i) => {
-      const prev = map.get(l.produitId!) ?? { quantite: 0, ca: 0, cmv: 0 };
-      prev.quantite += signe * l.quantite;
-      prev.ca += signe * (htsNets[i] ?? 0);
-      map.set(l.produitId!, prev);
-    });
+    for (const part of contributionsCaLignes(f, parametres, factures)) {
+      const prev = map.get(part.produitId) ?? { quantite: 0, ca: 0, cmv: 0 };
+      prev.quantite += part.quantite;
+      prev.ca += part.montant;
+      map.set(part.produitId, prev);
+    }
   }
 
   for (const [produitId, prev] of map) {
@@ -289,7 +309,10 @@ export function margeParProduitFactures(
       const p = produits.find((x) => x.id === produitId);
       return {
         produitId,
-        nom: p?.libelleCourt ?? produitId,
+        nom:
+          produitId === LIGNE_ACOMPTE_CA
+            ? "Acomptes"
+            : (p?.libelleCourt ?? produitId),
         unite: p?.unite ?? "",
         quantite: v.quantite,
         ca: Math.round(v.ca),
@@ -333,7 +356,7 @@ export function serieRentabiliteMensuelle(opts: {
   return out;
 }
 
-/** CA HT des factures fiscales validées (date de facture, hors paiement). */
+/** CA HT des factures émises (date de facture, hors paiement). */
 export function chiffreAffairesFactures(
   factures: Facture[],
   parametres: Parametres,
@@ -444,6 +467,7 @@ export type LigneCaProduitFacture = {
 export function caParProduitFactures(
   factures: Facture[],
   produits: Produit[],
+  parametres: Parametres,
   pointDeVenteId: string | "tous",
   periodeOrRange: Periode | DateRange,
   reference = new Date(),
@@ -459,26 +483,24 @@ export function caParProduitFactures(
       continue;
     }
     if (!inDateRange(f.date, range)) continue;
-    const signe = f.type === "avoir" ? -1 : 1;
-    const lignes = f.lignes.filter((l) => isLigneProduit(l) && l.produitId);
-    const htsNets = htNetsLignesProduit(
-      lignes,
-      f.remiseGlobale ?? 0,
-      f.remiseGlobaleMode,
-    );
-    lignes.forEach((l, i) => {
-      const prev = map.get(l.produitId!) ?? { quantite: 0, montant: 0 };
-      prev.quantite += signe * l.quantite;
-      prev.montant += signe * (htsNets[i] ?? 0);
-      map.set(l.produitId!, prev);
-    });
+    for (const part of contributionsCaLignes(f, parametres, factures)) {
+      const prev = map.get(part.produitId) ?? { quantite: 0, montant: 0 };
+      prev.quantite += part.quantite;
+      prev.montant += part.montant;
+      map.set(part.produitId, prev);
+    }
   }
   return [...map.entries()]
     .map(([id, v]) => {
       const p = produits.find((x) => x.id === id);
       return {
         id,
-        nom: p ? libelleProduit(p) : id,
+        nom:
+          id === LIGNE_ACOMPTE_CA
+            ? "Acomptes"
+            : p
+              ? libelleProduit(p)
+              : id,
         unite: p?.unite ?? "",
         quantite: v.quantite,
         montant: Math.round(v.montant),
@@ -511,8 +533,7 @@ export function detailFacturesCaPeriode(
       continue;
     }
     if (!inDateRange(f.date, range)) continue;
-    const t = totauxFacture(f, parametres);
-    const ht = f.type === "avoir" ? -t.totalHT : t.totalHT;
+    const ht = montantCaHtFacture(f, parametres, factures);
     out.push({
       id: f.id,
       date: f.date,

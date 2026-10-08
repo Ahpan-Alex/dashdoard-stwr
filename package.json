@@ -14,7 +14,8 @@
     "test:conflit-of": "tsx scripts/conflit-of.test.mts",
     "test:articles-filtres": "tsx scripts/articles-filtres.test.mts",
     "test:tiers-fiche": "tsx scripts/tiers-fiche.test.mts",
-    "test:prix-ttc": "tsx scripts/prix-ttc.test.mts"
+    "test:prix-ttc": "tsx scripts/prix-ttc.test.mts",
+    "test:ca-factures": "tsx scripts/ca-factures.test.mts"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

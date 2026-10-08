@@ -80,7 +80,7 @@ export default function CaObjectifsPage() {
     <div>
       <PageHeader
         title="CA objectif par point de vente"
-        description="Suivi du CA facturé (factures validées, date de facture) face aux objectifs mensuels et annuels."
+        description="Suivi du CA facturé (factures émises, date de facture, acompte inclus et finale nette) face aux objectifs mensuels et annuels."
         actions={
           <Link
             href="/parametres/pilotage?onglet=objectifs"

@@ -32,14 +32,20 @@ const periodes: { id: Periode; label: string }[] = [
 ];
 
 export default function CaProduitsPage() {
-  const { factures, produits, pointDeVenteActifId } = useStore();
+  const { factures, produits, parametres, pointDeVenteActifId } = useStore();
   const { visible, colSpan } = useAffichageTable("ca_produits");
   const [periode, setPeriode] = useState<Periode>("mois");
 
   const parProduit = useMemo(
     () =>
-      caParProduitFactures(factures, produits, pointDeVenteActifId, periode),
-    [factures, produits, pointDeVenteActifId, periode],
+      caParProduitFactures(
+        factures,
+        produits,
+        parametres,
+        pointDeVenteActifId,
+        periode,
+      ),
+    [factures, produits, parametres, pointDeVenteActifId, periode],
   );
   const total = parProduit.reduce((s, l) => s + l.montant, 0);
   const top = parProduit[0];
@@ -52,7 +58,7 @@ export default function CaProduitsPage() {
     <div>
       <PageHeader
         title="CA produits"
-        description="Répartition du CA HT par produit, à partir des factures fiscales validées (date de facture, hors paiement)."
+        description="Répartition du CA HT par produit, factures émises (date de facture). Les acomptes sans article sont isolés. La facture finale est nette des acomptes déjà déduits."
       />
 
       <div className="mb-6 flex flex-wrap gap-2">

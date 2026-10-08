@@ -232,7 +232,7 @@ export default function RentabilitePage() {
         <StatCard
           label="CA HT facturé"
           value={formatCurrency(synthese.caHt)}
-          hint="Factures fiscales validées (hors acompte / proforma)"
+          hint="Factures émises, acompte inclus, finale nette des acomptes"
         />
         <StatCard
           label="Coût des ventes (CMV)"

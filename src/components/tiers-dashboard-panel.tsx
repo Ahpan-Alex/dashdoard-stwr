@@ -110,8 +110,8 @@ export function TiersDashboardPanel({
         </section>
       )}
       <p className="text-xs text-muted">
-        CA HT net des remises, année civile {annee} — factures validées de ce
-        client (date de facture, hors paiement).
+        CA HT des factures émises, année civile {annee} — acomptes inclus,
+        facture finale nette des acomptes déduits, avoirs déduits (date de facture).
       </p>
 
       <section>
@@ -168,7 +168,7 @@ export function TiersDashboardPanel({
           <EmptyState
             icon={<BarChart3 className="h-5 w-5" />}
             title="Aucune famille"
-            description="Le CA par famille se calcule à partir des factures validées de ce client."
+            description="Le CA par famille se calcule à partir des factures émises de ce client, net des acomptes déjà déduits."
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-[1fr_auto_1fr] xl:items-start">

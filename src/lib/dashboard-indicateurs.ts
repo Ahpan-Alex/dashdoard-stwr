@@ -9,8 +9,16 @@ import {
 } from "date-fns";
 import { achatImpacteCompteResultat, livraisonsActives, montantAchatsHT } from "./achats";
 import { inDateRange, type DateRange, calculerStocks } from "./calculations";
-import { resteAPayer, totauxFacture } from "./commercial";
-import { caHtFacturesPeriode, syntheseRentabiliteDeuxPaliers } from "./rentabilite";
+import {
+  factureComptabiliseDansCA,
+  montantCaHtFacture,
+  resteAPayer,
+} from "./commercial";
+import {
+  caHtFacturesPeriode,
+  LIGNE_ACOMPTE_CA,
+  syntheseRentabiliteDeuxPaliers,
+} from "./rentabilite";
 import { historiqueFournisseursProduit } from "./classement-fournisseurs";
 import { depenseEnAttenteReclassement } from "./comptabilite";
 import { lignesMainOeuvre, quantiteTheoriqueComposantOf, reliquatsMatieres } from "./fabrication";
@@ -563,12 +571,7 @@ export function margeParOfCommande(
       const facs = factures.filter((f) => f.commandeId === o.commandeId);
       let ca = 0;
       for (const f of facs) {
-        if (f.statut === "brouillon" || f.statut === "annulee" || f.statut === "proforma") {
-          continue;
-        }
-        if (f.type === "acompte" || f.type === "proforma") continue;
-        const t = totauxFacture(f, parametres);
-        ca += f.type === "avoir" ? -t.totalHT : t.totalHT;
+        ca += montantCaHtFacture(f, parametres, facs);
       }
       const cout = (o.entreesProduction ?? []).reduce((s, e) => s + e.coutTotal, 0);
       return {
@@ -607,7 +610,10 @@ export function margeParFamille(
   for (const l of syn.parProduit) {
     const p = produits.find((x) => x.id === l.produitId);
     const cat = categories.find((c) => c.id === p?.categorieId);
-    const nom = cat?.libelle ?? "Sans famille";
+    const nom =
+      l.produitId === LIGNE_ACOMPTE_CA
+        ? "Acomptes"
+        : (cat?.libelle ?? "Sans famille");
     const cur = map.get(nom) ?? { nom, ca: 0, cmv: 0 };
     cur.ca += l.ca;
     cur.cmv += l.cmv;
@@ -643,12 +649,8 @@ export function caMargeParClient(
   for (const f of factures) {
     if (siteId !== "tous" && f.pointDeVenteId !== siteId) continue;
     if (!inDateRange(f.date, range)) continue;
-    if (f.statut === "brouillon" || f.statut === "annulee" || f.statut === "proforma") {
-      continue;
-    }
-    if (f.type === "acompte" || f.type === "proforma") continue;
-    const t = totauxFacture(f, parametres);
-    const ca = f.type === "avoir" ? -t.totalHT : t.totalHT;
+    const ca = montantCaHtFacture(f, parametres, factures);
+    if (ca === 0 && !factureComptabiliseDansCA(f)) continue;
     const client = clients.find((c) => c.id === f.clientId);
     const cur = map.get(f.clientId) ?? {
       nom: client?.nom ?? f.clientId,

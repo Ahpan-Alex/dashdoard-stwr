@@ -182,7 +182,7 @@ export default function CaMensuelPage() {
     <div>
       <PageHeader
         title="Chiffre d'affaires mensuel"
-        description="Analyse hebdomadaire, mensuelle et annuelle : factures fiscales validées (date de facture, hors paiement)."
+        description="Analyse hebdomadaire, mensuelle et annuelle : factures émises (date de facture, hors paiement). Acomptes inclus, facture finale nette des acomptes déduits, avoirs déduits."
         actions={
           <Link href="/factures" className="btn btn-primary">
             <ScrollText className="h-4 w-4" />
