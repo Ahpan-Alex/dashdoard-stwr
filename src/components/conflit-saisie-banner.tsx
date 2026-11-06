@@ -1,40 +1,98 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ApiError } from "@/lib/api";
 import {
+  getBusinessBase,
   putBusinessState,
+  setBusinessBase,
   setBusinessConflictHandler,
+  setBusinessRevision,
   setBusinessSyncEnabled,
 } from "@/lib/business-api";
-import { fusionnerOrdresFabricationLocaux } from "@/lib/conflit-saisie";
+import {
+  etatsEquivalents,
+  fusionnerEtatsSimultanes,
+} from "@/lib/conflit-saisie";
+import { pickAppState } from "@/lib/empty-state";
 import { useStore } from "@/lib/store";
+import type { AppState } from "@/lib/types";
 
-/** Prévient l'opérateur si deux personnes ont enregistré en même temps. */
+function copier(etat: AppState): AppState {
+  try {
+    return structuredClone(etat);
+  } catch {
+    return JSON.parse(JSON.stringify(etat)) as AppState;
+  }
+}
+
+/** Deux comptes ont enregistré ensemble : on garde les deux saisies. */
 export function ConflitSaisieBanner() {
   const [visible, setVisible] = useState(false);
   const applyBusinessData = useStore((s) => s.applyBusinessData);
 
   useEffect(() => {
-    setBusinessConflictHandler(({ data }) => {
-      const local = useStore.getState();
-      const merged = fusionnerOrdresFabricationLocaux(data, local);
+    setBusinessConflictHandler(async ({ data: serveurInitial, revision }) => {
       setBusinessSyncEnabled(false);
-      void (async () => {
-        try {
-          if (merged) {
-            const res = await putBusinessState(merged);
-            applyBusinessData(res.data);
-            return;
+      let distant = serveurInitial;
+      let revisionDistante = revision;
+      let ancetre = getBusinessBase();
+      let conflit = false;
+      let resolu = false;
+      try {
+        for (let essai = 0; essai < 5; essai++) {
+          const local = copier(pickAppState(useStore.getState()));
+          const fusion = fusionnerEtatsSimultanes(ancetre, local, distant);
+          if (fusion.conflit) conflit = true;
+          if (!fusion.aEnregistrer) {
+            applyBusinessData(distant);
+            setBusinessBase(distant);
+            setBusinessRevision(revisionDistante);
+            resolu = true;
+            break;
           }
-          applyBusinessData(data);
-          setVisible(true);
-        } catch {
-          applyBusinessData(data);
-          setVisible(true);
-        } finally {
-          setBusinessSyncEnabled(true);
+          try {
+            const res = await putBusinessState(fusion.etat, revisionDistante);
+            const apres = pickAppState(useStore.getState());
+            if (etatsEquivalents(apres, local)) {
+              applyBusinessData(res.data);
+              resolu = true;
+              break;
+            }
+            ancetre = local;
+            distant = res.data;
+            revisionDistante = res.revision;
+          } catch (err) {
+            if (
+              err instanceof ApiError &&
+              err.status === 409 &&
+              err.body &&
+              typeof err.body === "object" &&
+              "data" in err.body
+            ) {
+              const body = err.body as { data?: AppState; revision?: number };
+              if (body.data) distant = body.data;
+              if (typeof body.revision === "number") revisionDistante = body.revision;
+              continue;
+            }
+            applyBusinessData(distant);
+            setBusinessBase(distant);
+            setBusinessRevision(revisionDistante);
+            conflit = true;
+            resolu = true;
+            break;
+          }
         }
-      })();
+        if (!resolu) {
+          applyBusinessData(distant);
+          setBusinessBase(distant);
+          setBusinessRevision(revisionDistante);
+          conflit = true;
+        }
+        if (conflit) setVisible(true);
+      } finally {
+        setBusinessSyncEnabled(true);
+      }
     });
     return () => setBusinessConflictHandler(null);
   }, [applyBusinessData]);
@@ -48,9 +106,10 @@ export function ConflitSaisieBanner() {
     >
       <p className="font-semibold">Enregistrement simultané</p>
       <p className="mt-1">
-        Quelqu&apos;un d&apos;autre a enregistré en même temps que vous. Pour ne
-        rien écraser, Négoo a gardé la version déjà sauvée. Si votre dernière
-        saisie n&apos;apparaît plus, refaites-la.
+        Deux comptes ont modifié la même information au même moment. Le reste
+        des deux saisies a été conservé. Pour cette information précise, la
+        version déjà enregistrée est restée : si votre dernière saisie n&apos;y
+        est plus, refaites-la.
       </p>
       <button
         type="button"

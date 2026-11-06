@@ -3,7 +3,10 @@
  * Exécuter : npx tsx scripts/conflit-of.test.mts
  */
 import assert from "node:assert/strict";
-import { fusionnerOrdresFabricationLocaux } from "../src/lib/conflit-saisie.ts";
+import {
+  fusionnerEtatsSimultanes,
+  fusionnerOrdresFabricationLocaux,
+} from "../src/lib/conflit-saisie.ts";
 import {
   copierNomenclatureVersOf,
   coutsNonAffectes,
@@ -82,5 +85,65 @@ const copie = copierNomenclatureVersOf(
   "automatique",
 );
 assert.deepEqual(copie.lignes, []);
+
+const baseComptes = {
+  devis: [{ id: "d1", titre: "A", note: "n" }],
+  commandes: [] as { id: string; titre: string }[],
+  clients: [{ id: "c1", nom: "Awa", ville: "Tana" }],
+};
+const compteA = {
+  devis: [
+    { id: "d1", titre: "A", note: "n" },
+    { id: "d-local", titre: "Devis du compte A" },
+  ],
+  commandes: [{ id: "cmd-a", titre: "Commande A" }],
+  clients: [{ id: "c1", nom: "Awa", ville: "Tamatave" }],
+};
+const compteB = {
+  devis: [
+    { id: "d1", titre: "A", note: "déjà enregistrée" },
+    { id: "d-serveur", titre: "Devis du compte B" },
+  ],
+  commandes: [{ id: "cmd-b", titre: "Commande B" }],
+  clients: [{ id: "c1", nom: "Awa R.", ville: "Tana" }],
+};
+
+const fusion = fusionnerEtatsSimultanes(
+  baseComptes as never,
+  compteA as never,
+  compteB as never,
+);
+assert.equal(fusion.aEnregistrer, true);
+assert.equal(fusion.conflit, false);
+assert.deepEqual(
+  fusion.etat.devis.map((d) => d.id),
+  ["d-local", "d1", "d-serveur"],
+);
+assert.equal(fusion.etat.devis.find((d) => d.id === "d1")?.note, "déjà enregistrée");
+assert.deepEqual(
+  fusion.etat.commandes.map((c) => c.id).sort(),
+  ["cmd-a", "cmd-b"],
+);
+const client = fusion.etat.clients.find((c) => c.id === "c1");
+assert.equal(client?.nom, "Awa R.");
+assert.equal(client?.ville, "Tamatave");
+
+const ecrase = fusionnerEtatsSimultanes(
+  { parametres: { nom: "Avant" } } as never,
+  { parametres: { nom: "Compte A" } } as never,
+  { parametres: { nom: "Compte B" } } as never,
+);
+assert.equal(ecrase.conflit, true);
+assert.equal(ecrase.etat.parametres.nom, "Compte B");
+assert.equal(ecrase.aEnregistrer, false);
+
+const supprime = fusionnerEtatsSimultanes(
+  { devis: [{ id: "d1", titre: "A" }] } as never,
+  { devis: [] } as never,
+  { devis: [{ id: "d1", titre: "A" }] } as never,
+);
+assert.equal(supprime.conflit, false);
+assert.deepEqual(supprime.etat.devis, []);
+assert.equal(supprime.aEnregistrer, true);
 
 console.log("conflit of: ok");
